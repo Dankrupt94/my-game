@@ -7,8 +7,10 @@ REMOTE_URL="https://github.com/Dankrupt94/my-game.git"
 BRANCH_NAME="main"
 
 pause() {
-  echo
-  read -r -p "Press Enter to close this window..." _
+  if [ -t 0 ]; then
+    echo
+    read -r -p "Press Enter to close this window..." _ || true
+  fi
 }
 
 trap pause EXIT
@@ -79,4 +81,3 @@ git push -u "$REMOTE_NAME" "$BRANCH_NAME"
 
 echo
 echo "Done. Your local commits are now pushed to GitHub."
-
