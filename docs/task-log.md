@@ -37,3 +37,5 @@ Fix:
 
 - Added a root-level `main.tscn` and pointed `project.godot` to it so Godot 4.7 has the simplest possible launch path.
 - Simplified the generated scene files to avoid handmade UID/resource ID parsing issues.
+- Added desktop shortcuts to run the game directly and open the editor directly.
+- Added `docs/godot-troubleshooting.md` for the `main.tscm`/stale scene path issue.

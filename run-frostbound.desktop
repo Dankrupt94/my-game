@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Run Frostbound Prototype
+Comment=Run the Frostbound Prototype scene directly in Godot
+Exec=/run/media/doodbro/WD\ SSd\ 120g/godot\ game\ folder/scripts/run_game.sh
+Path=/run/media/doodbro/WD SSd 120g/godot game folder
+Terminal=false
+Icon=applications-games
+Categories=Game;
+StartupNotify=false

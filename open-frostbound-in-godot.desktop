@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Open Frostbound in Godot
+Comment=Open the Frostbound Prototype project in the Godot editor
+Exec=/run/media/doodbro/WD\ SSd\ 120g/godot\ game\ folder/scripts/open_editor.sh
+Path=/run/media/doodbro/WD SSd 120g/godot game folder
+Terminal=false
+Icon=godot
+Categories=Development;
+StartupNotify=false
+
