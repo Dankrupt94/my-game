@@ -25,10 +25,15 @@ Goal: create the first playable Godot 4 prototype milestone using original place
 
 Result:
 
-- Added `project.godot` with `scenes/main.tscn` as the main scene.
+- Added `project.godot` with `main.tscn` as the main scene.
 - Added a generated 3D snowy training yard called Frostbound Yard.
 - Added third-person movement, mouse camera, jumping, target selection, and three hotbar actions.
 - Added Scout Mira, a quest giver with a simple accept/complete quest loop.
 - Added a Frostbound Training Dummy with health, damage, and defeated state.
 - Added an MMO-style HUD with player bars, target frame, quest tracker, prompt text, and hotbar buttons.
 - Added beginner controls in `docs/controls.md`.
+
+Fix:
+
+- Added a root-level `main.tscn` and pointed `project.godot` to it so Godot 4.7 has the simplest possible launch path.
+- Simplified the generated scene files to avoid handmade UID/resource ID parsing issues.

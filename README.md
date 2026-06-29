@@ -8,7 +8,7 @@ Open the project in Godot 4, run the main scene, walk around the snowy test yard
 
 ## What Exists Now
 
-- A Godot 4 project with `scenes/main.tscn` as the main scene.
+- A Godot 4 project with `main.tscn` as the main scene.
 - A small original snowy training yard called Frostbound Yard.
 - A third-person player with mouse camera, movement, and jump.
 - Scout Mira, an original quest NPC.
