@@ -12,6 +12,14 @@ res://main.tscn
 
 This bypasses stale Godot editor state, such as the editor remembering an older scene path.
 
+If the shortcut closes right away, it now writes a log here:
+
+```text
+logs/godot-launch.log
+```
+
+The shortcut also opens in a terminal window so the error should stay visible.
+
 ## Opening The Editor
 
 Use the desktop shortcut named `Open Frostbound in Godot`.
@@ -26,4 +34,3 @@ Godot is remembering a bad path. In the editor:
 2. Search for `Main Scene`.
 3. Set it to `res://main.tscn`.
 4. Close and reopen Godot.
-

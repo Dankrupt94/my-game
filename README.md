@@ -34,6 +34,8 @@ Controls are also listed in [docs/controls.md](docs/controls.md).
 
 If Godot opens to a plain brown/gray 3D view with axes, that is the editor viewport. Use the `Run Frostbound Prototype` desktop shortcut to launch the actual game view directly. More help is in [docs/godot-troubleshooting.md](docs/godot-troubleshooting.md).
 
+If a desktop shortcut closes right away, open `logs/godot-launch.log` in this project folder. The launcher writes the exact Godot command and any error there.
+
 ## GitHub Push Shortcut
 
 A desktop shortcut named `Push My Game to GitHub` has been created. Double-click it to push saved local commits to the private GitHub repository at:

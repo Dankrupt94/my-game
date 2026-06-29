@@ -51,3 +51,9 @@ Plan:
 - Keep launcher windows open when Godot exits with an error.
 - Avoid fragile desktop `Exec` paths that contain spaces.
 - Push the finished fix to GitHub.
+
+Result:
+
+- Updated the run and editor scripts to write `logs/godot-launch.log`.
+- Updated desktop shortcuts to open in a terminal.
+- Added no-spaces wrapper scripts on the Desktop so launchers do not depend on escaping the project path.
