@@ -39,3 +39,15 @@ Fix:
 - Simplified the generated scene files to avoid handmade UID/resource ID parsing issues.
 - Added desktop shortcuts to run the game directly and open the editor directly.
 - Added `docs/godot-troubleshooting.md` for the `main.tscm`/stale scene path issue.
+
+## 2026-06-29 - Desktop Launcher Crash Fix
+
+Goal: make the desktop launchers visible and diagnosable instead of closing instantly.
+
+Plan:
+
+- Save a before-fix checkpoint.
+- Add launcher logging.
+- Keep launcher windows open when Godot exits with an error.
+- Avoid fragile desktop `Exec` paths that contain spaces.
+- Push the finished fix to GitHub.
