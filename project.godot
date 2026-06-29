@@ -22,7 +22,3 @@ window/size/viewport_height=720
 [dotnet]
 
 project/assembly_name="Frostbound Prototype"
-
-[rendering]
-
-renderer/rendering_method="forward_plus"
