@@ -57,3 +57,14 @@ Result:
 - Updated the run and editor scripts to write `logs/godot-launch.log`.
 - Updated desktop shortcuts to open in a terminal.
 - Added no-spaces wrapper scripts on the Desktop so launchers do not depend on escaping the project path.
+
+## 2026-06-29 - Godot Snap External Drive Fix
+
+Problem: Godot launched the project through `/run/user/1000/doc/...` and failed to create `res://.godot`, causing `res://main.tscn` to appear missing.
+
+Cause: the Snap package for Godot did not have permission to access external/removable media paths.
+
+Fix:
+
+- Connected `godot-4:removable-media` to `:removable-media`.
+- Verified the real non-headless launch command can open `res://main.tscn` from the external drive.

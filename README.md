@@ -36,6 +36,8 @@ If Godot opens to a plain brown/gray 3D view with axes, that is the editor viewp
 
 If a desktop shortcut closes right away, open `logs/godot-launch.log` in this project folder. The launcher writes the exact Godot command and any error there.
 
+Godot is installed as a Snap app on this machine. Because the project is on an external drive, Godot needs the Snap `removable-media` permission. That permission has been enabled.
+
 ## GitHub Push Shortcut
 
 A desktop shortcut named `Push My Game to GitHub` has been created. Double-click it to push saved local commits to the private GitHub repository at:

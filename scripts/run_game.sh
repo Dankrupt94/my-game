@@ -48,7 +48,29 @@ run_godot() {
   return "$status"
 }
 
+warn_if_snap_needs_removable_media() {
+  if [[ "$REPO_DIR" != /run/media/* && "$REPO_DIR" != /media/* ]]; then
+    return
+  fi
+
+  if ! command -v snap >/dev/null 2>&1 || ! snap list godot-4 >/dev/null 2>&1; then
+    return
+  fi
+
+  if snap connections godot-4 | awk '$1 == "removable-media" && $3 == ":removable-media" { found = 1 } END { exit found ? 0 : 1 }'; then
+    return
+  fi
+
+  echo "Godot is installed as a Snap app and this project is on an external drive."
+  echo "Godot needs external-drive permission before it can run this project."
+  echo "Ask Codex to enable Godot removable-media access, or run:"
+  echo "sudo snap connect godot-4:removable-media"
+  pause_if_possible
+  exit 1
+}
+
 cd "$REPO_DIR"
+warn_if_snap_needs_removable_media
 
 if command -v snap >/dev/null 2>&1 && snap list godot-4 >/dev/null 2>&1; then
   run_godot snap run godot-4 "${EXTRA_ARGS[@]}" --path "$REPO_DIR" --scene "$SCENE_PATH"
