@@ -44,3 +44,8 @@ Make the Godot app useful immediately as a friendly control panel for the local 
 - First audit found the bundle client executable at `/run/media/doodbro/New 1tb/AzerothCore/client/Wow.exe`.
 - Godot Snap cannot currently see Docker from child processes, so dashboard start/stop buttons are guarded until a localhost bridge or native runner exists.
 - Added a localhost bridge client path so the dashboard can use host-side status/start/stop when `tools/host_control_bridge.py` is running.
+- Linux `authserver` and `worldserver` binaries are now installed under `/run/media/doodbro/New 1tb/AzerothCore/run/bin`.
+- The configured auth/world/characters databases are reachable.
+- Worldserver now reaches data loading and stops because local runtime data is missing.
+- Runtime data readiness is tracked in the dashboard and `tools/audit_server_stack.py`.
+- Runtime data extraction is tracked in `docs/runtime-data-extraction-plan.md`.

@@ -315,3 +315,23 @@ Result:
 - Left the AzerothCore MySQL container `ac-mysql` running.
 - Added Stage 17, the full-port acceptance gate.
 - Updated the master plan, roadmap, stage docs, README, local authorization, and agent instructions to clarify that companion/dashboard and Path A sandbox work are scaffolding only.
+
+## 2026-06-30 - Begin Runtime Data Extraction
+
+Goal: continue the port process by clearing the current worldserver blocker: missing local AzerothCore runtime data.
+
+Plan:
+
+- Document the extraction plan before generating local data.
+- Build the AzerothCore extractor tools because the current build has `TOOLS_BUILD=none`.
+- Use the authorized local bundle client as input.
+- Generate data under `/run/media/doodbro/New 1tb/AzerothCore/data`.
+- Keep generated maps, DBC, VMaps, MMaps, MPQs, and converted outputs out of Git.
+- Re-run audits and document the result.
+
+Current evidence:
+
+- Bundle client MPQs are present under `/run/media/doodbro/New 1tb/AzerothCore/client/Data`.
+- `Wow.exe` is present under `/run/media/doodbro/New 1tb/AzerothCore/client`.
+- No Linux extractor binaries were found yet.
+- CMake cache currently reports `TOOLS_BUILD=none`.
