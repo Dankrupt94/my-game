@@ -1,5 +1,17 @@
 # Task Log
 
+## 2026-06-30 - Stage 07 Started
+
+Goal: prove a small Godot-native multiplayer loop on localhost before any WotLK protocol work.
+
+Plan:
+
+- Preserve this before-task note.
+- Add a minimal multiplayer scene and scripts using Godot-native networking.
+- Support local server mode and local client mode.
+- Synchronize player spawn/despawn, positions, target selection, attack messages, and shared placeholder NPC health.
+- Add an automated local self-test where practical and document manual two-client test steps.
+
 ## 2026-06-30 - Stage 06 Started
 
 Goal: make the playable Godot sandbox consume real AzerothCore-shaped data through the read-only bridge.
