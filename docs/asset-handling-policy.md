@@ -45,6 +45,7 @@ If Git tracks a file, it can be pushed later. To keep proprietary files local fo
 - Extracted WotLK models.
 - Extracted WotLK textures.
 - Extracted WotLK maps.
+- Generated AzerothCore map, VMap, and MMap runtime data.
 - Extracted WotLK sounds/music.
 - Extracted proprietary database/client files.
 - Converted files derived from proprietary client assets.
@@ -57,6 +58,7 @@ These may only live in ignored local-only folders or in the existing external cl
 - Extracted WotLK models.
 - Extracted WotLK textures.
 - Extracted WotLK maps.
+- Generated AzerothCore map, VMap, and MMap runtime data.
 - Extracted WotLK sounds/music.
 - Extracted proprietary database/client files.
 - Converted files derived from proprietary client assets.

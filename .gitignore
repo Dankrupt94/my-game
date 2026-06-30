@@ -26,6 +26,11 @@ extracted_client_assets/
 *.adt
 *.dbc
 *.db2
+*.map
+*.vmtree
+*.vmtile
+*.mmap
+*.mmtile
 *.wdt
 *.wdl
 *.anim
