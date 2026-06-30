@@ -1,5 +1,17 @@
 # Task Log
 
+## 2026-06-30 - Stage 06 Started
+
+Goal: make the playable Godot sandbox consume real AzerothCore-shaped data through the read-only bridge.
+
+Plan:
+
+- Preserve this before-task note.
+- Add read-only sandbox HTTP calls to `GET /data` for small character, creature, quest, and item slices.
+- Map returned records into placeholder UI labels and original primitive spawn objects.
+- Add a headless data self-test that proves data reached the sandbox and created placeholders.
+- Keep all database access read-only and all generated reports/runtime files out of Git.
+
 ## 2026-06-30 - Stage 05 Started
 
 Goal: add a fresh original playable Godot gameplay sandbox under the AzerothCore companion direction.

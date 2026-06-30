@@ -1,6 +1,6 @@
 # Stage 06 - Data-Driven Sandbox
 
-Status: Planned
+Status: In Progress
 
 ## Goal
 
@@ -19,6 +19,13 @@ Make the Godot sandbox consume AzerothCore-shaped data through the bridge.
 - Stage 05 gameplay sandbox exists.
 - Stage 04 bridge can expose safe read-only data.
 
+## Stage Start Notes
+
+- Stage 06 begins after the playable original sandbox and hardened bridge boundary.
+- Data access must remain read-only through `GET /data`.
+- AzerothCore records can influence placeholder labels, UI rows, and spawned primitive placeholders, but no proprietary assets or copied client UI should be introduced.
+- The first slice should stay small and testable: load a few characters, creatures, quests, and items, then prove the sandbox can spawn original placeholder objects from those records.
+
 ## Done Criteria
 
 - Godot can display and spawn placeholder gameplay objects based on real AzerothCore records.
@@ -30,4 +37,3 @@ Make the Godot sandbox consume AzerothCore-shaped data through the bridge.
 - Data models consumed by Godot.
 - Mapping rules from AzerothCore data to Godot placeholders.
 - Known missing fields.
-
