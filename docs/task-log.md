@@ -144,3 +144,17 @@ Result:
 - The audit script redacts config credentials and writes detailed reports to ignored `local_reports/`.
 - Documented the database audit in `tools/README.md`.
 - Ran the database audit: 3 configured databases were found, and 0 were reachable because `127.0.0.1:3306` refused connections.
+
+## 2026-06-30 - Begin Server Stack Discovery
+
+Goal: continue Stage 01 by adding a safe status/discovery tool for the local AzerothCore scripts, ports, processes, Docker MySQL container, binaries, logs, and client path.
+
+Plan:
+
+- Save this before-task note.
+- Add a local server-stack audit script that does not start or stop services by default.
+- Record script paths for `start.sh`, `stop.sh`, and `status.sh`.
+- Record port/process/container/binary/log/client status in ignored local reports.
+- Track a safe summary in documentation and update Stage 01 notes.
+- Verify no local reports, secrets, or proprietary files are tracked.
+- Commit and push the completed non-proprietary code and docs.
