@@ -69,3 +69,10 @@ Plan:
 - Add a local asset handling document.
 - Link it from the master plan and README.
 - Commit and push the completed documentation.
+
+Result:
+
+- Added `docs/asset-handling-policy.md`.
+- Added `.gitignore` rules for local-only asset folders and common WotLK client/extracted asset extensions.
+- Linked the policy from the README and master plan.
+- Recorded that the project owner authorizes local-only proprietary client file use for this prototype, while Git/GitHub must stay code, documentation, tooling, manifests, and references only.

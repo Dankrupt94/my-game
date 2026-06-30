@@ -7,7 +7,7 @@ This is the Godot-side companion workspace for the local AzerothCore setup. The 
 - Keep a Godot 4.7 project beside the local AzerothCore bundle.
 - Track local server, build, and client paths in one place.
 - Grow into a desktop-style companion for status checks, safe start/stop helpers, account setup, client launching, and diagnostics.
-- Avoid copying or depending on proprietary client assets.
+- Use local proprietary client files only for the authorized on-machine prototype. Keep those files out of Git and GitHub.
 
 ## Local Project Location
 
@@ -22,6 +22,8 @@ The long-term plan for building Godot toward the game-engine/client role is trac
 The master plan for the Godot-AzerothCore-WotLK direction is tracked in [docs/godot-azerothcore-wotlk-master-plan.md](docs/godot-azerothcore-wotlk-master-plan.md).
 
 Local AI resources, including `qwen2.5-coder:7b`, are documented in [docs/local-ai-resources.md](docs/local-ai-resources.md).
+
+Local proprietary client asset handling is documented in [docs/asset-handling-policy.md](docs/asset-handling-policy.md). Short version: this prototype may use local proprietary files on this machine under the project owner's authorization, but those files must stay untracked and must not be pushed to GitHub.
 
 ## How To Open
 

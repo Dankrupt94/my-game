@@ -6,3 +6,21 @@ export_presets.cfg
 *.tmp
 *.log
 logs/
+
+# Local-only proprietary client/extracted assets.
+# Keep these on disk for the authorized local prototype, but do not commit them.
+local_assets/
+proprietary_assets/
+client_assets/
+extracted_client_assets/
+*.MPQ
+*.mpq
+*.blp
+*.m2
+*.wmo
+*.adt
+*.dbc
+*.db2
+*.wdt
+*.wdl
+*.anim

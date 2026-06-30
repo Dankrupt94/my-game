@@ -34,7 +34,7 @@ Path B attempts the faithful port/replacement-client goal:
 - Godot sends movement, interaction, chat, combat, spell, loot, inventory, and quest actions.
 - Godot recreates the WotLK client experience as faithfully as possible in behavior and presentation.
 
-The WotLK client remains a local reference client. This repo should not contain copied proprietary client assets. Any visual work in this repo should use original or authorized assets unless a later legal/asset policy explicitly allows otherwise.
+The WotLK client remains a local reference client. Under the project owner's stated authorization, proprietary client files may be used locally for this prototype, but they must stay untracked and out of Git/GitHub. See [asset-handling-policy.md](asset-handling-policy.md).
 
 ## Definition Of "Port The Client"
 
@@ -85,6 +85,12 @@ qwen-agent:latest
 
 See [local-ai-resources.md](local-ai-resources.md) for usage notes and guardrails.
 
+## Asset Handling
+
+The repo tracks original code, documentation, tooling, placeholder assets, and references to local client paths. The local project folder may contain ignored private asset folders for the authorized local prototype, but Git must not track proprietary WotLK MPQs, extracted assets, or converted derivatives.
+
+See [asset-handling-policy.md](asset-handling-policy.md).
+
 ## Stage Index
 
 Path A:
@@ -121,6 +127,6 @@ Reason: the project already has a Godot shell and known local paths. The next us
 - Do not reset or revert local AzerothCore source changes unless explicitly requested.
 - Do not write directly into AzerothCore character/world/auth tables until a stage explicitly allows it.
 - Do not put secrets into Godot scenes.
-- Do not copy proprietary client assets into this repo.
+- Do not commit, push, or share proprietary client assets or converted derivatives.
 - Verify local AI model output before committing it.
 - Keep every meaningful task committed and pushed.
