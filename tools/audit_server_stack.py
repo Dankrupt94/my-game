@@ -22,6 +22,7 @@ RUN_DIR = ACORE_ROOT / "run"
 BIN_DIR = RUN_DIR / "bin"
 LOGS_DIR = ACORE_ROOT / "logs"
 CLIENT_DIR = ACORE_ROOT / "client"
+DATA_DIR = ACORE_ROOT / "data"
 
 PORTS = {
     "mysql": 3306,
@@ -62,6 +63,15 @@ CLIENT_CANDIDATES = [
     CLIENT_DIR / "Wow-64.exe",
     CLIENT_DIR / "Wow.app",
 ]
+
+DATA_PATHS = {
+    "data_dir": DATA_DIR,
+    "maps_dir": DATA_DIR / "maps",
+    "starting_map": DATA_DIR / "maps" / "0000.map",
+    "dbc_dir": DATA_DIR / "dbc",
+    "vmaps_dir": DATA_DIR / "vmaps",
+    "mmaps_dir": DATA_DIR / "mmaps",
+}
 
 
 def find_executable(name: str) -> str | None:
@@ -181,6 +191,7 @@ def build_report(include_bundle_status: bool, timeout: int) -> dict[str, object]
     logs = {name: asdict(path_status(path)) for name, path in LOG_PATHS.items()}
     binaries = {name: asdict(path_status(path)) for name, path in BINARY_PATHS.items()}
     clients = {path.name: asdict(path_status(path)) for path in CLIENT_CANDIDATES}
+    data = {name: asdict(path_status(path)) for name, path in DATA_PATHS.items()}
 
     report: dict[str, object] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -192,6 +203,7 @@ def build_report(include_bundle_status: bool, timeout: int) -> dict[str, object]
         "scripts": scripts,
         "binaries": binaries,
         "logs": logs,
+        "data": data,
         "client_candidates": clients,
         "runtime_environment": {
             "inside_snap": bool(os.environ.get("SNAP")),
@@ -254,6 +266,10 @@ def write_markdown(report: dict[str, object], path: Path) -> None:
     lines.extend(["", "## Binaries", ""])
     for name, info in report["binaries"].items():  # type: ignore[index]
         lines.append(f"- `{name}`: exists={info['exists']}, executable={info['executable']} - `{info['path']}`")
+
+    lines.extend(["", "## Data Readiness", ""])
+    for name, info in report["data"].items():  # type: ignore[index]
+        lines.append(f"- `{name}`: exists={info['exists']} - `{info['path']}`")
 
     lines.extend(["", "## Client Candidates", ""])
     for name, info in report["client_candidates"].items():  # type: ignore[index]

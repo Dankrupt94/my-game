@@ -267,3 +267,31 @@ Plan:
 - Re-run server-stack and database audits.
 - Record safe build/install results in documentation.
 - Commit and push non-proprietary documentation/tool updates.
+
+Result:
+
+- Built the `worldserver` target successfully in `/home/doodbro/azeroth-build`.
+- Installed `authserver` and `worldserver` into `/run/media/doodbro/New 1tb/AzerothCore/run/bin`.
+- Patched local AzerothCore runtime startup outside this repo so MySQL 8.4 can open the existing local database data on Linux.
+- Repaired local authserver config so `SourceDirectory` points to `/run/media/doodbro/New 1tb/AzerothCore/source`.
+- Verified the configured database login from the host.
+- Re-ran database audit: auth, world, and characters databases are reachable.
+- Re-ran server-stack audit: MySQL and Ollama are listening; auth/world binaries exist; worldserver now reaches local runtime data loading.
+- Current blocker: required local runtime data under `/run/media/doodbro/New 1tb/AzerothCore/data` is missing, so worldserver stops with missing map-file errors.
+
+## 2026-06-30 - Add Runtime Data Readiness To Dashboard
+
+Goal: make the current worldserver blocker visible in the Godot companion dashboard and the safe server-stack audit.
+
+Plan:
+
+- Add runtime data checks to the server-stack audit.
+- Show the combined runtime data readiness state in the dashboard.
+- Update documentation with the local runtime repair checkpoint.
+- Validate the Godot project still loads.
+
+Result:
+
+- Added audit checks for `data/maps`, `data/maps/0000.map`, `data/dbc`, `data/vmaps`, and `data/mmaps`.
+- Added a `Runtime data` row to the dashboard.
+- Documented local runtime repairs in `docs/local-runtime-repairs.md`.

@@ -37,6 +37,7 @@ The tool checks:
 - Docker `ac-mysql` container state.
 - Existing start/stop/status scripts.
 - Linux auth/world binaries.
+- Required local runtime data directories and the starting map file.
 - Known log file paths.
 - WotLK client launch candidates.
 
@@ -55,6 +56,23 @@ Current safe-status result:
 
 This matches the read-only database audit result: the database configs are present, but the local MySQL runtime is not currently up.
 
+## 2026-06-30 Runtime Repair Checkpoint
+
+Current safe-status result after building and installing Linux server binaries:
+
+- MySQL port `3306`: listening on localhost.
+- Authserver port `3724`: not listening after world startup attempt.
+- Worldserver port `8085`: not listening.
+- Docker `ac-mysql` container: found and running.
+- Linux `authserver` binary under `run/bin`: found and executable.
+- Linux `worldserver` binary under `run/bin`: found and executable.
+- Database audit: all configured auth/world/characters databases reachable.
+- Bundle client `Wow.exe`: found.
+
+Runtime repairs are recorded in [local-runtime-repairs.md](local-runtime-repairs.md).
+
+The current blocker is missing local runtime data under `/run/media/doodbro/New 1tb/AzerothCore/data`. The audit now records `data/maps`, `data/maps/0000.map`, `data/dbc`, `data/vmaps`, and `data/mmaps` readiness.
+
 ## Godot Snap Runtime Note
 
 When the dashboard is launched through Snap Godot, its child processes cannot currently see Docker. Terminal-launched audits can see `/usr/bin/docker`, but Godot-launched audits report Docker as unavailable inside the Snap sandbox.
@@ -69,7 +87,6 @@ Bridge work has started in [host-control-bridge.md](host-control-bridge.md).
 
 ## Next Stage 01 Actions
 
-- Add Godot dashboard buttons for status, start, stop, and log opening.
-- Make the dashboard show the current status from this tool or an equivalent Godot-side status check.
-- Keep start/stop actions routed through the existing AzerothCore scripts.
-- Add a localhost bridge or native runner so the Snap dashboard can request host-side start/stop safely.
+- Add a local data-readiness view to the dashboard so missing runtime data is visible without opening logs.
+- Keep start/stop actions routed through the existing AzerothCore scripts and host bridge.
+- Keep runtime data local-only and out of Git.

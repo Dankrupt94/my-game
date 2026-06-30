@@ -82,7 +82,7 @@ local_reports/server-stack-audit.json
 local_reports/server-stack-audit.md
 ```
 
-The script checks ports, processes, script paths, Linux binaries, log files, Docker MySQL container state, and WotLK client launch candidates. It does not start or stop services by default.
+The script checks ports, processes, script paths, Linux binaries, runtime data readiness, log files, Docker MySQL container state, and WotLK client launch candidates. It does not start or stop services by default.
 
 ## Host Control Bridge
 

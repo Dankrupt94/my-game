@@ -110,6 +110,7 @@ func _build_dashboard() -> void:
 	side_stack.add_child(_status_row("docker_mysql", "Docker MySQL"))
 	side_stack.add_child(_status_row("auth_binary", "Auth binary"))
 	side_stack.add_child(_status_row("world_binary", "World binary"))
+	side_stack.add_child(_status_row("runtime_data", "Runtime data"))
 	side_stack.add_child(_status_row("wow_exe", "Bundle Wow.exe"))
 
 	side_stack.add_child(_section_title("Project Rules"))
@@ -232,6 +233,9 @@ func _load_status_report() -> void:
 	_set_path_status(binaries, "authserver", "auth_binary")
 	_set_path_status(binaries, "worldserver", "world_binary")
 
+	var data: Dictionary = report.get("data", {})
+	_set_data_status(data)
+
 	var clients: Dictionary = report.get("client_candidates", {})
 	_set_path_status(clients, "Wow.exe", "wow_exe")
 
@@ -248,6 +252,20 @@ func _set_path_status(section: Dictionary, name: String, label_key: String) -> v
 	var executable := bool(info.get("executable", false))
 	var value := "Executable" if executable else ("Found" if exists else "Missing")
 	_set_status(label_key, value, exists)
+
+
+func _set_data_status(data: Dictionary) -> void:
+	var required := ["maps_dir", "starting_map", "dbc_dir", "vmaps_dir", "mmaps_dir"]
+	var missing := PackedStringArray()
+	for key in required:
+		var info: Dictionary = data.get(key, {})
+		if not bool(info.get("exists", false)):
+			missing.append(key.replace("_dir", "").replace("_", " "))
+
+	if missing.is_empty():
+		_set_status("runtime_data", "Ready", true)
+	else:
+		_set_status("runtime_data", "Missing " + ", ".join(missing), false)
 
 
 func _command_exists(command: String) -> bool:
