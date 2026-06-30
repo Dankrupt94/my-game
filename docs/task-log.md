@@ -166,3 +166,18 @@ Result:
 - Added `docs/server-stack-discovery-summary.md`.
 - Updated Stage 01 status to `In Progress`.
 - Ran the server-stack audit: only Ollama was listening, Docker `ac-mysql` was not found, Linux auth/world binaries under `run/bin` were not found, and bundle `Wow.exe` was found.
+
+## 2026-06-30 - Begin Stage 01 Dashboard Controls
+
+Goal: make the Godot companion dashboard useful by wiring visible controls to the local status/audit tooling and existing AzerothCore stack scripts.
+
+Plan:
+
+- Save this before-task note.
+- Add dashboard status rows for MySQL, authserver, worldserver, Ollama, Docker MySQL, binaries, and client executable.
+- Add buttons for refresh/status, start stack, stop stack, open logs, open local reports, and launch client.
+- Route start/stop through `/run/media/doodbro/New 1tb/AzerothCore/scripts/start.sh` and `stop.sh`.
+- Route refresh through `tools/audit_server_stack.py`.
+- Keep proprietary files and local reports out of Git.
+- Validate the Godot scene loads with Godot 4.7.
+- Commit and push the completed dashboard changes.
