@@ -1,0 +1,35 @@
+# Stage 09 - Path A Completion Gate
+
+Status: Planned
+
+## Goal
+
+Decide whether Path A is achieved and whether the project is ready to begin Path B.
+
+## Path A Completion Requirements
+
+- Companion dashboard works.
+- Safe command layer works.
+- Local bridge service works.
+- Godot can inspect safe AzerothCore data.
+- Godot has an original playable sandbox.
+- Godot-native multiplayer works locally.
+- Godot persistence works.
+- Documentation is current.
+
+## Decision
+
+Only after this stage is complete should the project begin Path B protocol-client work.
+
+## Done Criteria
+
+- A written decision is added to this file.
+- Missing Path A work is either complete or intentionally deferred.
+- Risks for Path B are documented.
+
+## Documentation To Update During Work
+
+- Completion checklist.
+- Deferred work list.
+- Path B go/no-go decision.
+

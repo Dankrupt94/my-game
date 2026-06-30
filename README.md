@@ -19,6 +19,10 @@ Related paths are tracked in [docs/location-notes.md](docs/location-notes.md).
 
 The long-term plan for building Godot toward the game-engine/client role is tracked in [docs/godot-as-engine-roadmap.md](docs/godot-as-engine-roadmap.md).
 
+The master plan for the Godot-AzerothCore-WotLK direction is tracked in [docs/godot-azerothcore-wotlk-master-plan.md](docs/godot-azerothcore-wotlk-master-plan.md).
+
+Local AI resources, including `qwen2.5-coder:7b`, are documented in [docs/local-ai-resources.md](docs/local-ai-resources.md).
+
 ## How To Open
 
 Use the desktop shortcut named `Open AzerothCore Companion in Godot`, or open this project folder in Godot 4.7.

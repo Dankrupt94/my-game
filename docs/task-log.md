@@ -49,3 +49,11 @@ Plan:
 - Add one documentation file per stage so progress can be tracked as changes occur.
 - Link the master plan from the README.
 - Commit and push the completed documentation.
+
+Result:
+
+- Added `docs/godot-azerothcore-wotlk-master-plan.md`.
+- Added stage documentation scaffolding under `docs/stages/`.
+- Documented that Path A is first and Path B follows after Path A is achieved.
+- Documented the long-term goal of a faithful Godot-AzerothCore-WotLK client/game.
+- Added `docs/local-ai-resources.md` for local Ollama models, including `qwen2.5-coder:7b`.
