@@ -17,6 +17,8 @@ This is the Godot-side companion workspace for the local AzerothCore setup. The 
 
 Related paths are tracked in [docs/location-notes.md](docs/location-notes.md).
 
+The long-term plan for building Godot toward the game-engine/client role is tracked in [docs/godot-as-engine-roadmap.md](docs/godot-as-engine-roadmap.md).
+
 ## How To Open
 
 Use the desktop shortcut named `Open AzerothCore Companion in Godot`, or open this project folder in Godot 4.7.

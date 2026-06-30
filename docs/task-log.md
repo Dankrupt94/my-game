@@ -31,3 +31,9 @@ Plan:
 - Preserve a before-task note.
 - Create a roadmap document with phases, deliverables, decisions, risks, and stopping points.
 - Commit and push the roadmap.
+
+Result:
+
+- Added `docs/godot-as-engine-roadmap.md`.
+- Broke the path into companion tooling, bridge/data work, original Godot gameplay, Godot-native multiplayer, and optional protocol-client milestones.
+- Marked Stage 1 companion dashboard controls as the best next task.
