@@ -28,6 +28,29 @@ Stage 11 begins from the Stage 10 decision to build a native C++ helper first be
 
 The first implementation checkpoint should be a safe local smoke harness that can exercise the protocol without writing proprietary files or committing account secrets. Godot integration follows once the helper proves the auth, realm, world auth, and character-enum byte handling.
 
+## Implementation Notes
+
+- Added `native/protocol_client/` as the first native helper.
+- Added CMake build support for `acore_protocol_client`.
+- Added local ARC4 implementation for header crypto so the helper does not depend on deprecated OpenSSL RC4 APIs.
+- Used OpenSSL only for HMAC-SHA1 support.
+- Added protocol byte helpers for:
+  - client world headers: 2-byte big-endian size plus 4-byte little-endian opcode,
+  - server world headers: 2-byte or 3-byte big-endian size plus 2-byte little-endian opcode,
+  - server header parsing.
+- Added `--self-test` to validate first header encoding and header crypto initialization.
+- Added `--world-challenge <host> <port>` to connect to the live worldserver and parse the initial plaintext `SMSG_AUTH_CHALLENGE`.
+
+## Validation
+
+Completed on 2026-06-30:
+
+- `cmake -S native/protocol_client -B native/protocol_client/build` succeeded.
+- `cmake --build native/protocol_client/build` succeeded.
+- `native/protocol_client/build/acore_protocol_client --self-test` printed `PROTOCOL_CLIENT_SELF_TEST_OK`.
+- `native/protocol_client/build/acore_protocol_client --world-challenge 127.0.0.1 8085` printed `WORLD_CHALLENGE_OK`.
+- No account credentials, session keys, packet captures, proprietary client files, or local runtime files were committed.
+
 ## Done Criteria
 
 - Godot establishes sockets to the authserver and worldserver natively.

@@ -11,6 +11,8 @@ local_runtime/
 .venv/
 __pycache__/
 *.pyc
+build/
+native/**/build/
 
 # Local-only proprietary client/extracted assets.
 # Keep these on disk for the authorized local prototype, but do not commit them.
