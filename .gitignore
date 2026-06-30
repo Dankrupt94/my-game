@@ -7,6 +7,7 @@ export_presets.cfg
 *.log
 logs/
 local_reports/
+local_runtime/
 .venv/
 __pycache__/
 *.pyc

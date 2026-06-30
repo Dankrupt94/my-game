@@ -83,3 +83,19 @@ local_reports/server-stack-audit.md
 ```
 
 The script checks ports, processes, script paths, Linux binaries, log files, Docker MySQL container state, and WotLK client launch candidates. It does not start or stop services by default.
+
+## Host Control Bridge
+
+Run outside Snap Godot:
+
+```bash
+scripts/start_host_bridge.sh
+```
+
+Stop:
+
+```bash
+scripts/stop_host_bridge.sh
+```
+
+The bridge listens on `127.0.0.1:8765`, provides read-only status, and requires a local token for start/stop requests.

@@ -65,6 +65,8 @@ Current dashboard behavior:
 - Start/stop buttons are guarded when Docker is unavailable inside Snap.
 - A localhost bridge or native/non-Snap Godot runner is the next clean way to let the Godot UI control Docker-backed services.
 
+Bridge work has started in [host-control-bridge.md](host-control-bridge.md).
+
 ## Next Stage 01 Actions
 
 - Add Godot dashboard buttons for status, start, stop, and log opening.

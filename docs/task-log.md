@@ -204,3 +204,11 @@ Plan:
 - Document how the dashboard should use the bridge.
 - Validate the bridge without starting the AzerothCore stack.
 - Commit and push the completed non-proprietary code and docs.
+
+Result:
+
+- Added `tools/host_control_bridge.py`.
+- Added host-side bridge start/stop scripts.
+- Added token and runtime ignore handling under `local_runtime/`.
+- Documented the bridge in `docs/host-control-bridge.md`.
+- Validated `GET /health`, `GET /status`, and unauthorized `POST /start` rejection without starting the AzerothCore stack.
