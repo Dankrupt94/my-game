@@ -27,6 +27,10 @@ The local Blizzard/WotLK file authorization and autonomous-work directive is doc
 
 Local proprietary client asset handling is documented in [docs/asset-handling-policy.md](docs/asset-handling-policy.md). Short version: this prototype may use local proprietary files on this machine under the project owner's authorization, but those files must stay untracked and must not be pushed to GitHub.
 
+Local helper tools for audits and metadata-only client scanning live in [tools](tools/).
+
+The latest safe summary of those local audits is tracked in [docs/toolchain-and-client-audit-summary.md](docs/toolchain-and-client-audit-summary.md).
+
 ## How To Open
 
 Use the desktop shortcut named `Open AzerothCore Companion in Godot`, or open this project folder in Godot 4.7.

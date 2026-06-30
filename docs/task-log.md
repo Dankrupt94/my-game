@@ -111,3 +111,13 @@ Plan:
 - Run the tools against this machine and record a safe summary.
 - Verify no proprietary files or local report payloads are tracked.
 - Commit and push the completed non-proprietary code and docs.
+
+Result:
+
+- Added `tools/audit_toolchain.py`.
+- Added `tools/client_manifest_scan.py`.
+- Added `tools/README.md`.
+- Added ignored `local_reports/` output handling.
+- Ran both tools successfully.
+- Recorded safe counts and missing/deferred tools in `docs/toolchain-and-client-audit-summary.md`.
+- Used `qwen-agent:latest` as a safe advisory reviewer and applied its large-directory scanner feedback.
