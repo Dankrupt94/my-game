@@ -234,3 +234,16 @@ Result:
 - Dashboard start/stop now use bridge token requests when the bridge is online.
 - Direct Snap start/stop remains guarded when the bridge is offline.
 - Validated offline bridge failure, online bridge health/status, and Godot 4.7 headless status refresh through the bridge without starting the stack.
+
+## 2026-06-30 - Begin Bridge-Aware Companion Launcher
+
+Goal: make the normal companion launcher start the localhost host bridge before opening Godot so the dashboard works through one desktop button.
+
+Plan:
+
+- Save this before-task note.
+- Update `scripts/run_game.sh` to start the host bridge before launching Godot.
+- Keep the bridge startup idempotent.
+- Keep logs in ignored local/runtime folders.
+- Validate the launcher headlessly.
+- Commit and push the completed launcher update.
