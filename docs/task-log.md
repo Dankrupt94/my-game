@@ -14,7 +14,13 @@ Plan:
 
 Result:
 
-- In progress.
+- Path A was approved as complete enough to begin Path B.
+- Marked Stage 01 complete after dashboard launch and bridge stop/start validation.
+- Validated bridge status and data summary against the live stack.
+- Validated dashboard headless launch, sandbox data self-test, sandbox persistence self-test, and multiplayer smoke test.
+- Found and repaired a local AzerothCore `scripts/start.sh` restart issue where an existing stopped `ac-mysql` container was not restarted before `docker run`.
+- Confirmed the stack returned to live ports: MySQL `3306`, authserver `3724`, worldserver `8085`, and Ollama `11434`.
+- Recorded deferred Path A polish and Path B risks in the Stage 09 file.
 
 ## 2026-06-30 - Stage 08 Started
 
