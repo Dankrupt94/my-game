@@ -34,7 +34,7 @@ Path B attempts the faithful port/replacement-client goal:
 - Godot sends movement, interaction, chat, combat, spell, loot, inventory, and quest actions.
 - Godot recreates the WotLK client experience as faithfully as possible in behavior and presentation.
 
-The WotLK client remains a local reference client. Under the project owner's stated authorization, proprietary client files may be used locally for this prototype, but they must stay untracked and out of Git/GitHub. See [asset-handling-policy.md](asset-handling-policy.md).
+The WotLK client remains a local reference client and input source. Under the project owner's stated authorization, all Blizzard/WotLK client files available on this machine may be used locally for this prototype, but they must stay untracked and out of Git/GitHub. See [local-blizzard-file-authorization.md](local-blizzard-file-authorization.md) and [asset-handling-policy.md](asset-handling-policy.md).
 
 ## Definition Of "Port The Client"
 
@@ -89,7 +89,7 @@ See [local-ai-resources.md](local-ai-resources.md) for usage notes and guardrail
 
 The repo tracks original code, documentation, tooling, placeholder assets, and references to local client paths. The local project folder may contain ignored private asset folders for the authorized local prototype, but Git must not track proprietary WotLK MPQs, extracted assets, or converted derivatives.
 
-See [asset-handling-policy.md](asset-handling-policy.md).
+See [local-blizzard-file-authorization.md](local-blizzard-file-authorization.md) and [asset-handling-policy.md](asset-handling-policy.md).
 
 ## Stage Index
 
@@ -128,5 +128,6 @@ Reason: the project already has a Godot shell and known local paths. The next us
 - Do not write directly into AzerothCore character/world/auth tables until a stage explicitly allows it.
 - Do not put secrets into Godot scenes.
 - Do not commit, push, or share proprietary client assets or converted derivatives.
+- Use the local Blizzard/WotLK files as authorized local inputs when they are needed for the port.
 - Verify local AI model output before committing it.
 - Keep every meaningful task committed and pushed.

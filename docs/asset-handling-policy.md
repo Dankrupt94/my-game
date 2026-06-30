@@ -8,9 +8,11 @@ The local project folder may contain proprietary assets for the authorized priva
 
 ## Authorization For This Local Prototype
 
-The project owner states they are authorized to evaluate a Godot-based WotLK client/engine port and has instructed Codex to use the proprietary client files locally for that prototype.
+The project owner states they are authorized to evaluate a Godot-based WotLK client/engine port for company product-use/design review and has instructed Codex to use all Blizzard/WotLK client files available on this machine as local inputs for that prototype.
 
 That authorization applies to local use on this machine. It does not change the Git/GitHub rule: the repository stores code, documentation, tooling, manifests, references, and original placeholder assets, not proprietary client files or derived copies.
+
+See [local-blizzard-file-authorization.md](local-blizzard-file-authorization.md) for the explicit local-use directive.
 
 ## Why
 
@@ -35,6 +37,7 @@ If Git tracks a file, it can be pushed later. To keep proprietary files local fo
 - Open-license assets with documented licenses.
 - Asset manifests that reference local files by path, hash, ID, or description.
 - Import/conversion code that operates on local files, as long as it does not commit proprietary input or derived output.
+- Local-use documentation that records paths, hashes, IDs, counts, and observations without embedding proprietary payloads.
 
 ## Allowed Locally, But Not In Git
 

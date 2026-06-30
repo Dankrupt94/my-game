@@ -89,3 +89,10 @@ Plan:
 - Tighten `AGENTS.md` so future agents know the local files are expected inputs.
 - Verify Git still tracks no proprietary client asset files.
 - Commit and push the completed documentation.
+
+Result:
+
+- Added `docs/local-blizzard-file-authorization.md`.
+- Documented that all Blizzard/WotLK files available on this machine are authorized local inputs for the porting prototype.
+- Documented that GitHub must receive only non-proprietary code, docs, tooling, manifests, references, and original/placeholder assets.
+- Linked the directive from `README.md`, the master plan, `AGENTS.md`, and the asset policy.
