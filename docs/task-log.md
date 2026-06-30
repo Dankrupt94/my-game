@@ -335,3 +335,10 @@ Current evidence:
 - `Wow.exe` is present under `/run/media/doodbro/New 1tb/AzerothCore/client`.
 - No Linux extractor binaries were found yet.
 - CMake cache currently reports `TOOLS_BUILD=none`.
+
+Checkpoint:
+
+- Reconfigured `/home/doodbro/azeroth-build` with `TOOLS_BUILD=maps-only`.
+- Built `map_extractor`, `vmap4_extractor`, `vmap4_assembler`, and `mmaps_generator`.
+- Located the binaries under `/home/doodbro/azeroth-build/src/tools/`.
+- Next action is local-only data generation from `/run/media/doodbro/New 1tb/AzerothCore/client`.

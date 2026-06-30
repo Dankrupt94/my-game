@@ -39,28 +39,34 @@ These outputs are generated from proprietary local client data and must remain o
 
 ## Extractor Tooling
 
-The current AzerothCore build was configured with:
+Initial status:
 
 ```text
 TOOLS_BUILD=none
 ```
 
-No Linux extractor binaries were found yet. The next step is to build the maps-only tools from `/home/doodbro/azeroth-build` or create a separate tool build if CMake requires reconfiguration.
+The build has now been reconfigured locally with:
 
-Expected tools:
+```text
+TOOLS_BUILD=maps-only
+```
 
-- `mapextractor`
-- `vmap4extractor`
-- `vmap4assembler`
+Built Linux tools:
+
+- `map_extractor`
+- `vmap4_extractor`
+- `vmap4_assembler`
 - `mmaps_generator`
+
+The tools were built under `/home/doodbro/azeroth-build/src/tools/`.
 
 ## Step Plan
 
-1. Build the AzerothCore extraction tools.
-2. Locate the generated Linux tool binaries.
-3. Run map/DBC extraction against the local bundle client.
-4. Run VMap extraction and assembly.
-5. Run MMap generation if feasible.
+1. Build the AzerothCore extraction tools. Done.
+2. Locate the generated Linux tool binaries. Done.
+3. Run map/DBC extraction against the local bundle client. In progress.
+4. Run VMap extraction and assembly. Pending.
+5. Run MMap generation if feasible. Pending.
 6. Re-run `tools/audit_server_stack.py`.
 7. Start the AzerothCore stack and verify whether worldserver reaches port `8085`.
 8. Document results and blockers in `docs/task-log.md`.
