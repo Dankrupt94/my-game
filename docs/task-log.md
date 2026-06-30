@@ -87,3 +87,17 @@ Result:
 - Updated project `.desktop` files and Desktop launchers to the new path.
 - Preserved the existing Git repo and GitHub remote.
 - Documented the local AzerothCore, build, and WotLK client paths in `docs/location-notes.md`.
+
+## 2026-06-30 - Retire Frostbound Prototype
+
+Goal: abandon the Frostbound prototype and rename this Godot repo for the local AzerothCore companion project.
+
+Plan:
+
+- Save this pre-change note as a before-task commit.
+- Rename the folder to `/run/media/doodbro/New 1tb/AzerothCore/godot-azerothcore-companion`.
+- Delete Frostbound-specific gameplay scenes/scripts/docs.
+- Replace the Godot project shell with an AzerothCore companion placeholder.
+- Update desktop shortcuts, launcher names, and documentation.
+- Verify the new Godot shell opens.
+- Commit and push the completed rename/reset.
