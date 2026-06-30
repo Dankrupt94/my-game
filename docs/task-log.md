@@ -136,3 +136,11 @@ Plan:
 - Track a safe summary in documentation.
 - Verify no secrets, local reports, or proprietary files are tracked.
 - Commit and push the completed non-proprietary code and docs.
+
+Result:
+
+- Installed `default-mysql-client`, providing `mysql` and `mysqldump`.
+- Added `tools/audit_azerothcore_db.py`.
+- The audit script redacts config credentials and writes detailed reports to ignored `local_reports/`.
+- Documented the database audit in `tools/README.md`.
+- Ran the database audit: 3 configured databases were found, and 0 were reachable because `127.0.0.1:3306` refused connections.

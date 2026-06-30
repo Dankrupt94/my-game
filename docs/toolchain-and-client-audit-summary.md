@@ -27,9 +27,18 @@ Confirmed present on this machine:
 - Ollama with `qwen-agent:latest` and `qwen2.5-coder:7b`.
 - `ffmpeg`, `7z`, `unzip`, `jq`, `rg`, `sqlite3`, and `mysql_config`.
 
-Missing or deferred:
+Missing or deferred before database-client setup:
 
 - `mysql` and `mysqldump`: recommended soon for safe read-only database inspection and snapshots.
+- `blender`: needed later for model conversion and Godot visual pipeline experiments.
+- `wine`: needed later if Linux launch automation around the Windows WotLK client is required.
+- `go`: optional unless future tooling needs Go.
+- `podman`: optional because Docker is already available.
+
+Update: `default-mysql-client` was installed after the first audit, so `mysql` and `mysqldump` are now available for follow-up database checks.
+
+Current deferred tools after install:
+
 - `blender`: needed later for model conversion and Godot visual pipeline experiments.
 - `wine`: needed later if Linux launch automation around the Windows WotLK client is required.
 - `go`: optional unless future tooling needs Go.
@@ -51,6 +60,24 @@ Summary:
 
 The detailed manifest stays in `local_reports/` and is not committed.
 
+## Database Audit Result
+
+The read-only AzerothCore database audit script completed and wrote detailed local reports to:
+
+```text
+local_reports/azerothcore-db-audit.json
+local_reports/azerothcore-db-audit.md
+```
+
+Summary:
+
+- Unique database connections parsed from local AzerothCore configs: 3.
+- Databases detected: `acore_auth`, `acore_world`, `acore_characters`.
+- Reachable databases during this run: 0.
+- Local result: MySQL refused connections on `127.0.0.1:3306`, so the database service is likely stopped or not listening there.
+
+The script only performs read-only checks and redacts credentials in reports.
+
 ## Local AI Review
 
 `qwen-agent:latest` was used as a safe advisory reviewer for this tooling slice. It recommended keeping optional hashes available and making the scanner friendlier to large directories.
@@ -62,7 +89,7 @@ Follow-up applied:
 
 ## Next Tooling Actions
 
-- Install or otherwise enable `mysql` and `mysqldump`.
-- Add a database read-only connection audit after the MySQL client tools exist.
 - Add a Godot dashboard action that can run the local audits and show friendly status text.
+- Add read-only database summaries to the dashboard once the local AzerothCore MySQL service is reachable.
+- Add server-stack discovery so the dashboard can find or start the local MySQL/auth/world services.
 - Defer Blender/Wine installation until the project reaches the asset conversion or client-launch automation stage.

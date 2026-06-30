@@ -49,3 +49,20 @@ local_reports/client-file-manifest.md
 The scanner records metadata only. It does not extract MPQs, unpack assets, or write proprietary files into Git.
 
 By default, it scans the documented local WotLK client paths and summarizes file counts, sizes, and extension groups. Use `--hash-mode sha256` only when exact provenance is needed and the extra runtime is acceptable.
+
+## AzerothCore Database Audit
+
+Run:
+
+```bash
+python3 tools/audit_azerothcore_db.py
+```
+
+Outputs:
+
+```text
+local_reports/azerothcore-db-audit.json
+local_reports/azerothcore-db-audit.md
+```
+
+The script parses local AzerothCore config files, redacts credentials, and runs read-only connectivity/table-count checks when `mysql` is available and the database server is reachable.
