@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import secrets
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -20,14 +21,17 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCAL_RUNTIME = ROOT / "local_runtime"
 LOCAL_REPORTS = ROOT / "local_reports"
 TOKEN_PATH = LOCAL_RUNTIME / "host-bridge-token.txt"
+TRANSACTION_LOG = LOCAL_RUNTIME / "database-transactions.log"
 STATUS_TOOL = ROOT / "tools" / "audit_server_stack.py"
 STATUS_REPORT = LOCAL_REPORTS / "server-stack-audit.json"
 DATA_TOOL = ROOT / "tools" / "read_only_data_browser.py"
 DATA_REPORT = LOCAL_REPORTS / "read-only-data-browser.json"
 START_SCRIPT = Path("/run/media/doodbro/New 1tb/AzerothCore/scripts/start.sh")
 STOP_SCRIPT = Path("/run/media/doodbro/New 1tb/AzerothCore/scripts/stop.sh")
+CLIENT_EXE = Path("/run/media/doodbro/New 1tb/AzerothCore/client/Wow.exe")
 ALLOWED_DATA_VIEWS = {"summary", "accounts", "characters", "online", "creatures", "items", "quests", "spells", "all"}
 MAX_DATA_SEARCH_LENGTH = 80
+MUTATING_ENDPOINTS = {"/start", "/stop", "/client/launch"}
 
 
 def utc_now() -> str:
@@ -44,6 +48,19 @@ def ensure_token() -> str:
     TOKEN_PATH.write_text(token + "\n", encoding="utf-8")
     TOKEN_PATH.chmod(0o600)
     return token
+
+
+def append_transaction_log(action: str, ok: bool, detail: dict[str, Any]) -> None:
+    LOCAL_RUNTIME.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "timestamp": utc_now(),
+        "action": action,
+        "ok": ok,
+        "detail": detail,
+    }
+    with TRANSACTION_LOG.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    TRANSACTION_LOG.chmod(0o600)
 
 
 def run_command(command: list[str], timeout: int) -> dict[str, Any]:
@@ -70,6 +87,46 @@ def run_command(command: list[str], timeout: int) -> dict[str, Any]:
     }
 
 
+def launch_client() -> dict[str, Any]:
+    if not CLIENT_EXE.exists():
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "output": f"Client executable not found: {CLIENT_EXE}",
+        }
+
+    wine = shutil.which("wine")
+    if not wine:
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "output": "Wine is not installed or not visible to the host bridge.",
+        }
+
+    try:
+        process = subprocess.Popen(
+            [wine, str(CLIENT_EXE)],
+            cwd=str(CLIENT_EXE.parent),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "output": str(exc),
+        }
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "output": f"Client launch started with process id {process.pid}",
+        "pid": process.pid,
+    }
+
+
 def load_json_report(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -80,7 +137,7 @@ def load_json_report(path: Path) -> dict[str, Any]:
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
-    server_version = "AcoreHostBridge/0.1"
+    server_version = "AcoreHostBridge/0.2"
 
     def log_message(self, format: str, *args: Any) -> None:
         sys.stderr.write("[%s] %s\n" % (utc_now(), format % args))
@@ -124,7 +181,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     "ok": True,
                     "service": "azerothcore-host-control-bridge",
                     "generated_at": utc_now(),
+                    "bind_host": self.server.server_address[0],
+                    "mutating_endpoints": sorted(MUTATING_ENDPOINTS),
                     "token_required_for_mutation": True,
+                    "transaction_log": str(TRANSACTION_LOG),
                 },
             )
             return
@@ -202,15 +262,51 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in ["/start", "/stop"]:
+        if path not in MUTATING_ENDPOINTS:
             self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "unknown endpoint", "generated_at": utc_now()})
             return
 
         if not self._require_token():
             return
 
+        if path == "/client/launch":
+            result = launch_client()
+            append_transaction_log(
+                "client_launch",
+                bool(result["ok"]),
+                {
+                    "endpoint": path,
+                    "client": self.client_address[0],
+                    "target": str(CLIENT_EXE),
+                    "pid": result.get("pid"),
+                    "exit_code": result.get("exit_code"),
+                    "output_tail": str(result.get("output", ""))[-1200:],
+                },
+            )
+            self._send_json(
+                HTTPStatus.OK if result["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR,
+                {
+                    "ok": result["ok"],
+                    "generated_at": utc_now(),
+                    "action": "client_launch",
+                    "target": str(CLIENT_EXE),
+                    "result": result,
+                },
+            )
+            return
+
         script = START_SCRIPT if path == "/start" else STOP_SCRIPT
         if not script.exists():
+            append_transaction_log(
+                path.strip("/"),
+                False,
+                {
+                    "endpoint": path,
+                    "client": self.client_address[0],
+                    "script": str(script),
+                    "error": "script not found",
+                },
+            )
             self._send_json(
                 HTTPStatus.NOT_FOUND,
                 {"ok": False, "error": f"script not found: {script}", "generated_at": utc_now()},
@@ -218,6 +314,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
 
         result = run_command(["/usr/bin/env", "bash", str(script)], timeout=240)
+        append_transaction_log(
+            path.strip("/"),
+            bool(result["ok"]),
+            {
+                "endpoint": path,
+                "client": self.client_address[0],
+                "script": str(script),
+                "exit_code": result.get("exit_code"),
+                "output_tail": str(result.get("output", ""))[-1200:],
+            },
+        )
         self._send_json(
             HTTPStatus.OK if result["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR,
             {

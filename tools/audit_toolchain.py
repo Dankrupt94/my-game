@@ -30,8 +30,9 @@ TOOL_GROUPS = {
     "core": ["git", "gh", "python3", "pip3", "node", "npm", "rg", "jq"],
     "godot": ["godot-4"],
     "build": ["cmake", "make", "gcc", "g++", "rustc", "cargo", "go"],
-    "data": ["sqlite3", "mysql", "mysql_config", "mysqldump"],
+    "data": ["sqlite3", "mysql", "mysql_config", "mysqldump", "mycli"],
     "containers": ["docker", "podman"],
+    "diagnostics": ["tshark", "termshark", "socat", "hexyl", "gdformat", "gdlint", "mpqtool"],
     "assets": ["ffmpeg", "blender", "7z", "unzip", "wine"],
     "ai": ["ollama"],
 }
@@ -45,12 +46,17 @@ VERSION_COMMANDS = {
     "ffmpeg": ["ffmpeg", "-version"],
     "g++": ["g++", "--version"],
     "gcc": ["gcc", "--version"],
+    "gdformat": ["gdformat", "--version"],
+    "gdlint": ["gdlint", "--version"],
     "gh": ["gh", "--version"],
     "git": ["git", "--version"],
     "godot-4": ["godot-4", "--version"],
     "go": ["go", "version"],
+    "hexyl": ["hexyl", "--version"],
     "jq": ["jq", "--version"],
     "make": ["make", "--version"],
+    "mpqtool": ["mpqtool", "--version"],
+    "mycli": ["mycli", "--version"],
     "mysql": ["mysql", "--version"],
     "mysql_config": ["mysql_config", "--version"],
     "mysqldump": ["mysqldump", "--version"],
@@ -62,7 +68,10 @@ VERSION_COMMANDS = {
     "python3": ["python3", "--version"],
     "rg": ["rg", "--version"],
     "rustc": ["rustc", "--version"],
+    "socat": ["socat", "-V"],
     "sqlite3": ["sqlite3", "--version"],
+    "tshark": ["tshark", "--version"],
+    "termshark": ["termshark", "--version"],
     "unzip": ["unzip", "-v"],
     "wine": ["wine", "--version"],
 }
@@ -79,6 +88,38 @@ MISSING_TOOL_NOTES = {
     "mysqldump": {
         "priority": "recommended",
         "note": "Useful for safe database snapshots before read/write experiments.",
+    },
+    "mycli": {
+        "priority": "recommended",
+        "note": "Terminal MySQL client with auto-completion and syntax highlighting.",
+    },
+    "tshark": {
+        "priority": "recommended",
+        "note": "Lightweight packet capture utility for analyzing the WotLK socket protocol.",
+    },
+    "termshark": {
+        "priority": "optional",
+        "note": "Terminal-UI viewer for tshark packet captures.",
+    },
+    "socat": {
+        "priority": "optional",
+        "note": "Socket debugger for testing local network connections.",
+    },
+    "hexyl": {
+        "priority": "recommended",
+        "note": "Colored hex viewer for inspecting binary packets and client files.",
+    },
+    "gdformat": {
+        "priority": "recommended",
+        "note": "GDScript code formatter for style guidelines.",
+    },
+    "gdlint": {
+        "priority": "recommended",
+        "note": "GDScript linter to maintain code quality.",
+    },
+    "mpqtool": {
+        "priority": "recommended",
+        "note": "CLI reader and extractor for Blizzard .MPQ archives.",
     },
     "podman": {
         "priority": "optional",

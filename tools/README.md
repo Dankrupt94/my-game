@@ -115,7 +115,7 @@ Stop:
 scripts/stop_host_bridge.sh
 ```
 
-The bridge listens on `127.0.0.1:8765`, provides read-only status, and requires a local token for start/stop requests.
+The bridge listens on `127.0.0.1:8765`, provides read-only status/data endpoints, and requires a local token for start, stop, and client-launch requests.
 
 CLI client:
 
@@ -123,4 +123,11 @@ CLI client:
 python3 tools/bridge_client.py health
 python3 tools/bridge_client.py status --compact
 python3 tools/bridge_client.py data --view summary --compact
+python3 tools/bridge_client.py launch_client --compact
+```
+
+Mutating bridge actions write ignored local JSONL audit entries to:
+
+```text
+local_runtime/database-transactions.log
 ```

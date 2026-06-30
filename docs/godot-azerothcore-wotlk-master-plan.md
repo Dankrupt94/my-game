@@ -148,11 +148,21 @@ To ensure the logical porting plan remains sound, the following technical and ar
 - **Proprietary Asset Pipeline (Stage 14 / Path B):** Faithfully porting the client requires parsing proprietary client assets (`.m2` models, `.blp` textures, `.adt` terrain, `.wmo` world objects) from local MPQ archives. A dedicated offline/runtime local converter must be designed to dump standard structures (e.g., GLTF, PNG) into Git-ignored local folders, ensuring proprietary files remain local-only while keeping conversion tools tracked.
 - **Movement Synchronization & Desyncs (Stage 13):** WoW uses client-predicted movement verified by server heartbeats and fall/jump speed checks. Desyncs cause server-side rubber-banding or disconnects. Stage 13 must focus on simple "read-only movement mimicry" (mimicking a character controlled by an official client) before introducing direct client-authoritative movement inputs from Godot.
 
+## Nice-to-Have Future Enhancements
+
+These optimizations and visual enhancements can be introduced in later stages or post-port to improve fidelity, speed, and safety:
+
+- **Physically Based Rendering (PBR) Materials:** Generate normal, roughness, and metallic maps procedurally from client diffuse textures during local conversion. Enable PBR shader parameters to support wetness during weather effects and metal specular reflections.
+- **Global Illumination & Atmospheres:** Leverage Godot 4’s **SDFGI (Signed Distance Field Global Illumination)** for dynamic light bounces in dungeons and caves, and dynamic directional lights mapping to the server’s day/night cycles. Add volumetric fog and Screen Space Reflections (SSR) for realistic water surfaces.
+- **VRAM Optimizations:** Compress converted assets to BPTC (Vulkan Desktop) format. Batch repetitive town/dungeon props (barrels, crates, fences) via `MultiMeshInstance3D` to minimize draw calls, and configure automatic mesh LODs.
+- **Zone-Based VRAM Streaming:** Implement a chunked asset-streaming system aligned with the client’s ADT map grid. Unload meshes and textures beyond a 2-chunk radius to maintain a stable, lightweight VRAM footprint.
+- **Rust GDExtension Parser:** Implement the core network stream reader, opcode decryption, and the heavy packet parsing logic (`SMSG_UPDATE_OBJECT`) in Rust via a GDExtension helper (`godot-rust`). This achieves native C++ execution speeds with zero-copy packet deserialization, eliminating GDScript garbage collection spikes while guaranteeing memory safety.
+
 ## Current Status
 
-Current stage: Stage 04 is in progress.
+Current stage: Stage 04 is complete; Stage 05 is next.
 
-Reason: the project already has a Godot shell, known local paths, a bridge-aware dashboard, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a host bridge that can report and idempotently start the live stack, and a completed read-only data browser for real AzerothCore data. Stage 04 now hardens that host bridge into the formal local security boundary.
+Reason: the project already has a Godot shell, known local paths, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a completed read-only data browser, and a hardened localhost bridge boundary for Godot dashboard actions. Stage 05 should begin the original Godot gameplay sandbox required by Path A.
 
 ## Non-Negotiable Safety Rules
 

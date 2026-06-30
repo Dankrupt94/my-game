@@ -12,6 +12,14 @@ Plan:
 - Remove direct Godot dashboard fallbacks to host scripts or Wine so dashboard actions go through the bridge.
 - Validate the bridge, dashboard launch, local-stack status, and Git asset boundaries before committing the finished stage.
 
+Result:
+
+- Added token-protected `POST /client/launch` to the host bridge.
+- Added ignored, owner-only `local_runtime/database-transactions.log` JSONL mutation logging for start, stop, and client launch.
+- Updated the dashboard to use native Godot HTTP requests to the localhost bridge for status, data, stack control, restart, and client launch.
+- Removed direct dashboard execution paths for host scripts, helper Python commands, and Wine.
+- Validated bridge health/status/data, unauthorized and invalid-token rejection, idempotent start logging, safe launch failure without Wine, mutation-log permissions/JSON parsing, local Qwen review, and Godot headless launch.
+
 ## 2026-06-30 - Move Godot Project Into AzerothCore Bundle
 
 Goal: move the Godot project out of the SSD trash and into the local AzerothCore bundle where it is easier to find and manage.

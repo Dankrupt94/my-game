@@ -12,14 +12,14 @@ The action registry lives in `scripts/companion_dashboard.gd`.
 
 Current actions:
 
-- `status`: refresh bridge/direct server-stack status and reload the local report.
-- `start_stack`: start the AzerothCore stack through the host bridge when available, with direct script fallback.
-- `stop_stack`: stop the AzerothCore stack through the host bridge when available, with direct script fallback.
+- `status`: refresh server-stack status through the host bridge.
+- `start_stack`: start the AzerothCore stack through the host bridge.
+- `stop_stack`: stop the AzerothCore stack through the host bridge.
 - `restart_stack`: run stop then start through the same command path.
 - `data_browser`: fetch the selected read-only AzerothCore data view through the host bridge and update the dashboard Data Snapshot/results panel.
 - `open_logs`: open the local AzerothCore logs folder.
 - `open_reports`: open this repo's ignored local reports folder.
-- `launch_client`: launch the bundle `Wow.exe` through Wine if Wine is installed.
+- `launch_client`: ask the host bridge to launch the bundled `Wow.exe` through Wine if Wine is installed.
 
 ## Command Output
 
@@ -36,8 +36,8 @@ Command results include:
 
 - The status action is read-only.
 - The data summary action is read-only.
-- Start/stop/restart use the existing local AzerothCore scripts.
-- Snap-limited direct start/stop remains guarded when the host bridge is offline.
+- Start/stop/restart ask the host bridge to use the existing local AzerothCore scripts.
+- The Godot dashboard no longer falls back to direct script or Wine execution when the host bridge is offline.
 - No database writes are introduced by this command layer.
 
 ## Validation

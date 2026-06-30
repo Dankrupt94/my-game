@@ -55,9 +55,10 @@ Build:
 
 Implementation approach:
 
-- Godot calls local helper scripts through `OS.create_process`.
+- Early dashboard prototypes called local helper scripts directly.
+- Stage 04 supersedes that approach: Godot dashboard actions now go through the localhost host bridge.
 - Existing scripts in `/run/media/doodbro/New 1tb/AzerothCore/scripts` remain the source of truth.
-- Godot reads logs but does not directly mutate configs yet.
+- Godot reads safe reports/log folders, but stack control and client launch are bridge-mediated.
 
 Done when:
 
@@ -437,15 +438,21 @@ Done when:
 - **Proprietary Asset Pipeline (Stage 14 / Path B):** Faithfully porting the client requires parsing `.m2` models, `.blp` textures, `.adt` terrain, and `.wmo` world objects from local MPQ archives. A local-only, Git-ignored asset pipeline must convert these into standard formats (GLTF, PNG) without checking them into the repository.
 - **Movement Synchronization & Desyncs (Stage 13):** WoW uses client-predicted movement verified by server heartbeats. Desyncs cause rubber-banding or disconnects. Stage 13 must focus on simple "read-only movement mimicry" (tracking a character moved by the official client) before introducing direct client-authoritative movement inputs from Godot.
 
+## Nice-to-Have Future Enhancements
+
+These visual upgrades and optimization targets can be added to the backlog to improve client speed, fidelity, and safety post-port:
+
+- **Physically Based Rendering (PBR) Materials:** Convert local textures to support normal/roughness maps procedural generation, providing modern material properties.
+- **Atmospherics & Global Illumination:** Leverage SDFGI for caves and dungeons, dynamically shadows aligned to the day/night cycle, Screen Space Reflections (SSR), and volumetric fog.
+- **Draw Call & VRAM Optimization:** Use `MultiMeshInstance3D` to batch city props, configure auto-mesh LODs, compress converted texture assets to BPTC format, and implement a chunked VRAM texture streaming system based on active ADT grid locations.
+- **Rust GDExtension Parser:** Leverage Rust (`godot-rust`) for binary packet reading, opcode decryption, and updating player managers to eliminate GDScript GC frame drops and guarantee memory safety.
+
 ## Best Next Task
 
-Build Stage 1:
+Build Stage 5:
 
-- Add working companion dashboard buttons for:
-  - status,
-  - start,
-  - stop,
-  - open logs,
-  - launch WotLK client.
+- Create the original Godot gameplay sandbox required by Path A.
+- Add third-person movement, camera, collision, targeting, one original NPC, one original enemy, an ability bar, health/resource UI, and a tiny original task loop.
+- Keep all content original/placeholder and use AzerothCore-shaped data only when Stage 06 begins.
 
-This gives immediate value and creates the command layer needed for every later stage. It is not the destination.
+This starts moving the project from dashboard scaffolding toward Godot as the actual game engine layer. It is still Path A risk reduction, not the final WotLK port destination.

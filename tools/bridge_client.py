@@ -15,6 +15,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN_PATH = ROOT / "local_runtime" / "host-bridge-token.txt"
 DEFAULT_BASE_URL = "http://127.0.0.1:8765"
+ACTION_PATHS = {
+    "health": "/health",
+    "status": "/status",
+    "start": "/start",
+    "stop": "/stop",
+    "data": "/data",
+    "launch_client": "/client/launch",
+}
 
 
 def read_token() -> str | None:
@@ -26,7 +34,7 @@ def read_token() -> str | None:
 
 def request_json(base_url: str, action: str, timeout: int, view: str, search: str, limit: int) -> tuple[int, dict[str, object]]:
     method = "GET" if action in ["health", "status"] else "POST"
-    path = "/" + action
+    path = ACTION_PATHS[action]
     headers = {}
 
     if action == "data":
@@ -89,7 +97,7 @@ def compact_summary(action: str, status: int, payload: dict[str, object]) -> dic
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["health", "status", "start", "stop", "data"])
+    parser.add_argument("action", choices=["health", "status", "start", "stop", "data", "launch_client"])
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--compact", action="store_true")

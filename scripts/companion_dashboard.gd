@@ -6,12 +6,8 @@ const AZEROTHCORE_BUILD := "/home/doodbro/azeroth-build"
 const AZEROTHCORE_RUN := "/run/media/doodbro/New 1tb/AzerothCore/run"
 const WOTLK_CLIENT := "/run/media/doodbro/5e07d7d7-039f-43a8-94da-999f100ab1fb/World of Warcraft - WoTLK"
 const BUNDLE_CLIENT := "/run/media/doodbro/New 1tb/AzerothCore/client"
-const START_SCRIPT := "/run/media/doodbro/New 1tb/AzerothCore/scripts/start.sh"
-const STOP_SCRIPT := "/run/media/doodbro/New 1tb/AzerothCore/scripts/stop.sh"
-const STATUS_TOOL := "res://tools/audit_server_stack.py"
-const BRIDGE_CLIENT := "res://tools/bridge_client.py"
-const STATUS_REPORT := "res://local_reports/server-stack-audit.json"
-const DATA_REPORT := "res://local_reports/read-only-data-browser.json"
+const BRIDGE_BASE_URL := "http://127.0.0.1:8765"
+const BRIDGE_TOKEN_PATH := "res://local_runtime/host-bridge-token.txt"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
 const DATA_VIEWS := ["summary", "accounts", "characters", "online", "creatures", "items", "quests", "spells"]
@@ -23,8 +19,8 @@ var data_view_selector: OptionButton
 var data_search_input: LineEdit
 var data_limit_input: SpinBox
 var data_results: TextEdit
-var start_stop_blocked := false
 var bridge_available := false
+var pending_restart := false
 
 
 func _ready() -> void:
@@ -206,7 +202,7 @@ func _build_dashboard() -> void:
 	side_stack.add_child(_section_title("Project Rules"))
 	side_stack.add_child(_status_row("asset_policy", "Asset policy"))
 	_set_status("asset_policy", "Local only", true)
-	side_stack.add_child(_body_text("Reports are generated under local_reports/ and ignored by Git. Start and stop actions use the existing AzerothCore scripts."))
+	side_stack.add_child(_body_text("Dashboard actions go through the localhost host bridge. Reports, tokens, logs, and runtime files stay local and ignored by Git."))
 
 
 func _run_action(action_id: String) -> void:
@@ -227,35 +223,55 @@ func _run_action(action_id: String) -> void:
 
 
 func _action_refresh_status() -> void:
-	_append_log("Refreshing local server-stack status...")
-	var health := _run_bridge_action("health", 8)
-	bridge_available = int(health["exit_code"]) == 0
-	_set_status("bridge", "Online" if bridge_available else "Offline", bridge_available)
+	_append_log("Checking host bridge...")
+	_bridge_get("/health", "Bridge health", Callable(self, "_on_health_response"), 8, false)
 
-	if bridge_available:
-		var bridge_status := _run_bridge_action("status", 35)
-		_append_command_result("Bridge status", bridge_status)
-	else:
-		var tool_path := ProjectSettings.globalize_path(STATUS_TOOL)
-		var result := _run_command("/usr/bin/python3", [tool_path])
-		_append_command_result("Direct status", result)
-	_load_status_report()
-	if bridge_available:
-		_refresh_data_summary(false)
+
+func _on_health_response(payload: Dictionary, response_code: int, request_ok: bool) -> void:
+	bridge_available = request_ok
+	_set_status("bridge", "Online" if bridge_available else "Offline", bridge_available)
+	if not bridge_available:
+		_append_log("Host bridge is offline. Start the project with the normal launcher or run scripts/start_host_bridge.sh, then refresh status.")
+		return
+
+	_bridge_get("/status", "Bridge status", Callable(self, "_on_status_response"), 35)
+
+
+func _on_status_response(payload: Dictionary, response_code: int, request_ok: bool) -> void:
+	if not request_ok:
+		return
+
+	var report: Dictionary = payload.get("report", {})
+	_apply_status_report(report)
+	_refresh_data_summary(false)
 
 
 func _action_start_stack() -> void:
-	_run_stack_script(START_SCRIPT, "Start stack")
+	_bridge_post("/start", "Bridge start", Callable(self, "_on_stack_control_response"), 260)
 
 
 func _action_stop_stack() -> void:
-	_run_stack_script(STOP_SCRIPT, "Stop stack")
+	_bridge_post("/stop", "Bridge stop", Callable(self, "_on_stack_control_response"), 260)
 
 
 func _action_restart_stack() -> void:
-	_append_log("Restart stack: stop then start.")
-	_run_stack_script(STOP_SCRIPT, "Stop stack")
-	_run_stack_script(START_SCRIPT, "Start stack")
+	pending_restart = true
+	_append_log("Restart stack: bridge stop then bridge start.")
+	_bridge_post("/stop", "Bridge stop for restart", Callable(self, "_on_restart_stop_response"), 260)
+
+
+func _on_restart_stop_response(payload: Dictionary, response_code: int, request_ok: bool) -> void:
+	if not request_ok:
+		pending_restart = false
+		_action_refresh_status()
+		return
+
+	_bridge_post("/start", "Bridge start for restart", Callable(self, "_on_stack_control_response"), 260)
+
+
+func _on_stack_control_response(payload: Dictionary, response_code: int, request_ok: bool) -> void:
+	pending_restart = false
+	_action_refresh_status()
 
 
 func _action_data_browser() -> void:
@@ -277,10 +293,7 @@ func _refresh_data_summary(log_result: bool) -> void:
 		_append_log("Read-only data browser needs the host bridge to be online.")
 		return
 
-	var result := _run_bridge_data_action("summary", "", 25, 35)
-	if log_result:
-		_append_command_result("Bridge data summary", result)
-	_load_data_report()
+	_bridge_get("/data?view=summary&search=&limit=25", "Bridge data summary", Callable(self, "_on_data_response"), 35, log_result)
 
 
 func _refresh_data_view(view: String, search: String, limit: int, log_result: bool) -> void:
@@ -288,33 +301,16 @@ func _refresh_data_view(view: String, search: String, limit: int, log_result: bo
 		_append_log("Read-only data browser needs the host bridge to be online.")
 		return
 
-	var result := _run_bridge_data_action(view, search, limit, 35)
-	if log_result:
-		_append_command_result("Bridge data " + view, result)
-	_load_data_report()
+	var path := "/data?view=" + view.uri_encode() + "&search=" + search.uri_encode() + "&limit=" + str(limit)
+	_bridge_get(path, "Bridge data " + view, Callable(self, "_on_data_response"), 35, log_result)
 
 
-func _run_stack_script(script_path: String, label: String) -> void:
-	if bridge_available:
-		var bridge_action := "start" if script_path == START_SCRIPT else "stop"
-		var bridge_result := _run_bridge_action(bridge_action, 260)
-		_append_command_result("Bridge " + bridge_action, bridge_result)
-		_run_action("status")
+func _on_data_response(payload: Dictionary, response_code: int, request_ok: bool) -> void:
+	if not request_ok:
 		return
 
-	if start_stop_blocked:
-		_append_log("Start/stop from Snap Godot is blocked because Docker is not visible inside the app sandbox. Use the host script directly for now; the next bridge step will fix this.")
-		return
-
-	if not FileAccess.file_exists(script_path):
-		_append_log(label + " script missing: " + script_path)
-		return
-
-	_append_log("Running: " + label)
-	var result := _run_command("/usr/bin/env", ["bash", script_path])
-	_append_log(result["output"])
-	_append_log(label + " exit code: " + str(result["exit_code"]))
-	_run_action("status")
+	var report: Dictionary = payload.get("report", {})
+	_apply_data_report(report)
 
 
 func _action_open_logs() -> void:
@@ -329,39 +325,18 @@ func _action_open_reports() -> void:
 
 
 func _action_launch_client() -> void:
-	var wow_path := BUNDLE_CLIENT + "/Wow.exe"
-	if not FileAccess.file_exists(wow_path):
-		_append_log("Bundle Wow.exe not found at: " + wow_path)
+	_bridge_post("/client/launch", "Bridge client launch", Callable(self, "_on_client_launch_response"), 30)
+
+
+func _on_client_launch_response(payload: Dictionary, response_code: int, request_ok: bool) -> void:
+	pass
+
+
+func _apply_status_report(report: Dictionary) -> void:
+	if report.is_empty():
+		_append_log("Bridge status report was empty.")
 		return
 
-	if not _command_exists("wine"):
-		_append_log("Wine is not installed yet, so the Windows client cannot be launched from this Linux dashboard.")
-		return
-
-	var pid := OS.create_process("/usr/bin/env", PackedStringArray(["wine", wow_path]), false)
-	if pid <= 0:
-		_append_log("Client launch failed.")
-	else:
-		_append_log("Client launch started with process id: " + str(pid))
-
-
-func _load_status_report() -> void:
-	var report_path := ProjectSettings.globalize_path(STATUS_REPORT)
-	if not FileAccess.file_exists(report_path):
-		_append_log("Status report not found yet: " + report_path)
-		return
-
-	var file := FileAccess.open(report_path, FileAccess.READ)
-	if file == null:
-		_append_log("Could not open status report: " + report_path)
-		return
-
-	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY:
-		_append_log("Status report JSON could not be parsed.")
-		return
-
-	var report: Dictionary = parsed
 	var ports: Dictionary = report.get("ports", {})
 	_set_port_status(ports, "mysql")
 	_set_port_status(ports, "authserver")
@@ -369,16 +344,9 @@ func _load_status_report() -> void:
 	_set_port_status(ports, "ollama")
 
 	var docker_mysql: Dictionary = report.get("docker_mysql", {})
-	var runtime_environment: Dictionary = report.get("runtime_environment", {})
 	var docker_running := bool(docker_mysql.get("container_running", false))
 	var docker_found := bool(docker_mysql.get("container_found", false))
-	var docker_present := bool(docker_mysql.get("docker_present", false))
-	var inside_snap := bool(runtime_environment.get("inside_snap", false))
-	start_stop_blocked = (not bridge_available) and inside_snap and not docker_present
-	if start_stop_blocked:
-		_set_status("docker_mysql", "Snap blocked", false)
-	else:
-		_set_status("docker_mysql", "Running" if docker_running else ("Stopped" if docker_found else "Not found"), docker_running)
+	_set_status("docker_mysql", "Running" if docker_running else ("Stopped" if docker_found else "Not found"), docker_running)
 
 	var binaries: Dictionary = report.get("binaries", {})
 	_set_path_status(binaries, "authserver", "auth_binary")
@@ -393,23 +361,11 @@ func _load_status_report() -> void:
 	_set_path_status(clients, "Wow.exe", "wow_exe")
 
 
-func _load_data_report() -> void:
-	var report_path := ProjectSettings.globalize_path(DATA_REPORT)
-	if not FileAccess.file_exists(report_path):
-		_append_log("Data report not found yet: " + report_path)
+func _apply_data_report(report: Dictionary) -> void:
+	if report.is_empty():
+		_append_log("Bridge data report was empty.")
 		return
 
-	var file := FileAccess.open(report_path, FileAccess.READ)
-	if file == null:
-		_append_log("Could not open data report: " + report_path)
-		return
-
-	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY:
-		_append_log("Data report JSON could not be parsed.")
-		return
-
-	var report: Dictionary = parsed
 	var views: Dictionary = report.get("views", {})
 	var summary: Dictionary = views.get("summary", {})
 	var counts: Dictionary = summary.get("counts", {})
@@ -531,48 +487,106 @@ func _set_data_status(data: Dictionary, data_file_counts: Dictionary, runtime_da
 		_set_status("runtime_data", "Missing " + ", ".join(missing), false)
 
 
-func _command_exists(command: String) -> bool:
-	var result := _run_command("/usr/bin/env", ["bash", "-lc", "command -v " + command])
-	return int(result["exit_code"]) == 0
+func _bridge_get(path: String, label: String, callback: Callable, timeout: int, log_response: bool = true) -> void:
+	_bridge_request(path, HTTPClient.METHOD_GET, PackedStringArray(), "", label, callback, timeout, log_response)
 
 
-func _run_bridge_action(action: String, timeout: int) -> Dictionary:
-	var client_path := ProjectSettings.globalize_path(BRIDGE_CLIENT)
-	return _run_command("/usr/bin/python3", [client_path, action, "--compact", "--timeout", str(timeout)])
+func _bridge_post(path: String, label: String, callback: Callable, timeout: int, log_response: bool = true) -> void:
+	var token := _read_bridge_token()
+	if token.is_empty():
+		pending_restart = false
+		_append_log("Bridge token is missing. Start or restart the host bridge, then try again.")
+		return
+
+	var headers := PackedStringArray(["X-Acore-Bridge-Token: " + token])
+	_bridge_request(path, HTTPClient.METHOD_POST, headers, "", label, callback, timeout, log_response)
 
 
-func _run_bridge_data_action(view: String, search: String, limit: int, timeout: int) -> Dictionary:
-	var client_path := ProjectSettings.globalize_path(BRIDGE_CLIENT)
-	return _run_command(
-		"/usr/bin/python3",
-		[client_path, "data", "--view", view, "--search", search, "--limit", str(limit), "--compact", "--timeout", str(timeout)]
-	)
+func _read_bridge_token() -> String:
+	var token_path := ProjectSettings.globalize_path(BRIDGE_TOKEN_PATH)
+	if not FileAccess.file_exists(token_path):
+		return ""
+
+	var file := FileAccess.open(token_path, FileAccess.READ)
+	if file == null:
+		return ""
+
+	return file.get_as_text().strip_edges()
 
 
-func _run_command(executable: String, args: Array) -> Dictionary:
-	var output := []
-	var packed_args := PackedStringArray()
-	for arg in args:
-		packed_args.append(str(arg))
+func _bridge_request(
+	path: String,
+	method: int,
+	headers: PackedStringArray,
+	body: String,
+	label: String,
+	callback: Callable,
+	timeout: int,
+	log_response: bool
+) -> void:
+	var request := HTTPRequest.new()
+	request.timeout = timeout
+	add_child(request)
+	request.request_completed.connect(Callable(self, "_on_bridge_request_completed").bind(label, callback, request, log_response))
 
-	var exit_code := OS.execute(executable, packed_args, output, true, false)
-	var text := ""
-	for chunk in output:
-		text += str(chunk)
-	if text.strip_edges().is_empty():
-		text = "(no output)"
-
-	return {
-		"exit_code": exit_code,
-		"output": text.strip_edges(),
-	}
+	var error := request.request(BRIDGE_BASE_URL + path, headers, method, body)
+	if error != OK:
+		request.queue_free()
+		if log_response:
+			_append_log(label + " could not start. Error code: " + str(error))
+		if callback.is_valid():
+			callback.call({}, 0, false)
 
 
-func _append_command_result(label: String, result: Dictionary) -> void:
-	var output := str(result["output"])
-	if output.length() > 4200:
-		output = output.substr(0, 1000) + "\n...[output truncated]...\n" + output.substr(output.length() - 2800)
-	_append_log(label + " exit code: " + str(result["exit_code"]) + "\n" + output)
+func _on_bridge_request_completed(
+	result: int,
+	response_code: int,
+	_headers: PackedStringArray,
+	body: PackedByteArray,
+	label: String,
+	callback: Callable,
+	request: HTTPRequest,
+	log_response: bool
+) -> void:
+	var body_text := body.get_string_from_utf8()
+	var parsed = JSON.parse_string(body_text)
+	var payload: Dictionary = {}
+	if typeof(parsed) == TYPE_DICTIONARY:
+		payload = parsed
+	elif not body_text.strip_edges().is_empty():
+		payload["error"] = body_text.strip_edges()
+
+	var request_ok := result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300 and bool(payload.get("ok", false))
+	if log_response:
+		_append_bridge_response(label, payload, response_code, result, request_ok)
+
+	if callback.is_valid():
+		callback.call(payload, response_code, request_ok)
+
+	request.queue_free()
+
+
+func _append_bridge_response(label: String, payload: Dictionary, response_code: int, result: int, request_ok: bool) -> void:
+	var lines := PackedStringArray()
+	lines.append(label + " HTTP " + str(response_code) + (" OK" if request_ok else " failed"))
+
+	if result != HTTPRequest.RESULT_SUCCESS:
+		lines.append("Transport result: " + str(result))
+
+	if payload.has("error"):
+		lines.append("Error: " + str(payload["error"]))
+
+	var command_result: Dictionary = payload.get("result", {})
+	if not command_result.is_empty():
+		if command_result.has("exit_code"):
+			lines.append("Exit code: " + str(command_result["exit_code"]))
+		var output := str(command_result.get("output", "")).strip_edges()
+		if output.length() > 4200:
+			output = output.substr(0, 1000) + "\n...[output truncated]...\n" + output.substr(output.length() - 2800)
+		if not output.is_empty():
+			lines.append(output)
+
+	_append_log("\n".join(lines))
 
 
 func _append_log(text: String) -> void:

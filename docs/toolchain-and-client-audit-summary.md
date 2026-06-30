@@ -17,32 +17,26 @@ local_reports/client-file-manifest.md
 
 Confirmed present on this machine:
 
-- Godot 4.7 Mono through `godot-4`.
-- Git and GitHub CLI.
-- Python and pip.
-- Node and npm.
-- Rust and Cargo.
-- CMake, Make, GCC, and G++.
-- Docker.
-- Ollama with `qwen-agent:latest` and `qwen2.5-coder:7b`.
-- `ffmpeg`, `7z`, `unzip`, `jq`, `rg`, `sqlite3`, and `mysql_config`.
+- **Godot Engine:** Godot 4.7 Mono (via `godot-4`).
+- **Core VCS/CLI:** Git and GitHub CLI.
+- **Languages/Packages:** Python3/pip3, Node/npm, Rust/Cargo.
+- **Compilers/Linkers:** CMake, Make, GCC, and G++.
+- **Containerization:** Docker.
+- **Local AI:** Ollama running `qwen-agent:latest` and `qwen2.5-coder:7b`.
+- **System Utilities:** `ffmpeg`, `7z`, `unzip`, `jq`, `sqlite3`, and `mysql_config`.
+- **Database Client:** `mysql` and `mysqldump` (via `default-mysql-client`).
 
-Missing or deferred before database-client setup:
+Missing or deferred developer/debugging tools:
 
-- `mysql` and `mysqldump`: recommended soon for safe read-only database inspection and snapshots.
-- `blender`: needed later for model conversion and Godot visual pipeline experiments.
-- `wine`: needed later if Linux launch automation around the Windows WotLK client is required.
-- `go`: optional unless future tooling needs Go.
-- `podman`: optional because Docker is already available.
-
-Update: `default-mysql-client` was installed after the first audit, so `mysql` and `mysqldump` are now available for follow-up database checks.
-
-Current deferred tools after install:
-
-- `blender`: needed later for model conversion and Godot visual pipeline experiments.
-- `wine`: needed later if Linux launch automation around the Windows WotLK client is required.
-- `go`: optional unless future tooling needs Go.
-- `podman`: optional because Docker is already available.
+- **Protocol Sniffing:** `tshark` (recommended for packet capture) and `termshark` (optional TUI for packet analysis).
+- **Socket Testing:** `socat` (optional socket debugger).
+- **Hex/Binary Inspection:** `hexyl` (recommended colored hex viewer).
+- **Auto-complete SQL:** `mycli` (recommended MySQL shell).
+- **GDScript Quality:** `gdformat` (recommended formatter) and `gdlint` (recommended linter).
+- **MPQ Parsing:** `mpqtool` (recommended MPQ viewer/extractor).
+- **Graphics/Visuals:** `blender` (needed later for model conversions).
+- **Client Automation:** `wine` (needed later for launching Windows client binary).
+- **Other:** `go` (optional) and `podman` (optional, since Docker is present).
 
 ## Client Manifest Result
 
