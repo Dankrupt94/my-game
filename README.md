@@ -37,6 +37,8 @@ Server stack discovery is tracked in [docs/server-stack-discovery-summary.md](do
 
 The localhost bridge for host-side start/stop/status control is documented in [docs/host-control-bridge.md](docs/host-control-bridge.md).
 
+The current protocol smoke profile and live character-list validation path are documented in [docs/local-server-smoke-profile.md](docs/local-server-smoke-profile.md). In the Godot dashboard, use `Check Protocol` to run the native helper through the local ignored `CODEXPROTO` account.
+
 The original Godot gameplay sandbox is documented in [docs/gameplay-sandbox.md](docs/gameplay-sandbox.md).
 
 The Godot-native multiplayer sandbox is documented in [docs/multiplayer-sandbox.md](docs/multiplayer-sandbox.md).

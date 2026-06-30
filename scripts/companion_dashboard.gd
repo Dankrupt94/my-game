@@ -1,5 +1,7 @@
 extends Control
 
+const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
+
 const AZEROTHCORE_ROOT := "/run/media/doodbro/New 1tb/AzerothCore"
 const AZEROTHCORE_SOURCE := "/run/media/doodbro/New 1tb/AzerothCore/source"
 const AZEROTHCORE_BUILD := "/home/doodbro/azeroth-build"
@@ -23,12 +25,19 @@ var data_limit_input: SpinBox
 var data_results: TextEdit
 var bridge_available := false
 var pending_restart := false
+var protocol_thread: Thread
+var protocol_bridge: RefCounted
 
 
 func _ready() -> void:
 	_register_command_actions()
 	_build_dashboard()
 	_run_action("status")
+
+
+func _exit_tree() -> void:
+	if protocol_thread != null and protocol_thread.is_started():
+		protocol_thread.wait_to_finish()
 
 
 func _register_command_actions() -> void:
@@ -60,6 +69,10 @@ func _register_command_actions() -> void:
 		"open_multiplayer": {
 			"label": "Open Multiplayer",
 			"handler": Callable(self, "_action_open_multiplayer"),
+		},
+		"protocol_character_flow": {
+			"label": "Check Protocol",
+			"handler": Callable(self, "_action_protocol_character_flow"),
 		},
 		"open_logs": {
 			"label": "Open Logs",
@@ -128,6 +141,7 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("data_browser"))
 	actions.add_child(_action_button("open_sandbox"))
 	actions.add_child(_action_button("open_multiplayer"))
+	actions.add_child(_action_button("protocol_character_flow"))
 	actions.add_child(_action_button("open_logs"))
 	actions.add_child(_action_button("open_reports"))
 	actions.add_child(_action_button("launch_client"))
@@ -195,6 +209,7 @@ func _build_dashboard() -> void:
 	side_stack.add_child(_status_row("authserver", "Authserver"))
 	side_stack.add_child(_status_row("worldserver", "Worldserver"))
 	side_stack.add_child(_status_row("ollama", "Ollama"))
+	side_stack.add_child(_status_row("protocol_character_flow", "Protocol flow"))
 	side_stack.add_child(_status_row("docker_mysql", "Docker MySQL"))
 	side_stack.add_child(_status_row("auth_binary", "Auth binary"))
 	side_stack.add_child(_status_row("world_binary", "World binary"))
@@ -354,6 +369,64 @@ func _action_launch_client() -> void:
 
 func _on_client_launch_response(payload: Dictionary, response_code: int, request_ok: bool) -> void:
 	pass
+
+
+func _action_protocol_character_flow() -> void:
+	if protocol_thread != null and protocol_thread.is_started():
+		_append_log("Protocol character-flow check is already running.")
+		return
+
+	protocol_bridge = ProtocolClientBridge.new()
+	protocol_thread = Thread.new()
+	_set_status("protocol_character_flow", "Running", true)
+	_append_log("Running native protocol character-flow check...")
+	var error := protocol_thread.start(Callable(self, "_run_protocol_character_flow_thread"))
+	if error != OK:
+		_set_status("protocol_character_flow", "Could not start", false)
+		_append_log("Protocol check thread could not start. Error code: " + str(error))
+
+
+func _run_protocol_character_flow_thread() -> void:
+	var result: Dictionary = protocol_bridge.run_character_flow()
+	call_deferred("_on_protocol_character_flow_done", result)
+
+
+func _on_protocol_character_flow_done(result: Dictionary) -> void:
+	if protocol_thread != null:
+		protocol_thread.wait_to_finish()
+		protocol_thread = null
+
+	var ok := bool(result.get("ok", false))
+	var count := int(result.get("character_count", -1))
+	if ok:
+		_set_status("protocol_character_flow", "Characters: " + str(count), true)
+	else:
+		_set_status("protocol_character_flow", "Failed", false)
+
+	_append_log(_format_protocol_flow_result(result))
+
+
+func _format_protocol_flow_result(result: Dictionary) -> String:
+	var lines := PackedStringArray()
+	lines.append("Protocol character-flow " + ("OK" if bool(result.get("ok", false)) else "failed"))
+	lines.append("Exit code: " + str(result.get("exit_code", "?")))
+	if result.has("realm_line"):
+		lines.append(str(result["realm_line"]))
+	if bool(result.get("world_auth_ok", false)):
+		lines.append("WORLD_AUTH_OK")
+	if bool(result.get("char_enum_ok", false)):
+		lines.append("CHAR_ENUM_OK count=" + str(result.get("character_count", "?")))
+
+	var characters: Array = result.get("characters", [])
+	for character in characters:
+		lines.append(str(character))
+
+	var output := str(result.get("output", "")).strip_edges()
+	if not output.is_empty() and not bool(result.get("ok", false)):
+		if output.length() > 1200:
+			output = output.substr(0, 1200) + "\n...[output truncated]..."
+		lines.append(output)
+	return "\n".join(lines)
 
 
 func _apply_status_report(report: Dictionary) -> void:

@@ -53,10 +53,12 @@ The first implementation checkpoint should be a safe local smoke harness that ca
 - Used local `qwen-agent` as a narrow advisory reviewer for the character-flow packet code; final acceptance came from the local CMake build and live safe probes.
 - Created the local ignored `CODEXPROTO` protocol test account for live smoke validation.
 - Documented and applied a local AzerothCore smoke profile with Warden and random bot autologin disabled for protocol validation. Warden support remains a later compatibility task.
+- Added `scripts/protocol_client_bridge.gd` as the first Godot-side wrapper around the native helper.
+- Added a dashboard `Check Protocol` action that runs the live character-flow smoke test through the ignored local protocol account and reports the parsed milestones in Godot.
 
 ## Next Checkpoint
 
-- Start moving the validated helper flow behind a Godot-facing native wrapper.
+- Replace the blocking helper process bridge with a true asynchronous GDExtension or native Godot TCP module.
 - Track Warden handling separately before claiming full default-server compatibility.
 - Decide when to restore random bot autologin for gameplay-load testing after protocol smoke tests are stable.
 
@@ -72,6 +74,8 @@ Completed on 2026-06-30:
 - `native/protocol_client/build/acore_protocol_client --character-flow 127.0.0.1 3724 ADMIN` fails safely with `ACORE_PROTOCOL_PASSWORD is not set` when no local password is supplied.
 - `native/protocol_client/build/acore_protocol_client --world-challenge 127.0.0.1 8085` printed `WORLD_CHALLENGE_OK`.
 - With `local_runtime/protocol-test-account.env` loaded for the ignored `CODEXPROTO` account, `native/protocol_client/build/acore_protocol_client --character-flow 127.0.0.1 3724 CODEXPROTO` printed `AUTH_FLOW_OK`, `WORLD_AUTH_OK`, and `CHAR_ENUM_OK count=0`.
+- `godot-4 --headless --path . --quit` succeeded.
+- `godot-4 --headless --path . --scene res://main.tscn --quit-after 1` succeeded with the protocol dashboard action wired.
 - `cmake --build native/protocol_client/build` completed without warnings after the character-flow checkpoint.
 - No account credentials, session keys, packet captures, proprietary client files, or local runtime files were committed.
 
