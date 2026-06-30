@@ -254,3 +254,16 @@ Result:
 - Kept bridge startup optional with `ACORE_COMPANION_START_BRIDGE=0`.
 - Documented automatic bridge startup in `docs/host-control-bridge.md`.
 - Validated the launcher in headless mode: it started the bridge, launched Godot 4.7, exited successfully, and the bridge was stopped after the test.
+
+## 2026-06-30 - Begin Linux Server Binary Completion
+
+Goal: continue toward a runnable local stack by completing the missing Linux `worldserver` build and installing available Linux server binaries into the configured AzerothCore run folder.
+
+Plan:
+
+- Save this before-task note.
+- Build the `worldserver` target in `/home/doodbro/azeroth-build`.
+- Run the CMake install step if the build succeeds.
+- Re-run server-stack and database audits.
+- Record safe build/install results in documentation.
+- Commit and push non-proprietary documentation/tool updates.
