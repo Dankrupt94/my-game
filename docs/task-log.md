@@ -1,5 +1,17 @@
 # Task Log
 
+## 2026-06-30 - Stage 05 Started
+
+Goal: add a fresh original playable Godot gameplay sandbox under the AzerothCore companion direction.
+
+Plan:
+
+- Preserve this before-task note.
+- Add a new sandbox scene and script using original placeholder geometry only.
+- Add third-person movement, camera follow, collision, targeting, one original NPC, one original enemy, an action bar, health/resource UI, and a simple task loop.
+- Link the dashboard to the sandbox and provide a return path.
+- Validate the scene with Godot 4.7 headless launch and Git asset-boundary checks.
+
 ## 2026-06-30 - Stage 04 Started
 
 Goal: harden the localhost bridge into the formal security boundary between Godot and host-level AzerothCore operations.
