@@ -277,7 +277,7 @@ Result:
 - Verified the configured database login from the host.
 - Re-ran database audit: auth, world, and characters databases are reachable.
 - Re-ran server-stack audit: MySQL and Ollama are listening; auth/world binaries exist; worldserver now reaches local runtime data loading.
-- Current blocker: required local runtime data under `/run/media/doodbro/New 1tb/AzerothCore/data` is missing, so worldserver stops with missing map-file errors.
+- Blocker at that checkpoint: required local runtime data under `/run/media/doodbro/New 1tb/AzerothCore/data` was missing, so worldserver stopped with missing map-file errors.
 
 ## 2026-06-30 - Add Runtime Data Readiness To Dashboard
 
@@ -292,7 +292,7 @@ Plan:
 
 Result:
 
-- Added audit checks for `data/maps`, `data/maps/0000.map`, `data/dbc`, `data/vmaps`, and `data/mmaps`.
+- Added audit checks for `data/maps`, `data/dbc`, `data/vmaps`, and `data/mmaps`.
 - Added a `Runtime data` row to the dashboard.
 - Documented local runtime repairs in `docs/local-runtime-repairs.md`.
 
@@ -341,4 +341,32 @@ Checkpoint:
 - Reconfigured `/home/doodbro/azeroth-build` with `TOOLS_BUILD=maps-only`.
 - Built `map_extractor`, `vmap4_extractor`, `vmap4_assembler`, and `mmaps_generator`.
 - Located the binaries under `/home/doodbro/azeroth-build/src/tools/`.
-- Next action is local-only data generation from `/run/media/doodbro/New 1tb/AzerothCore/client`.
+- Generated maps, DBC, VMaps, and MMaps from `/run/media/doodbro/New 1tb/AzerothCore/client`.
+- Moved required runtime data into `/run/media/doodbro/New 1tb/AzerothCore/data`.
+- Verified local runtime data counts: 5744 map files, 246 DBC files, 2794 VMap files, and 3780 MMap files.
+- Removed the temporary `/run/media/doodbro/New 1tb/AzerothCore/client/Buildings` extractor scratch folder.
+- Repaired `/run/media/doodbro/New 1tb/AzerothCore/scripts/start.sh` so desktop/background launches detach server processes, disable worldserver console mode for background runtime configs, and check real runtime-data file counts.
+- Verified the local stack reaches live ports: MySQL `3306`, authserver `3724`, worldserver `8085`, Ollama `11434`, with the LLM bridge running.
+- Worldserver logged `WORLD: World Initialized In 1 Minutes 1 Seconds` and `worldserver-daemon ready`.
+
+## 2026-06-30 - Verify Dashboard Bridge Against Live Stack
+
+Goal: prove the Godot dashboard path can see and control the now-running local AzerothCore stack through the localhost bridge.
+
+Plan:
+
+- Start the host control bridge.
+- Verify bridge health and status against the live stack.
+- Repair bridge startup if it does not survive background launch cleanup.
+- Validate an idempotent bridge `start` request while the stack is already running.
+- Validate the Godot dashboard scene loads headlessly with the bridge online.
+- Record results in documentation.
+
+Result:
+
+- Found that the host bridge code worked in foreground, but the launcher needed the same detached-session repair as the server launcher.
+- Updated `scripts/start_host_bridge.sh` to use a detached launch, clean stale PID files, and verify bridge health before success.
+- Verified `tools/bridge_client.py health --compact` returns success.
+- Verified `tools/bridge_client.py status --compact` sees MySQL `3306`, authserver `3724`, worldserver `8085`, Ollama `11434`, Docker, and runtime data ready.
+- Verified `tools/bridge_client.py start --compact` succeeds while the stack is already running and reports the existing live ports.
+- Verified `scripts/run_game.sh` loads the Godot 4.7 scene headlessly with the bridge online.

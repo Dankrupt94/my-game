@@ -59,6 +59,8 @@ Manual start:
 scripts/start_host_bridge.sh
 ```
 
+The start script launches the bridge in a detached session and verifies `GET /health` before reporting success. This matters for desktop/Godot launches, where plain background jobs can be cleaned up when the parent script exits.
+
 Stop:
 
 ```bash
@@ -103,3 +105,10 @@ Dashboard integration validation completed:
 - `tools/bridge_client.py status --compact` succeeds and sees host-side Docker.
 - Godot 4.7 loaded headlessly with the bridge online and refreshed status without starting the stack.
 - The bridge was stopped after validation.
+
+Live-stack validation completed after runtime data extraction:
+
+- `scripts/start_host_bridge.sh` starts a durable bridge process and verifies health.
+- `tools/bridge_client.py status --compact` sees MySQL `3306`, authserver `3724`, worldserver `8085`, Ollama `11434`, Docker, and runtime data ready.
+- `tools/bridge_client.py start --compact` succeeds while the stack is already running and reports the existing live ports.
+- Godot 4.7 loads the dashboard scene headlessly through `scripts/run_game.sh` with the bridge online.

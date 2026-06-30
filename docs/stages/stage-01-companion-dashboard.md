@@ -46,6 +46,9 @@ Make the Godot app useful immediately as a friendly control panel for the local 
 - Added a localhost bridge client path so the dashboard can use host-side status/start/stop when `tools/host_control_bridge.py` is running.
 - Linux `authserver` and `worldserver` binaries are now installed under `/run/media/doodbro/New 1tb/AzerothCore/run/bin`.
 - The configured auth/world/characters databases are reachable.
-- Worldserver now reaches data loading and stops because local runtime data is missing.
-- Runtime data readiness is tracked in the dashboard and `tools/audit_server_stack.py`.
-- Runtime data extraction is tracked in `docs/runtime-data-extraction-plan.md`.
+- Runtime data extraction is complete and tracked in `docs/runtime-data-extraction-plan.md`.
+- Runtime data readiness is tracked by file counts in the dashboard and `tools/audit_server_stack.py`.
+- The local stack has been verified with MySQL `3306`, authserver `3724`, worldserver `8085`, Ollama `11434`, and the LLM bridge running.
+- The host bridge has been verified against the live stack for health, status, and idempotent start.
+- Godot 4.7 loads the dashboard scene headlessly through `scripts/run_game.sh` with the bridge online.
+- Remaining Stage 01 work: decide whether to add a visible restart action and optionally test a full stop/start cycle when it is acceptable to briefly take the stack offline.

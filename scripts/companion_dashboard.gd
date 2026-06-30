@@ -234,7 +234,9 @@ func _load_status_report() -> void:
 	_set_path_status(binaries, "worldserver", "world_binary")
 
 	var data: Dictionary = report.get("data", {})
-	_set_data_status(data)
+	var data_file_counts: Dictionary = report.get("data_file_counts", {})
+	var runtime_data_ready := bool(report.get("runtime_data_ready", false))
+	_set_data_status(data, data_file_counts, runtime_data_ready)
 
 	var clients: Dictionary = report.get("client_candidates", {})
 	_set_path_status(clients, "Wow.exe", "wow_exe")
@@ -254,16 +256,28 @@ func _set_path_status(section: Dictionary, name: String, label_key: String) -> v
 	_set_status(label_key, value, exists)
 
 
-func _set_data_status(data: Dictionary) -> void:
-	var required := ["maps_dir", "starting_map", "dbc_dir", "vmaps_dir", "mmaps_dir"]
+func _set_data_status(data: Dictionary, data_file_counts: Dictionary, runtime_data_ready: bool) -> void:
+	var required := ["maps_dir", "dbc_dir", "vmaps_dir", "mmaps_dir"]
 	var missing := PackedStringArray()
 	for key in required:
 		var info: Dictionary = data.get(key, {})
 		if not bool(info.get("exists", false)):
 			missing.append(key.replace("_dir", "").replace("_", " "))
 
+	if not data_file_counts.is_empty():
+		if int(data_file_counts.get("maps_files", 0)) <= 0:
+			missing.append("maps files")
+		if int(data_file_counts.get("dbc_files", 0)) <= 0:
+			missing.append("DBC files")
+		var vmap_count := int(data_file_counts.get("vmap_tree_files", 0)) + int(data_file_counts.get("vmap_tile_files", 0))
+		if vmap_count <= 0:
+			missing.append("VMap files")
+		var mmap_count := int(data_file_counts.get("mmap_files", 0)) + int(data_file_counts.get("mmtile_files", 0))
+		if mmap_count <= 0:
+			missing.append("MMap files")
+
 	if missing.is_empty():
-		_set_status("runtime_data", "Ready", true)
+		_set_status("runtime_data", "Ready", runtime_data_ready or data_file_counts.is_empty())
 	else:
 		_set_status("runtime_data", "Missing " + ", ".join(missing), false)
 

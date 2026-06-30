@@ -37,7 +37,7 @@ The tool checks:
 - Docker `ac-mysql` container state.
 - Existing start/stop/status scripts.
 - Linux auth/world binaries.
-- Required local runtime data directories and the starting map file.
+- Required local runtime data directories and file counts for maps, DBC, VMap, and MMap output.
 - Known log file paths.
 - WotLK client launch candidates.
 
@@ -58,7 +58,7 @@ This matches the read-only database audit result: the database configs are prese
 
 ## 2026-06-30 Runtime Repair Checkpoint
 
-Current safe-status result after building and installing Linux server binaries:
+Safe-status result after building and installing Linux server binaries, before runtime data extraction:
 
 - MySQL port `3306`: listening on localhost.
 - Authserver port `3724`: not listening after world startup attempt.
@@ -71,7 +71,24 @@ Current safe-status result after building and installing Linux server binaries:
 
 Runtime repairs are recorded in [local-runtime-repairs.md](local-runtime-repairs.md).
 
-The current blocker is missing local runtime data under `/run/media/doodbro/New 1tb/AzerothCore/data`. The audit now records `data/maps`, `data/maps/0000.map`, `data/dbc`, `data/vmaps`, and `data/mmaps` readiness.
+The earlier blocker was missing local runtime data under `/run/media/doodbro/New 1tb/AzerothCore/data`. That blocker is now cleared. The audit records directory readiness and file counts for maps, DBC, VMap, and MMap output.
+
+## 2026-06-30 Runtime Data And Startup Checkpoint
+
+Current safe-status result after runtime data extraction and startup-script repair:
+
+- MySQL port `3306`: listening.
+- Authserver port `3724`: listening.
+- Worldserver port `8085`: listening.
+- Ollama port `11434`: listening.
+- Docker `ac-mysql` container: found and running.
+- Linux `authserver` binary under `run/bin`: found and executable.
+- Linux `worldserver` binary under `run/bin`: found and executable.
+- Runtime data ready: true.
+- Data counts: 5744 map files, 246 DBC files, 2794 VMap files, and 3780 MMap files.
+- LLM bridge process: running.
+
+The local `start.sh` script was repaired so it checks real runtime-data counts, detaches long-lived server processes for desktop/script launches, and disables the interactive worldserver console in copied runtime configs.
 
 ## Godot Snap Runtime Note
 
@@ -87,6 +104,6 @@ Bridge work has started in [host-control-bridge.md](host-control-bridge.md).
 
 ## Next Stage 01 Actions
 
-- Add a local data-readiness view to the dashboard so missing runtime data is visible without opening logs.
+- Use the live stack as the local server target for the next Godot/AzerothCore bridge and data-inspection steps.
 - Keep start/stop actions routed through the existing AzerothCore scripts and host bridge.
 - Keep runtime data local-only and out of Git.

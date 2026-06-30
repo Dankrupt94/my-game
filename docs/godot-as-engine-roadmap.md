@@ -254,7 +254,7 @@ Path A is complete only if:
 - Godot can inspect safe AzerothCore data,
 - the sandbox proves movement/camera/UI/combat basics,
 - Godot-native multiplayer and persistence have been proven locally,
-- the missing runtime data and local-stack blockers are documented.
+- the runtime data and local-stack blockers have been cleared or documented with repeatable repair notes.
 
 Path A completion does not end the project. It only opens Path B.
 

@@ -57,16 +57,35 @@ Updated these local config files to use `/run/media/doodbro/New 1tb/AzerothCore/
 - Authserver can connect to the auth database and start its realm setup.
 - Worldserver can connect to auth, characters, world, and playerbots databases and run database updates.
 
-## Current Blocker
+### Runtime Data Extraction
 
-Worldserver stops at local runtime data loading because `/run/media/doodbro/New 1tb/AzerothCore/data` does not contain the required map/DBC/VMap/MMap data.
+The missing runtime-data blocker has been cleared.
 
-Current audit result:
+Generated local-only AzerothCore runtime data from the authorized bundle client and moved the required outputs into `/run/media/doodbro/New 1tb/AzerothCore/data`:
 
-- `data/maps`: missing
-- `data/maps/0000.map`: missing
-- `data/dbc`: missing
-- `data/vmaps`: missing
-- `data/mmaps`: missing
+- `dbc`: 246 `.dbc` files.
+- `maps`: 5744 `.map` files.
+- `vmaps`: 101 `.vmtree` files and 2693 `.vmtile` files.
+- `mmaps`: 98 `.mmap` files and 3682 `.mmtile` files.
+
+Removed the temporary extractor scratch folder `/run/media/doodbro/New 1tb/AzerothCore/client/Buildings` after VMap/MMap verification.
+
+### Startup Script Repair
+
+Applied to `/run/media/doodbro/New 1tb/AzerothCore/scripts/start.sh`:
+
+- Replaced the old hardcoded `maps/0000.map` readiness check with real file-count checks for maps, DBC, VMap, and MMap files.
+- Started authserver, worldserver, and the LLM bridge through a detached session so they survive desktop/script launch cleanup.
+- Redirected detached server stdin from `/dev/null`.
+- Disabled `Console.Enable` in the copied runtime `worldserver.conf` files for background launches so worldserver does not shut down when console input closes.
+
+## Verified Result After Runtime Data Repair
+
+- MySQL listens on `127.0.0.1:3306`.
+- Authserver listens on `0.0.0.0:3724`.
+- Worldserver listens on `0.0.0.0:8085`.
+- Ollama listens on `127.0.0.1:11434`.
+- The LLM bridge process is running.
+- Worldserver logged `WORLD: World Initialized In 1 Minutes 1 Seconds` and `worldserver-daemon ready`.
 
 Keep any runtime data population local-only and out of Git.

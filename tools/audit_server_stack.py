@@ -67,10 +67,18 @@ CLIENT_CANDIDATES = [
 DATA_PATHS = {
     "data_dir": DATA_DIR,
     "maps_dir": DATA_DIR / "maps",
-    "starting_map": DATA_DIR / "maps" / "0000.map",
     "dbc_dir": DATA_DIR / "dbc",
     "vmaps_dir": DATA_DIR / "vmaps",
     "mmaps_dir": DATA_DIR / "mmaps",
+}
+
+DATA_FILE_PATTERNS = {
+    "maps_files": (DATA_DIR / "maps", "*.map"),
+    "dbc_files": (DATA_DIR / "dbc", "*.dbc"),
+    "vmap_tree_files": (DATA_DIR / "vmaps", "*.vmtree"),
+    "vmap_tile_files": (DATA_DIR / "vmaps", "*.vmtile"),
+    "mmap_files": (DATA_DIR / "mmaps", "*.mmap"),
+    "mmtile_files": (DATA_DIR / "mmaps", "*.mmtile"),
 }
 
 
@@ -111,6 +119,12 @@ def path_status(path: Path) -> PathStatus:
         size_bytes=stat.st_size if stat else None,
         modified_at=datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat() if stat else None,
     )
+
+
+def count_matching_files(directory: Path, pattern: str) -> int:
+    if not directory.is_dir():
+        return 0
+    return sum(1 for path in directory.glob(pattern) if path.is_file())
 
 
 def port_open(port: int, host: str = "127.0.0.1") -> bool:
@@ -192,6 +206,20 @@ def build_report(include_bundle_status: bool, timeout: int) -> dict[str, object]
     binaries = {name: asdict(path_status(path)) for name, path in BINARY_PATHS.items()}
     clients = {path.name: asdict(path_status(path)) for path in CLIENT_CANDIDATES}
     data = {name: asdict(path_status(path)) for name, path in DATA_PATHS.items()}
+    data_file_counts = {
+        name: count_matching_files(directory, pattern)
+        for name, (directory, pattern) in DATA_FILE_PATTERNS.items()
+    }
+    runtime_data_ready = (
+        data["maps_dir"]["exists"]
+        and data["dbc_dir"]["exists"]
+        and data["vmaps_dir"]["exists"]
+        and data["mmaps_dir"]["exists"]
+        and data_file_counts["maps_files"] > 0
+        and data_file_counts["dbc_files"] > 0
+        and (data_file_counts["vmap_tree_files"] + data_file_counts["vmap_tile_files"]) > 0
+        and (data_file_counts["mmap_files"] + data_file_counts["mmtile_files"]) > 0
+    )
 
     report: dict[str, object] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -204,6 +232,8 @@ def build_report(include_bundle_status: bool, timeout: int) -> dict[str, object]
         "binaries": binaries,
         "logs": logs,
         "data": data,
+        "data_file_counts": data_file_counts,
+        "runtime_data_ready": runtime_data_ready,
         "client_candidates": clients,
         "runtime_environment": {
             "inside_snap": bool(os.environ.get("SNAP")),
@@ -270,6 +300,11 @@ def write_markdown(report: dict[str, object], path: Path) -> None:
     lines.extend(["", "## Data Readiness", ""])
     for name, info in report["data"].items():  # type: ignore[index]
         lines.append(f"- `{name}`: exists={info['exists']} - `{info['path']}`")
+    lines.append(f"- runtime data ready: {report['runtime_data_ready']}")
+
+    lines.extend(["", "## Data File Counts", ""])
+    for name, count in report["data_file_counts"].items():  # type: ignore[index]
+        lines.append(f"- `{name}`: {count}")
 
     lines.extend(["", "## Client Candidates", ""])
     for name, info in report["client_candidates"].items():  # type: ignore[index]
@@ -298,6 +333,7 @@ def main() -> int:
     print(f"Wrote {md_path}")
     print(f"Listening ports: {', '.join(listening) or 'none'}")
     print(f"MySQL container found: {report['docker_mysql']['container_found']}")  # type: ignore[index]
+    print(f"Runtime data ready: {report['runtime_data_ready']}")
     return 0
 
 
