@@ -189,3 +189,18 @@ Result:
 - Added buttons for start stack, stop stack, opening logs, opening local reports, and launching the bundle client.
 - Validated that Godot 4.7 loads the scene headlessly.
 - Found that Snap Godot cannot see Docker from child processes; guarded direct start/stop and documented the need for a localhost bridge or native runner.
+
+## 2026-06-30 - Begin Host Control Bridge
+
+Goal: continue autonomously by adding a localhost-only host bridge that runs outside Snap Godot and can execute safe AzerothCore status/start/stop actions for the dashboard.
+
+Plan:
+
+- Save this before-task note.
+- Add a Python localhost bridge with health/status endpoints.
+- Require a local token for state-changing start/stop requests.
+- Keep bridge token, logs, and runtime files in ignored local folders.
+- Add host-side start/stop scripts for the bridge.
+- Document how the dashboard should use the bridge.
+- Validate the bridge without starting the AzerothCore stack.
+- Commit and push the completed non-proprietary code and docs.
