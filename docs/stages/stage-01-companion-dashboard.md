@@ -43,3 +43,4 @@ Make the Godot app useful immediately as a friendly control panel for the local 
 - First audit did not find Linux auth/world binaries under `/run/media/doodbro/New 1tb/AzerothCore/run/bin`.
 - First audit found the bundle client executable at `/run/media/doodbro/New 1tb/AzerothCore/client/Wow.exe`.
 - Godot Snap cannot currently see Docker from child processes, so dashboard start/stop buttons are guarded until a localhost bridge or native runner exists.
+- Added a localhost bridge client path so the dashboard can use host-side status/start/stop when `tools/host_control_bridge.py` is running.

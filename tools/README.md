@@ -99,3 +99,10 @@ scripts/stop_host_bridge.sh
 ```
 
 The bridge listens on `127.0.0.1:8765`, provides read-only status, and requires a local token for start/stop requests.
+
+CLI client:
+
+```bash
+python3 tools/bridge_client.py health
+python3 tools/bridge_client.py status --compact
+```

@@ -10,6 +10,7 @@ The host control bridge solves that by running outside Snap Godot and listening 
 
 ```text
 tools/host_control_bridge.py
+tools/bridge_client.py
 scripts/start_host_bridge.sh
 scripts/stop_host_bridge.sh
 ```
@@ -61,12 +62,18 @@ scripts/stop_host_bridge.sh
 Health check:
 
 ```bash
-curl http://127.0.0.1:8765/health
+python3 tools/bridge_client.py health
+```
+
+Status check:
+
+```bash
+python3 tools/bridge_client.py status --compact
 ```
 
 ## Next Dashboard Work
 
-The Godot dashboard should use this bridge for status/start/stop when it is reachable. Direct start/stop from Snap Godot should remain guarded.
+The Godot dashboard uses this bridge for status/start/stop when it is reachable. Direct start/stop from Snap Godot remains guarded as a fallback.
 
 ## Validation
 
@@ -75,4 +82,12 @@ Initial validation completed:
 - `GET /health` returned success.
 - `GET /status` returned success and did not start/stop services.
 - `POST /start` without the local token returned `401`.
+- The bridge was stopped after validation.
+
+Dashboard integration validation completed:
+
+- `tools/bridge_client.py health --compact` fails cleanly when the bridge is offline.
+- `tools/bridge_client.py health --compact` succeeds when the bridge is online.
+- `tools/bridge_client.py status --compact` succeeds and sees host-side Docker.
+- Godot 4.7 loaded headlessly with the bridge online and refreshed status without starting the stack.
 - The bridge was stopped after validation.

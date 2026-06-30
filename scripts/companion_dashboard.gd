@@ -9,6 +9,7 @@ const BUNDLE_CLIENT := "/run/media/doodbro/New 1tb/AzerothCore/client"
 const START_SCRIPT := "/run/media/doodbro/New 1tb/AzerothCore/scripts/start.sh"
 const STOP_SCRIPT := "/run/media/doodbro/New 1tb/AzerothCore/scripts/stop.sh"
 const STATUS_TOOL := "res://tools/audit_server_stack.py"
+const BRIDGE_CLIENT := "res://tools/bridge_client.py"
 const STATUS_REPORT := "res://local_reports/server-stack-audit.json"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
@@ -16,6 +17,7 @@ const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
 var status_labels := {}
 var output_log: TextEdit
 var start_stop_blocked := false
+var bridge_available := false
 
 
 func _ready() -> void:
@@ -100,6 +102,7 @@ func _build_dashboard() -> void:
 	side_panel.add_child(side_stack)
 
 	side_stack.add_child(_section_title("Runtime Status"))
+	side_stack.add_child(_status_row("bridge", "Host bridge"))
 	side_stack.add_child(_status_row("mysql", "MySQL"))
 	side_stack.add_child(_status_row("authserver", "Authserver"))
 	side_stack.add_child(_status_row("worldserver", "Worldserver"))
@@ -117,10 +120,17 @@ func _build_dashboard() -> void:
 
 func _refresh_status() -> void:
 	_append_log("Refreshing local server-stack status...")
-	var tool_path := ProjectSettings.globalize_path(STATUS_TOOL)
-	var result := _run_command("/usr/bin/python3", [tool_path])
-	_append_log(result["output"])
-	_append_log("Status refresh exit code: " + str(result["exit_code"]))
+	var health := _run_bridge_action("health", 8)
+	bridge_available = int(health["exit_code"]) == 0
+	_set_status("bridge", "Online" if bridge_available else "Offline", bridge_available)
+
+	if bridge_available:
+		var bridge_status := _run_bridge_action("status", 35)
+		_append_command_result("Bridge status", bridge_status)
+	else:
+		var tool_path := ProjectSettings.globalize_path(STATUS_TOOL)
+		var result := _run_command("/usr/bin/python3", [tool_path])
+		_append_command_result("Direct status", result)
 	_load_status_report()
 
 
@@ -133,6 +143,13 @@ func _stop_stack() -> void:
 
 
 func _run_stack_script(script_path: String, label: String) -> void:
+	if bridge_available:
+		var bridge_action := "start" if script_path == START_SCRIPT else "stop"
+		var bridge_result := _run_bridge_action(bridge_action, 260)
+		_append_command_result("Bridge " + bridge_action, bridge_result)
+		_refresh_status()
+		return
+
 	if start_stop_blocked:
 		_append_log("Start/stop from Snap Godot is blocked because Docker is not visible inside the app sandbox. Use the host script directly for now; the next bridge step will fix this.")
 		return
@@ -205,7 +222,7 @@ func _load_status_report() -> void:
 	var docker_found := bool(docker_mysql.get("container_found", false))
 	var docker_present := bool(docker_mysql.get("docker_present", false))
 	var inside_snap := bool(runtime_environment.get("inside_snap", false))
-	start_stop_blocked = inside_snap and not docker_present
+	start_stop_blocked = (not bridge_available) and inside_snap and not docker_present
 	if start_stop_blocked:
 		_set_status("docker_mysql", "Snap blocked", false)
 	else:
@@ -238,6 +255,11 @@ func _command_exists(command: String) -> bool:
 	return int(result["exit_code"]) == 0
 
 
+func _run_bridge_action(action: String, timeout: int) -> Dictionary:
+	var client_path := ProjectSettings.globalize_path(BRIDGE_CLIENT)
+	return _run_command("/usr/bin/python3", [client_path, action, "--compact", "--timeout", str(timeout)])
+
+
 func _run_command(executable: String, args: Array) -> Dictionary:
 	var output := []
 	var packed_args := PackedStringArray()
@@ -255,6 +277,13 @@ func _run_command(executable: String, args: Array) -> Dictionary:
 		"exit_code": exit_code,
 		"output": text.strip_edges(),
 	}
+
+
+func _append_command_result(label: String, result: Dictionary) -> void:
+	var output := str(result["output"])
+	if output.length() > 4200:
+		output = output.substr(0, 1000) + "\n...[output truncated]...\n" + output.substr(output.length() - 2800)
+	_append_log(label + " exit code: " + str(result["exit_code"]) + "\n" + output)
 
 
 func _append_log(text: String) -> void:

@@ -226,3 +226,11 @@ Plan:
 - Keep direct script execution guarded when the bridge is unavailable inside Snap.
 - Validate Godot 4.7 scene loading and bridge client behavior without starting the AzerothCore stack.
 - Commit and push the completed non-proprietary code and docs.
+
+Result:
+
+- Added `tools/bridge_client.py`.
+- Dashboard refresh now prefers bridge status when the bridge is online.
+- Dashboard start/stop now use bridge token requests when the bridge is online.
+- Direct Snap start/stop remains guarded when the bridge is offline.
+- Validated offline bridge failure, online bridge health/status, and Godot 4.7 headless status refresh through the bridge without starting the stack.
