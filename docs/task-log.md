@@ -158,3 +158,11 @@ Plan:
 - Track a safe summary in documentation and update Stage 01 notes.
 - Verify no local reports, secrets, or proprietary files are tracked.
 - Commit and push the completed non-proprietary code and docs.
+
+Result:
+
+- Added `tools/audit_server_stack.py`.
+- Documented known AzerothCore start, stop, status, and common script paths.
+- Added `docs/server-stack-discovery-summary.md`.
+- Updated Stage 01 status to `In Progress`.
+- Ran the server-stack audit: only Ollama was listening, Docker `ac-mysql` was not found, Linux auth/world binaries under `run/bin` were not found, and bundle `Wow.exe` was found.

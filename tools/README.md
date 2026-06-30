@@ -66,3 +66,20 @@ local_reports/azerothcore-db-audit.md
 ```
 
 The script parses local AzerothCore config files, redacts credentials, and runs read-only connectivity/table-count checks when `mysql` is available and the database server is reachable.
+
+## Server Stack Audit
+
+Run:
+
+```bash
+python3 tools/audit_server_stack.py
+```
+
+Outputs:
+
+```text
+local_reports/server-stack-audit.json
+local_reports/server-stack-audit.md
+```
+
+The script checks ports, processes, script paths, Linux binaries, log files, Docker MySQL container state, and WotLK client launch candidates. It does not start or stop services by default.
