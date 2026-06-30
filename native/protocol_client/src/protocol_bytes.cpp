@@ -6,12 +6,12 @@
 
 std::vector<std::uint8_t> build_client_header(std::uint32_t opcode, std::size_t payload_size)
 {
-    std::uint32_t const size = static_cast<std::uint32_t>(payload_size + 4);
-    if (size > 0xFFFF)
+    if (payload_size > 0xFFFF - 4)
     {
         throw std::runtime_error("client packet too large for 2-byte header");
     }
 
+    std::uint32_t const size = static_cast<std::uint32_t>(payload_size + 4);
     return {
         static_cast<std::uint8_t>((size >> 8) & 0xFF),
         static_cast<std::uint8_t>(size & 0xFF),

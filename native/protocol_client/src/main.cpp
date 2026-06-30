@@ -1,6 +1,7 @@
 #include "auth_crypt.h"
 #include "protocol_bytes.h"
 #include "srp6.h"
+#include "world_packets.h"
 
 #include <openssl/rand.h>
 
@@ -22,7 +23,6 @@
 namespace
 {
 constexpr std::uint16_t SMSG_AUTH_CHALLENGE = 0x1EC;
-constexpr std::uint32_t CMSG_CHAR_ENUM = 0x037;
 constexpr std::uint8_t AUTH_LOGON_CHALLENGE = 0x00;
 
 class SocketFd
@@ -371,6 +371,11 @@ int self_test()
         throw std::runtime_error("SRP6 self-test failed");
     }
     std::cout << "SRP6_SELF_TEST_OK\n";
+    if (!world_packet_self_test())
+    {
+        throw std::runtime_error("world packet self-test failed");
+    }
+    std::cout << "WORLD_PACKET_SELF_TEST_OK\n";
     return 0;
 }
 

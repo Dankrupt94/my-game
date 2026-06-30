@@ -13,7 +13,12 @@ Plan:
 
 Result:
 
-- In progress.
+- Added native world packet helpers for `CMSG_AUTH_SESSION`, `CMSG_CHAR_ENUM`, empty compressed addon info, and `SMSG_CHAR_ENUM` summary parsing.
+- Added a synthetic character enum parser test using safe fake character data.
+- Validated a clean CMake build.
+- `--self-test` now prints `WORLD_PACKET_SELF_TEST_OK`.
+- Live no-secret auth challenge and world challenge probes still pass.
+- Guarded auth flow still fails safely when `ACORE_PROTOCOL_PASSWORD` is not set.
 
 ## 2026-06-30 - Stage 11 Started
 
