@@ -212,3 +212,17 @@ Result:
 - Added token and runtime ignore handling under `local_runtime/`.
 - Documented the bridge in `docs/host-control-bridge.md`.
 - Validated `GET /health`, `GET /status`, and unauthorized `POST /start` rejection without starting the AzerothCore stack.
+
+## 2026-06-30 - Begin Dashboard Bridge Integration
+
+Goal: let the Godot dashboard use the localhost host bridge for status/start/stop when it is running, while keeping direct Snap-limited behavior as a fallback.
+
+Plan:
+
+- Save this before-task note.
+- Add a small bridge client tool for health/status/start/stop requests.
+- Update the dashboard refresh button to prefer bridge status.
+- Update start/stop buttons to use the bridge token when the bridge is reachable.
+- Keep direct script execution guarded when the bridge is unavailable inside Snap.
+- Validate Godot 4.7 scene loading and bridge client behavior without starting the AzerothCore stack.
+- Commit and push the completed non-proprietary code and docs.
