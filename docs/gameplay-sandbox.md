@@ -15,6 +15,23 @@ scripts/gameplay_sandbox.gd
 
 The dashboard opens the sandbox through the `Open Sandbox` action.
 
+Additional parse-checked modular scaffolding is present for later refactors:
+
+```text
+scenes/floating_text.tscn
+scripts/ability_cooldowns.gd
+scripts/camera_controller.gd
+scripts/entity_stats.gd
+scripts/floating_text.gd
+scripts/player_controller.gd
+scripts/player_states/
+scripts/sandbox.gd
+scripts/state_machine.gd
+scripts/targeting_system.gd
+```
+
+These modular files are not the active dashboard-launched scene yet. They are kept as safe scaffolding for breaking the sandbox into reusable player, camera, targeting, cooldown, state-machine, stats, and floating-text systems during later Stage 05/06 cleanup.
+
 Direct scene launch:
 
 ```bash
@@ -62,4 +79,5 @@ Validated on 2026-06-30:
 - Dashboard scene loads in Godot 4.7 headless.
 - Sandbox scene loads directly in Godot 4.7 headless.
 - Sandbox self-test prints `SANDBOX_SELF_TEST_OK` after exercising mentor interaction, enemy defeat, task completion, and target health UI state.
+- Modular scaffold scripts parse successfully with Godot 4.7 `--check-only --script`.
 - Tracked-file guard found no proprietary client assets, local reports, local runtime files, or logs in Git.

@@ -45,6 +45,7 @@ This is not the retired prototype. It is a new sandbox used to prove Godot can a
 - Added an `Open Sandbox` dashboard action.
 - The sandbox creates its own placeholder floor, obstacles, player, NPC, enemy, camera, target marker, and UI using Godot primitives and materials.
 - The sandbox includes a dashboard return button.
+- Preserved parse-checked modular scaffolding for later player, camera, targeting, stats, cooldown, state-machine, and floating-text refactors. These files are not the active dashboard-launched scene yet.
 
 ## Gameplay Added
 
@@ -66,6 +67,7 @@ Completed on 2026-06-30:
 - `snap run godot-4 --headless --quit-after 5 --path ".../godot-azerothcore-companion" --scene res://scenes/gameplay_sandbox.tscn` exited `0`.
 - `snap run godot-4 --headless --quit-after 5 --path ".../godot-azerothcore-companion" --scene res://main.tscn` exited `0`.
 - `ACORE_SANDBOX_SELF_TEST=1 snap run godot-4 --headless --quit-after 5 --path ".../godot-azerothcore-companion" --scene res://scenes/gameplay_sandbox.tscn` printed `SANDBOX_SELF_TEST_OK`.
+- Modular scaffold scripts parse successfully with Godot 4.7 `--check-only --script`.
 - The sandbox script contains no proprietary asset references and uses only original placeholder names/content.
 - The tracked-file guard found no proprietary client assets, local reports, local runtime files, or logs in Git.
 

@@ -25,21 +25,15 @@ Confirmed present on this machine:
 - **Local AI:** Ollama running `qwen-agent:latest` and `qwen2.5-coder:7b`.
 - **System Utilities:** `ffmpeg`, `7z`, `unzip`, `jq`, `sqlite3`, and `mysql_config`.
 - **Database Client:** `mysql` and `mysqldump` (via `default-mysql-client`).
+- **Database Convenience:** `mycli`.
+- **Protocol/Socket Diagnostics:** `tshark`, `termshark`, `socat`, `ss`, and `tc`.
+- **Binary/Native Debugging:** `hexyl`, `strace`, `lsof`, `gdb`, and `heaptrack`.
+- **GDScript Quality:** `gdformat` and `gdlint`.
+- **Shell/Workflow Helpers:** `delta`, `btop`, `entr`, `direnv`, and `shellcheck`.
 
 Missing or deferred developer/debugging tools:
 
-- **Protocol Sniffing:** `tshark` (recommended for packet capture) and `termshark` (optional TUI for packet analysis).
-- **Socket Diagnostics:** `socat` (optional socket debugger) and `ss` (recommended socket statistics tool).
-- **Hex/Binary Inspection:** `hexyl` (recommended colored hex viewer).
-- **Syscall & Lock Auditing:** `strace` (recommended system call tracer) and `lsof` (recommended for listing open files/ports).
-- **Compiled Debugging:** `gdb` (recommended for core dump inspection) and `heaptrack` (recommended memory/VRAM allocator profiler).
-- **Auto-complete SQL:** `mycli` (recommended MySQL terminal shell).
-- **GDScript Quality:** `gdformat` (recommended formatter) and `gdlint` (recommended linter).
 - **MPQ Parsing:** `mpqtool` (recommended MPQ viewer/extractor).
-- **Network Simulation:** `tc` (recommended for injecting packet lag/loss to test prediction models in Stage 13).
-- **Git Diff Visuals:** `delta` (optional syntax-highlighting terminal diff-viewer).
-- **Shell Automation:** `entr` (recommended filewatcher for auto-running tests/builds), `direnv` (optional env variable manager), and `shellcheck` (recommended script static analysis).
-- **Interactive Monitoring:** `btop` (optional CPU/RAM process viewer).
 - **Multi-Client Test Automation:** `xdotool` (recommended for simulating keyboard/mouse inputs) and `wmctrl` (recommended for managing window positioning of test clients).
 - **Headless GUI Testing:** `xvfb-run` (recommended virtual framebuffer runner).
 - **Rust GDExtension Building:** `cargo-watch` (recommended automatic recompiler utility).

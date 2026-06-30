@@ -23,8 +23,8 @@ func setup(amount: String, color: Color) -> void:
 	
 	# Float upward
 	tween.tween_property(self, "position:y", position.y + 1.8, 1.0)\
-		.set_trans(Tween.TRANS_OUT)\
-		.set_ease(Tween.EASE_QUAD)
+		.set_trans(Tween.TRANS_QUAD)\
+		.set_ease(Tween.EASE_OUT)
 		
 	# Scale size down slightly toward end
 	tween.tween_property(label, "font_size", int(label.font_size * 0.7), 1.0)

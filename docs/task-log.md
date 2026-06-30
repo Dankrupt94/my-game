@@ -17,6 +17,7 @@ Result:
 - Added `scenes/gameplay_sandbox.tscn` and `scripts/gameplay_sandbox.gd`.
 - Added a dashboard `Open Sandbox` action and a sandbox `Dashboard` return button.
 - Implemented original placeholder third-person movement, camera follow, collision, NPC, enemy, targeting, strike action, health/focus UI, target health UI, and a simple task loop.
+- Preserved and parse-checked modular gameplay scaffolding for later refactors, including player state, camera, targeting, stats, cooldown, and floating-text helpers.
 - Documented controls, files, gameplay systems, and placeholder asset policy in `docs/gameplay-sandbox.md`.
 - Added and passed a headless sandbox self-test for mentor interaction, enemy defeat, task completion, and target health UI state.
 - Validated the dashboard and sandbox scenes in Godot 4.7 headless mode.
