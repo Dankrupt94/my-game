@@ -47,7 +47,13 @@ local_runtime/host-bridge.log
 
 ## Run
 
-Start:
+The normal companion launcher starts the bridge automatically:
+
+```bash
+scripts/run_game.sh
+```
+
+Manual start:
 
 ```bash
 scripts/start_host_bridge.sh
@@ -57,6 +63,12 @@ Stop:
 
 ```bash
 scripts/stop_host_bridge.sh
+```
+
+To run the companion without starting the bridge:
+
+```bash
+ACORE_COMPANION_START_BRIDGE=0 scripts/run_game.sh
 ```
 
 Health check:

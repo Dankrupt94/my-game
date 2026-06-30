@@ -5,6 +5,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCENE_PATH="res://main.tscn"
 LOG_DIR="$REPO_DIR/logs"
 LOG_FILE="$LOG_DIR/godot-launch.log"
+HOST_BRIDGE_SCRIPT="$REPO_DIR/scripts/start_host_bridge.sh"
 EXTRA_ARGS=()
 
 mkdir -p "$LOG_DIR"
@@ -71,6 +72,11 @@ warn_if_snap_needs_removable_media() {
 
 cd "$REPO_DIR"
 warn_if_snap_needs_removable_media
+
+if [ "${ACORE_COMPANION_START_BRIDGE:-1}" = "1" ] && [ -x "$HOST_BRIDGE_SCRIPT" ]; then
+  echo "Starting host control bridge for dashboard actions..." | tee -a "$LOG_FILE"
+  "$HOST_BRIDGE_SCRIPT" 2>&1 | tee -a "$LOG_FILE" || true
+fi
 
 if command -v snap >/dev/null 2>&1 && snap list godot-4 >/dev/null 2>&1; then
   run_godot snap run godot-4 "${EXTRA_ARGS[@]}" --path "$REPO_DIR" --scene "$SCENE_PATH"

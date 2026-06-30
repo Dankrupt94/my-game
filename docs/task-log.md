@@ -247,3 +247,10 @@ Plan:
 - Keep logs in ignored local/runtime folders.
 - Validate the launcher headlessly.
 - Commit and push the completed launcher update.
+
+Result:
+
+- Updated `scripts/run_game.sh` to start the host bridge before launching Godot.
+- Kept bridge startup optional with `ACORE_COMPANION_START_BRIDGE=0`.
+- Documented automatic bridge startup in `docs/host-control-bridge.md`.
+- Validated the launcher in headless mode: it started the bridge, launched Godot 4.7, exited successfully, and the bridge was stopped after the test.
