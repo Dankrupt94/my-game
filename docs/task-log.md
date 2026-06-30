@@ -57,3 +57,15 @@ Result:
 - Documented that Path A is first and Path B follows after Path A is achieved.
 - Documented the long-term goal of a faithful Godot-AzerothCore-WotLK client/game.
 - Added `docs/local-ai-resources.md` for local Ollama models, including `qwen2.5-coder:7b`.
+
+## 2026-06-30 - Clarify Proprietary Asset Handling
+
+Goal: document that proprietary client assets stay local and are not committed to GitHub, while the project may reference local asset/client paths for private experimentation.
+
+Plan:
+
+- Save this policy checkpoint.
+- Add ignore rules for common proprietary client/extracted asset file types and local asset folders.
+- Add a local asset handling document.
+- Link it from the master plan and README.
+- Commit and push the completed documentation.
