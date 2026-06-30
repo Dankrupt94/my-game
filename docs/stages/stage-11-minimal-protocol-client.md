@@ -46,13 +46,14 @@ The first implementation checkpoint should be a safe local smoke harness that ca
 - Added `--world-challenge <host> <port>` to connect to the live worldserver and parse the initial plaintext `SMSG_AUTH_CHALLENGE`.
 - Added world packet helpers for `CMSG_AUTH_SESSION`, `CMSG_CHAR_ENUM`, empty compressed addon info, and `SMSG_CHAR_ENUM` parsing.
 - Added `WORLD_PACKET_SELF_TEST_OK`, which validates world-auth payload shape, client packet framing, compressed zero-addon info, and safe synthetic character-enum parsing.
+- Added guarded `--character-flow <host> <port> <account>`, which uses `ACORE_PROTOCOL_PASSWORD` to run authserver proof, realm parsing, world auth, encrypted `CMSG_CHAR_ENUM`, and `SMSG_CHAR_ENUM` summary parsing.
+- Hardened `SMSG_CHAR_ENUM` parsing so truncated character records fail safely during parsing.
+- Used local `qwen-agent` as a narrow advisory reviewer for the character-flow packet code; final acceptance came from the local CMake build and live safe probes.
 
 ## Next Checkpoint
 
-- Add live worldserver `CMSG_AUTH_SESSION` once a local password is available through `ACORE_PROTOCOL_PASSWORD`.
-- Parse live `SMSG_AUTH_RESPONSE`.
-- Send live encrypted `CMSG_CHAR_ENUM`.
-- Parse live `SMSG_CHAR_ENUM` into safe local character summaries.
+- Validate guarded `--character-flow` with a local test account once a local password is available through `ACORE_PROTOCOL_PASSWORD`.
+- Decide whether to create a dedicated local protocol-test account through approved AzerothCore tooling instead of using an existing account.
 
 ## Validation
 
@@ -63,8 +64,9 @@ Completed on 2026-06-30:
 - `native/protocol_client/build/acore_protocol_client --self-test` printed `PROTOCOL_CLIENT_SELF_TEST_OK`, `SRP6_SELF_TEST_OK`, and `WORLD_PACKET_SELF_TEST_OK`.
 - `native/protocol_client/build/acore_protocol_client --auth-challenge 127.0.0.1 3724 ADMIN` prints `AUTH_CHALLENGE_OK` when the local `ADMIN` account exists and the authserver accepts build `12340`.
 - `native/protocol_client/build/acore_protocol_client --auth-flow 127.0.0.1 3724 ADMIN` fails safely with `ACORE_PROTOCOL_PASSWORD is not set` when no local password is supplied.
+- `native/protocol_client/build/acore_protocol_client --character-flow 127.0.0.1 3724 ADMIN` fails safely with `ACORE_PROTOCOL_PASSWORD is not set` when no local password is supplied.
 - `native/protocol_client/build/acore_protocol_client --world-challenge 127.0.0.1 8085` printed `WORLD_CHALLENGE_OK`.
-- `cmake --build native/protocol_client/build` completed without warnings after the world packet parser checkpoint.
+- `cmake --build native/protocol_client/build` completed without warnings after the character-flow checkpoint.
 - No account credentials, session keys, packet captures, proprietary client files, or local runtime files were committed.
 
 ## Done Criteria

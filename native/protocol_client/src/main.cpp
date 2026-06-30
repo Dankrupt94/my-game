@@ -23,6 +23,7 @@
 namespace
 {
 constexpr std::uint16_t SMSG_AUTH_CHALLENGE = 0x1EC;
+constexpr std::uint16_t SMSG_AUTH_RESPONSE = 0x1EE;
 constexpr std::uint8_t AUTH_LOGON_CHALLENGE = 0x00;
 
 class SocketFd
@@ -188,6 +189,21 @@ struct AuthChallengeData
     std::uint8_t security_flags = 0;
 };
 
+struct RealmInfo
+{
+    std::string name;
+    std::string endpoint;
+    std::string host;
+    std::string port;
+    std::uint32_t realm_id = 0;
+};
+
+struct WorldPacketData
+{
+    std::uint16_t opcode = 0;
+    std::vector<std::uint8_t> payload;
+};
+
 AuthChallengeData read_auth_challenge_response(int fd)
 {
     auto prefix = read_exact(fd, 3);
@@ -269,7 +285,7 @@ std::string read_c_string(std::span<const std::uint8_t> bytes, std::size_t& offs
     return value;
 }
 
-void parse_realm_list(std::span<const std::uint8_t> body)
+RealmInfo parse_realm_list(std::span<const std::uint8_t> body)
 {
     if (body.size() < 6)
     {
@@ -305,6 +321,11 @@ void parse_realm_list(std::span<const std::uint8_t> body)
     std::uint8_t const character_count = body[offset++];
     std::uint8_t const timezone = body[offset++];
     std::uint8_t const realm_id = body[offset++];
+    std::size_t const colon = endpoint.rfind(':');
+    if (colon == std::string::npos || colon + 1 >= endpoint.size())
+    {
+        throw std::runtime_error("realm endpoint does not contain host:port");
+    }
 
     std::cout << "AUTH_FLOW_OK"
               << " realms=" << realm_count
@@ -317,6 +338,14 @@ void parse_realm_list(std::span<const std::uint8_t> body)
               << " chars=" << static_cast<int>(character_count)
               << " timezone=" << static_cast<int>(timezone)
               << "\n";
+
+    return {
+        .name = name,
+        .endpoint = endpoint,
+        .host = endpoint.substr(0, colon),
+        .port = endpoint.substr(colon + 1),
+        .realm_id = realm_id,
+    };
 }
 
 srp6::EphemeralKey random_ephemeral()
@@ -327,6 +356,65 @@ srp6::EphemeralKey random_ephemeral()
         throw std::runtime_error("RAND_bytes failed");
     }
     return bytes;
+}
+
+std::array<std::uint8_t, 4> random_seed4()
+{
+    std::array<std::uint8_t, 4> bytes{};
+    if (RAND_bytes(bytes.data(), static_cast<int>(bytes.size())) != 1)
+    {
+        throw std::runtime_error("RAND_bytes failed");
+    }
+    return bytes;
+}
+
+WorldPacketData read_world_packet(int fd, AuthCrypt* crypt)
+{
+    auto header = read_exact(fd, 4);
+    if (crypt && crypt->initialized())
+    {
+        crypt->decrypt_server_header(header);
+    }
+
+    if ((header[0] & 0x80) != 0)
+    {
+        auto extra = read_exact(fd, 1);
+        if (crypt && crypt->initialized())
+        {
+            crypt->decrypt_server_header(extra);
+        }
+        header.push_back(extra[0]);
+    }
+
+    ServerHeader parsed = parse_server_header(header);
+    if (parsed.size < 2)
+    {
+        throw std::runtime_error("server packet size is smaller than opcode");
+    }
+
+    return {
+        .opcode = parsed.opcode,
+        .payload = read_exact(fd, parsed.size - 2),
+    };
+}
+
+void write_world_packet(int fd, std::uint32_t opcode, std::span<const std::uint8_t> payload, AuthCrypt* crypt)
+{
+    auto packet = build_client_packet(opcode, payload);
+    if (crypt && crypt->initialized())
+    {
+        crypt->encrypt_client_header(std::span<std::uint8_t>(packet.data(), 6));
+    }
+    write_all(fd, packet);
+}
+
+std::uint8_t parse_auth_response(std::span<const std::uint8_t> payload)
+{
+    if (payload.empty())
+    {
+        throw std::runtime_error("SMSG_AUTH_RESPONSE payload is empty");
+    }
+    return payload[0];
 }
 
 int self_test()
@@ -397,7 +485,13 @@ int auth_challenge(std::string const& host, std::string const& port, std::string
     return 0;
 }
 
-int auth_flow(std::string const& host, std::string const& port, std::string const& account)
+struct AuthFlowResult
+{
+    srp6::SessionKey session_key{};
+    RealmInfo realm;
+};
+
+AuthFlowResult run_auth_flow(std::string const& host, std::string const& port, std::string const& account)
 {
     char const* password = std::getenv("ACORE_PROTOCOL_PASSWORD");
     if (!password || std::string(password).empty())
@@ -435,8 +529,95 @@ int auth_flow(std::string const& host, std::string const& port, std::string cons
 
     std::uint16_t const body_size = read_le_u16(realm_header, 1);
     auto body = read_exact(socket.get(), body_size);
-    parse_realm_list(body);
+    RealmInfo realm = parse_realm_list(body);
+    return {
+        .session_key = proof.K,
+        .realm = std::move(realm),
+    };
+}
+
+int auth_flow(std::string const& host, std::string const& port, std::string const& account)
+{
+    (void)run_auth_flow(host, port, account);
     return 0;
+}
+
+int character_flow(std::string const& host, std::string const& port, std::string const& account)
+{
+    AuthFlowResult auth = run_auth_flow(host, port, account);
+    SocketFd socket = connect_tcp(auth.realm.host, auth.realm.port);
+
+    WorldPacketData challenge_packet = read_world_packet(socket.get(), nullptr);
+    if (challenge_packet.opcode != SMSG_AUTH_CHALLENGE || challenge_packet.payload.size() != 40)
+    {
+        throw std::runtime_error("expected SMSG_AUTH_CHALLENGE from worldserver");
+    }
+
+    std::array<std::uint8_t, 4> server_seed{};
+    std::copy_n(challenge_packet.payload.data() + 4, server_seed.size(), server_seed.begin());
+    std::array<std::uint8_t, 4> local_challenge = random_seed4();
+    auto addon_info = build_empty_addon_info();
+    auto auth_payload = build_auth_session_payload(
+        account,
+        auth.session_key,
+        server_seed,
+        local_challenge,
+        auth.realm.realm_id,
+        addon_info);
+    write_world_packet(socket.get(), CMSG_AUTH_SESSION, auth_payload, nullptr);
+
+    AuthCrypt crypt;
+    crypt.init(auth.session_key);
+
+    bool authed = false;
+    for (int i = 0; i < 10; ++i)
+    {
+        WorldPacketData packet = read_world_packet(socket.get(), &crypt);
+        if (packet.opcode != SMSG_AUTH_RESPONSE)
+        {
+            continue;
+        }
+
+        std::uint8_t const response = parse_auth_response(packet.payload);
+        if (response != 0x0C)
+        {
+            throw std::runtime_error("world auth failed with response 0x" + hex(std::span<const std::uint8_t>(&response, 1)));
+        }
+        authed = true;
+        break;
+    }
+
+    if (!authed)
+    {
+        throw std::runtime_error("did not receive SMSG_AUTH_RESPONSE");
+    }
+
+    write_world_packet(socket.get(), CMSG_CHAR_ENUM, {}, &crypt);
+    for (int i = 0; i < 20; ++i)
+    {
+        WorldPacketData packet = read_world_packet(socket.get(), &crypt);
+        if (packet.opcode != SMSG_CHAR_ENUM)
+        {
+            continue;
+        }
+
+        auto characters = parse_char_enum(packet.payload);
+        std::cout << "CHAR_ENUM_OK count=" << characters.size() << "\n";
+        for (CharacterSummary const& character : characters)
+        {
+            std::cout << "CHAR guid=0x" << std::hex << character.guid << std::dec
+                      << " name=\"" << character.name << "\""
+                      << " level=" << static_cast<int>(character.level)
+                      << " race=" << static_cast<int>(character.race)
+                      << " class=" << static_cast<int>(character.character_class)
+                      << " map=" << character.map
+                      << " pos=(" << character.x << "," << character.y << "," << character.z << ")"
+                      << "\n";
+        }
+        return 0;
+    }
+
+    throw std::runtime_error("did not receive SMSG_CHAR_ENUM");
 }
 
 int world_challenge(std::string const& host, std::string const& port)
@@ -480,6 +661,7 @@ void usage()
               << "  acore_protocol_client --self-test\n"
               << "  acore_protocol_client --auth-challenge <host> <port> <account>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --auth-flow <host> <port> <account>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --character-flow <host> <port> <account>\n"
               << "  acore_protocol_client --world-challenge <host> <port>\n";
 }
 }
@@ -506,6 +688,11 @@ int main(int argc, char** argv)
         if (argc == 5 && std::strcmp(argv[1], "--auth-flow") == 0)
         {
             return auth_flow(argv[2], argv[3], argv[4]);
+        }
+
+        if (argc == 5 && std::strcmp(argv[1], "--character-flow") == 0)
+        {
+            return character_flow(argv[2], argv[3], argv[4]);
         }
 
         usage();

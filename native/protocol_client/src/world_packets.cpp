@@ -88,6 +88,15 @@ float read_float_le(std::span<const std::uint8_t> bytes, std::size_t& offset)
     return value;
 }
 
+void skip_bytes(std::span<const std::uint8_t> bytes, std::size_t& offset, std::size_t count)
+{
+    if (offset + count > bytes.size())
+    {
+        throw std::runtime_error("not enough bytes to skip field");
+    }
+    offset += count;
+}
+
 std::string read_c_string(std::span<const std::uint8_t> bytes, std::size_t& offset)
 {
     std::size_t start = offset;
@@ -237,18 +246,18 @@ std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payl
         character.race = read_u8(payload, offset);
         character.character_class = read_u8(payload, offset);
         character.gender = read_u8(payload, offset);
-        offset += 5; // skin, face, hair style, hair color, facial hair
+        skip_bytes(payload, offset, 5); // skin, face, hair style, hair color, facial hair
         character.level = read_u8(payload, offset);
         character.zone = read_u32_le(payload, offset);
         character.map = read_u32_le(payload, offset);
         character.x = read_float_le(payload, offset);
         character.y = read_float_le(payload, offset);
         character.z = read_float_le(payload, offset);
-        offset += 4; // guild id
-        offset += 4; // character flags
-        offset += 4; // customize flags
-        offset += 1; // first login
-        offset += 12; // pet display, level, family
+        skip_bytes(payload, offset, 4);  // guild id
+        skip_bytes(payload, offset, 4);  // character flags
+        skip_bytes(payload, offset, 4);  // customize flags
+        skip_bytes(payload, offset, 1);  // first login
+        skip_bytes(payload, offset, 12); // pet display, level, family
 
         std::size_t const equipment_bytes = CharEnumEquipmentSlots * (4 + 1 + 4);
         if (offset + equipment_bytes > payload.size())
@@ -294,7 +303,19 @@ bool world_packet_self_test()
     append_u8(char_payload, 1);
     append_synthetic_character(char_payload);
     auto characters = parse_char_enum(char_payload);
-    return characters.size() == 1
+    bool rejected_truncation = false;
+    try
+    {
+        std::vector<std::uint8_t> truncated{1, 0x34, 0x12};
+        (void)parse_char_enum(truncated);
+    }
+    catch (std::exception const&)
+    {
+        rejected_truncation = true;
+    }
+
+    return rejected_truncation
+        && characters.size() == 1
         && characters[0].guid == 0x1234
         && characters[0].name == "SafeTest"
         && characters[0].level == 80
