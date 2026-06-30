@@ -1,5 +1,21 @@
 # Task Log
 
+## 2026-06-30 - Stage 10 Started
+
+Goal: begin Path B protocol research for a Godot-native AzerothCore-compatible WotLK client.
+
+Plan:
+
+- Identify local AzerothCore source files for authserver, realm list, world socket, packets, and opcodes.
+- Create Git-safe protocol documentation under `docs/protocol/`.
+- Decide the crypto integration direction for SRP6 and world header encryption.
+- Document byte-level flows for login, realm list, world authentication, character enumeration, and character select.
+- Produce an opcode reference for build `12340` boundaries needed by the first Godot protocol client.
+
+Result:
+
+- In progress.
+
 ## 2026-06-30 - Stage 09 Started
 
 Goal: review whether Path A is complete enough to begin Path B protocol-client work.

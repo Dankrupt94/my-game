@@ -160,9 +160,9 @@ These optimizations and visual enhancements can be introduced in later stages or
 
 ## Current Status
 
-Current stage: Stage 09 is complete; Stage 10 is next.
+Current stage: Stage 10 is in progress.
 
-Reason: Path A is complete enough to open Path B. The project has a Godot shell, known local paths, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a completed read-only data browser, a hardened localhost bridge boundary, a playable original Godot sandbox scene, a data-driven sandbox slice, a Godot-native ENet multiplayer smoke test, local ignored persistence for Godot-side test state, and a written Path A completion decision. Stage 10 should begin protocol research for the Godot-native AzerothCore-compatible WotLK client path.
+Reason: Path A is complete enough to open Path B. Stage 10 is now researching the WotLK/AzerothCore auth, realm, world-session, opcode, and packet requirements needed for a Godot-native client to connect directly to AzerothCore.
 
 ## Non-Negotiable Safety Rules
 

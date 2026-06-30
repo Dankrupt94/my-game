@@ -1,6 +1,6 @@
 # Stage 10 - Protocol Research
 
-Status: Planned
+Status: In Progress
 
 ## Goal
 
@@ -16,7 +16,23 @@ Investigate, document, and define the mathematical algorithms, opcode packet pay
 
 ## Entry Criteria
 
-- Stage 09 marks Path A complete.
+- [x] Stage 09 marks Path A complete.
+
+## Stage Start Notes
+
+Started on 2026-06-30.
+
+Stage 10 begins Path B. This is the first stage aimed directly at replacing the original WotLK client runtime with a Godot-native AzerothCore-compatible client.
+
+Research will use the local AzerothCore source tree as the primary reference:
+
+- `/run/media/doodbro/New 1tb/AzerothCore/source/src/server/apps/authserver/`
+- `/run/media/doodbro/New 1tb/AzerothCore/source/src/server/shared/Realms/`
+- `/run/media/doodbro/New 1tb/AzerothCore/source/src/server/game/Server/`
+- `/run/media/doodbro/New 1tb/AzerothCore/source/src/server/game/Server/Protocol/`
+- `/run/media/doodbro/New 1tb/AzerothCore/source/src/server/game/Server/Packets/`
+
+The research output must remain Git-safe: protocol notes, offsets, opcode references, and original client implementation code are allowed; proprietary client assets, extracted files, packet captures containing secrets, or converted derivatives are not allowed in Git.
 
 ## Done Criteria
 
