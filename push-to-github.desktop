@@ -2,10 +2,9 @@
 Type=Application
 Name=Push My Game to GitHub
 Comment=Push unpushed commits for the Frostbound Prototype project
-Exec=/run/media/doodbro/WD\ SSd\ 120g/godot\ game\ folder/scripts/push_unpushed_commits.sh
-Path=/run/media/doodbro/WD SSd 120g/godot game folder
+Exec=/home/doodbro/Desktop/push-frostbound-to-github.sh
+Path=/run/media/doodbro/New 1tb/AzerothCore/godot-frostbound-prototype
 Terminal=true
 Icon=utilities-terminal
 Categories=Development;
 StartupNotify=false
-

@@ -15,6 +15,16 @@ Open the project in Godot 4, run the main scene, walk around the snowy test yard
 - A Frostbound Training Dummy with health and defeat logic.
 - A simple MMO-style HUD with player bars, target frame, quest tracker, prompt text, and hotbar buttons.
 
+## Local Project Location
+
+This project now lives inside the local AzerothCore bundle:
+
+```text
+/run/media/doodbro/New 1tb/AzerothCore/godot-frostbound-prototype
+```
+
+Related local paths are tracked in [docs/location-notes.md](docs/location-notes.md).
+
 ## How To Play
 
 The easiest way is to double-click the desktop shortcut named `Run Frostbound Prototype`.

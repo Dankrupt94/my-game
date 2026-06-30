@@ -80,3 +80,10 @@ Plan:
 - Update desktop shortcuts and scripts that contain the old path.
 - Verify Godot can still launch the scene.
 - Commit and push the completed move.
+
+Result:
+
+- Moved the project from the SSD trash to `/run/media/doodbro/New 1tb/AzerothCore/godot-frostbound-prototype`.
+- Updated project `.desktop` files and Desktop launchers to the new path.
+- Preserved the existing Git repo and GitHub remote.
+- Documented the local AzerothCore, build, and WotLK client paths in `docs/location-notes.md`.
