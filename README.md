@@ -1,56 +1,31 @@
-# Frostbound Prototype
+# AzerothCore Godot Companion
 
-Frostbound Prototype is a Godot 4 third-person fantasy RPG prototype inspired by classic snowy-zone MMORPG gameplay. It uses original placeholder content and does not depend on any proprietary game client files.
+This is the Godot-side companion workspace for the local AzerothCore setup. The previous RPG prototype has been retired and removed from this repo.
 
-## First Playtest Goal
+## Current Purpose
 
-Open the project in Godot 4, run the main scene, walk around the snowy test yard, talk to the quest NPC, and attack the training dummy from the hotbar.
-
-## What Exists Now
-
-- A Godot 4 project with `main.tscn` as the main scene.
-- A small original snowy training yard called Frostbound Yard.
-- A third-person player with mouse camera, movement, and jump.
-- Scout Mira, an original quest NPC.
-- A Frostbound Training Dummy with health and defeat logic.
-- A simple MMO-style HUD with player bars, target frame, quest tracker, prompt text, and hotbar buttons.
+- Keep a Godot 4.7 project beside the local AzerothCore bundle.
+- Track local server, build, and client paths in one place.
+- Grow into a desktop-style companion for status checks, safe start/stop helpers, account setup, client launching, and diagnostics.
+- Avoid copying or depending on proprietary client assets.
 
 ## Local Project Location
 
-This project now lives inside the local AzerothCore bundle:
-
 ```text
-/run/media/doodbro/New 1tb/AzerothCore/godot-frostbound-prototype
+/run/media/doodbro/New 1tb/AzerothCore/godot-azerothcore-companion
 ```
 
-Related local paths are tracked in [docs/location-notes.md](docs/location-notes.md).
+Related paths are tracked in [docs/location-notes.md](docs/location-notes.md).
 
-## How To Play
+## How To Open
 
-The easiest way is to double-click the desktop shortcut named `Run Frostbound Prototype`.
+Use the desktop shortcut named `Open AzerothCore Companion in Godot`, or open this project folder in Godot 4.7.
 
-You can also open this folder in Godot 4.7 and press Play.
-
-Once the game starts:
-
-1. Walk to Scout Mira and press `E`.
-2. Press `Tab` to target the dummy.
-3. Use `1` and `2` to attack.
-4. Return to Scout Mira and press `E` to complete the quest.
-
-If Godot asks to convert or update the project to Godot 4.7, allow it. This prototype uses simple Godot 4 features, so that update is expected.
-
-Controls are also listed in [docs/controls.md](docs/controls.md).
-
-If Godot opens to a plain brown/gray 3D view with axes, that is the editor viewport. Use the `Run Frostbound Prototype` desktop shortcut to launch the actual game view directly. More help is in [docs/godot-troubleshooting.md](docs/godot-troubleshooting.md).
-
-If a desktop shortcut closes right away, open `logs/godot-launch.log` in this project folder. The launcher writes the exact Godot command and any error there.
-
-Godot is installed as a Snap app on this machine. Because the project is on an external drive, Godot needs the Snap `removable-media` permission. That permission has been enabled.
+To run the shell directly, use `Run AzerothCore Companion`.
 
 ## GitHub Push Shortcut
 
-A desktop shortcut named `Push My Game to GitHub` has been created. Double-click it to push saved local commits to the private GitHub repository at:
+Use the desktop shortcut named `Push AzerothCore Companion to GitHub` to push saved local commits to:
 
 https://github.com/Dankrupt94/my-game
 

@@ -2,19 +2,19 @@
 
 ## Current Goal
 
-Create a Godot 4 prototype for a private, WotLK-inspired third-person fantasy MMORPG experience using original placeholder content.
+Build a Godot 4.7 companion project for the local AzerothCore server and WotLK client setup.
 
 ## Guardrails
 
-- Build original placeholder art, names, quests, and zones.
-- Do not extract, copy, or redistribute Blizzard/WoW client assets.
-- Focus first on a playable local prototype: movement, camera, combat target, hotbar, NPC, quest, and RPG UI.
+- Do not copy, extract, or redistribute proprietary client assets.
+- Keep this project separate from AzerothCore server source, client files, build output, and data extraction output.
+- Preserve local user changes in the AzerothCore source repo.
+- Commit before and after meaningful tasks, then push to GitHub.
 
 ## First Milestone
 
-- Create a Godot project.
-- Add one playable 3D scene.
-- Add third-person movement and camera.
-- Add a target dummy, one quest giver, a simple hotbar, health/resource UI, and interaction text.
-- Commit the result locally.
-
+- Rename the project for the AzerothCore companion direction.
+- Remove retired RPG prototype gameplay files.
+- Keep a working Godot shell.
+- Track important local AzerothCore and client paths.
+- Prepare the repo for companion tooling.

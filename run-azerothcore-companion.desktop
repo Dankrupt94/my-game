@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Run AzerothCore Companion
+Comment=Run the AzerothCore Godot companion shell
+Exec=x-terminal-emulator -e /home/doodbro/Desktop/run-azerothcore-companion.sh
+Path=/run/media/doodbro/New 1tb/AzerothCore/godot-azerothcore-companion
+Terminal=false
+Icon=applications-games
+Categories=Game;
+StartupNotify=false
+

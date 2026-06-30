@@ -17,7 +17,7 @@ trap pause EXIT
 
 cd "$REPO_DIR"
 
-echo "Frostbound Prototype - GitHub Push"
+echo "AzerothCore Godot Companion - GitHub Push"
 echo "Project folder: $REPO_DIR"
 echo
 

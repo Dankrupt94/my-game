@@ -8,7 +8,7 @@ EXTRA_ARGS=()
 
 mkdir -p "$LOG_DIR"
 
-if [ "${FROSTBOUND_HEADLESS:-0}" = "1" ]; then
+if [ "${ACORE_COMPANION_HEADLESS:-0}" = "1" ]; then
   EXTRA_ARGS=(--headless --quit-after 10)
 fi
 
@@ -24,7 +24,7 @@ run_godot() {
 
   {
     echo "============================================================"
-    echo "Open Frostbound in Godot"
+    echo "Open AzerothCore Godot Companion"
     echo "Time: $(date)"
     echo "Project: $REPO_DIR"
     echo "Command: ${command_line[*]}"
@@ -39,7 +39,7 @@ run_godot() {
     echo "A launch error happened. The log was saved here:" | tee -a "$LOG_FILE"
     echo "$LOG_FILE" | tee -a "$LOG_FILE"
     pause_if_possible
-  elif [ "${FROSTBOUND_PAUSE:-0}" = "1" ]; then
+  elif [ "${ACORE_COMPANION_PAUSE:-0}" = "1" ]; then
     pause_if_possible
   fi
 

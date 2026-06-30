@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Open AzerothCore Companion in Godot
+Comment=Open the AzerothCore Godot companion project in the Godot editor
+Exec=x-terminal-emulator -e /home/doodbro/Desktop/open-azerothcore-companion-in-godot.sh
+Path=/run/media/doodbro/New 1tb/AzerothCore/godot-azerothcore-companion
+Terminal=false
+Icon=godot
+Categories=Development;
+StartupNotify=false
+

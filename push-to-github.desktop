@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Push My Game to GitHub
-Comment=Push unpushed commits for the Frostbound Prototype project
-Exec=/home/doodbro/Desktop/push-frostbound-to-github.sh
-Path=/run/media/doodbro/New 1tb/AzerothCore/godot-frostbound-prototype
+Name=Push AzerothCore Companion to GitHub
+Comment=Push unpushed commits for the AzerothCore Godot companion project
+Exec=/home/doodbro/Desktop/push-azerothcore-companion-to-github.sh
+Path=/run/media/doodbro/New 1tb/AzerothCore/godot-azerothcore-companion
 Terminal=true
 Icon=utilities-terminal
 Categories=Development;

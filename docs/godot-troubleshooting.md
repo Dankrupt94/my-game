@@ -1,8 +1,8 @@
 # Godot Launch Troubleshooting
 
-## Fastest Way To Play
+## Fastest Way To Run
 
-Use the desktop shortcut named `Run Frostbound Prototype`.
+Use the desktop shortcut named `Run AzerothCore Companion`.
 
 That shortcut runs the scene directly:
 
@@ -10,25 +10,19 @@ That shortcut runs the scene directly:
 res://main.tscn
 ```
 
-This bypasses stale Godot editor state, such as the editor remembering an older scene path.
-
-If the shortcut closes right away, it now writes a log here:
+If the shortcut closes right away, it writes a log here:
 
 ```text
 logs/godot-launch.log
 ```
 
-The shortcut also opens in a terminal window so the error should stay visible.
-
 ## Opening The Editor
 
-Use the desktop shortcut named `Open Frostbound in Godot`.
+Use the desktop shortcut named `Open AzerothCore Companion in Godot`.
 
-The editor may show a plain brown/gray 3D viewport with axes before you press Play. That is normal for this early prototype because the snowy yard is built by the game script when the scene runs.
+## If The Play Button Uses A Stale Scene
 
-## If The Play Button Still Mentions main.tscm
-
-Godot is remembering a bad path. In the editor:
+In the editor:
 
 1. Open `Project > Project Settings`.
 2. Search for `Main Scene`.
@@ -45,4 +39,4 @@ The permission has been enabled on this machine:
 godot-4:removable-media -> :removable-media
 ```
 
-Without that permission, Godot opens the project through a temporary `/run/user/1000/doc/...` path and cannot create its `.godot` working folder.
+Without that permission, Godot may open the project through a temporary `/run/user/1000/doc/...` path and fail to create its `.godot` working folder.
