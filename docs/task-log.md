@@ -14,7 +14,12 @@ Plan:
 
 Result:
 
-- In progress.
+- Completed protocol research docs under `docs/protocol/`.
+- Chose a native C++ helper path first because `g++` and CMake are available locally while `dotnet` is not installed.
+- Documented authserver challenge/proof and realm-list packet structures.
+- Documented worldserver header framing, `SMSG_AUTH_CHALLENGE`, `CMSG_AUTH_SESSION`, `SMSG_AUTH_RESPONSE`, `CMSG_CHAR_ENUM`, `SMSG_CHAR_ENUM`, and `CMSG_PLAYER_LOGIN`.
+- Created an opcode boundary sheet for build `12340`.
+- Used local `qwen-agent:latest` as an advisory reviewer and added clearer realm endpoint parsing notes for Stage 11.
 
 ## 2026-06-30 - Stage 09 Started
 
