@@ -6,7 +6,9 @@ This is the Godot-side companion workspace for the local AzerothCore setup. The 
 
 - Keep a Godot 4.7 project beside the local AzerothCore bundle.
 - Track local server, build, and client paths in one place.
-- Grow into a desktop-style companion for status checks, safe start/stop helpers, account setup, client launching, and diagnostics.
+- Use the desktop-style companion dashboard as bootstrap tooling for status checks, safe start/stop helpers, account setup, client launching, and diagnostics.
+- Build toward a fully functional Godot-native WotLK client/port that can replace the original WotLK client for normal AzerothCore play.
+- Treat any original sandbox or companion-only work as scaffolding, not as the final product.
 - Use local proprietary client files only for the authorized on-machine prototype. Keep those files out of Git and GitHub.
 
 ## Local Project Location

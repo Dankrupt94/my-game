@@ -2,7 +2,9 @@
 
 ## Purpose
 
-This project is an authorized local prototype for evaluating how well AI agents can help port a WotLK-era Blizzard client experience into Godot while using the local AzerothCore setup.
+This project is an authorized local prototype for evaluating how well AI agents can help create a fully functional Godot-native WotLK client/port while using the local AzerothCore setup.
+
+The goal is not a companion-only tool, not a reimagined game, and not a half-port that still depends on the original WotLK executable for normal play. The original client is a local reference/input source and validation target only.
 
 The project owner has instructed Codex and future AI agents to use the Blizzard/WotLK files available on this local machine as inputs for the porting work.
 
@@ -36,7 +38,7 @@ Codex and future agents should work autonomously toward the prototype goal:
 - document decisions and blockers,
 - commit and push non-proprietary project changes.
 
-The goal is to let the project owner's company evaluate future product use and design patterns for AI-assisted porting and game-engine work.
+The goal is to let the project owner's company evaluate future product use and design patterns for AI-assisted full client porting and game-engine work.
 
 ## GitHub Boundary
 

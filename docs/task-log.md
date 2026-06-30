@@ -295,3 +295,23 @@ Result:
 - Added audit checks for `data/maps`, `data/maps/0000.map`, `data/dbc`, `data/vmaps`, and `data/mmaps`.
 - Added a `Runtime data` row to the dashboard.
 - Documented local runtime repairs in `docs/local-runtime-repairs.md`.
+
+## 2026-06-30 - Clarify Full Godot WotLK Port Goal
+
+Goal: make the plan explicit that the project target is a fully functional Godot-native WotLK client/port, not a companion-only app, half-port, reimagining, or continued reliance on the original WotLK client.
+
+Plan:
+
+- Update the master plan with a full-port acceptance standard.
+- Update the engine roadmap so Path A is scaffolding only and Path B/full parity is the destination.
+- Add a final full-port acceptance stage.
+- Update README and agent instructions with the same mission boundary.
+- Take the Stash server stack offline if it is still running.
+- Commit and push the documentation changes.
+
+Result:
+
+- Stopped the running Stash-related containers: `nsfw-ai-server`, `stash-dockge`, `stash-uptime-kuma`, and `stash-dozzle`.
+- Left the AzerothCore MySQL container `ac-mysql` running.
+- Added Stage 17, the full-port acceptance gate.
+- Updated the master plan, roadmap, stage docs, README, local authorization, and agent instructions to clarify that companion/dashboard and Path A sandbox work are scaffolding only.

@@ -2,19 +2,22 @@
 
 ## North Star
 
-Turn Godot into the game-facing engine layer for the local AzerothCore setup.
+Turn Godot into the full player-facing WotLK client/engine layer for the local AzerothCore setup.
 
-That does not mean replacing the WotLK client immediately. It means building Godot in layers until it can move from companion tool, to playable original sandbox, to server-connected prototype, and eventually to either:
+The final goal is not a companion app, not a reimagined AzerothCore-inspired game, and not a workflow that still depends on launching the original WotLK client. The final goal is a fully functional Godot-native WotLK client/port that can replace the original client for normal play against AzerothCore.
 
-- an original AzerothCore-backed game, or
-- a much harder custom AzerothCore-compatible client.
+That does not mean replacing the WotLK client immediately. It means building Godot in layers until it can move from companion tool, to playable sandbox, to server-connected prototype, to a custom AzerothCore-compatible WotLK client.
+
+Some features may need technical adaptation for Godot, Linux, or AzerothCore. Those adaptations are allowed only when documented as compatibility deviations; they are not permission to change the identity of the port.
 
 ## Ground Rules
 
 - Do not copy client assets into this repo.
 - Use original placeholder assets for Godot gameplay work.
 - Keep AzerothCore source, build output, client files, and this Godot project separate.
-- Treat the WotLK client as a reference and local test client, not as something Godot can directly absorb.
+- Treat the WotLK client as a reference, local input source, and validation target, not as the final runtime.
+- Treat companion/dashboard work as scaffolding only.
+- Treat Path A sandbox work as risk-reduction only; it cannot become the final product unless the user explicitly changes the mission.
 - Commit and push before and after meaningful roadmap/code/document work.
 
 ## Stage 0 - Project Hygiene
@@ -240,65 +243,24 @@ Done when:
 
 - Godot characters can log out and back in with saved state.
 
-## Stage 9 - AzerothCore Integration Fork In The Road
+## Stage 9 - Path A Completion Gate
 
-At this point choose between two paths.
+At this point decide whether Path A has reduced enough risk to begin the real port path.
 
-### Path A - Godot MMO Inspired By AzerothCore
+Path A is complete only if:
 
-Godot uses:
+- the companion dashboard works,
+- the command layer and bridge boundaries are stable,
+- Godot can inspect safe AzerothCore data,
+- the sandbox proves movement/camera/UI/combat basics,
+- Godot-native multiplayer and persistence have been proven locally,
+- the missing runtime data and local-stack blockers are documented.
 
-- Its own networking.
-- Its own gameplay runtime.
-- AzerothCore data as reference/source material.
-- Bridge services for selected server/admin/database features.
-
-Pros:
-
-- Much more realistic.
-- Easier to debug.
-- Freer design.
-- Better for original assets and original game direction.
-
-Cons:
-
-- It is not a drop-in WotLK client replacement.
-
-### Path B - Godot Replacement Client For AzerothCore
-
-Godot implements:
-
-- Login/auth protocol.
-- Realm connection.
-- WotLK packet handling.
-- Object updates.
-- Movement.
-- Spells.
-- Inventory.
-- Quests.
-- Chat.
-- Groups.
-- Combat.
-
-Pros:
-
-- Closest to Godot becoming a true AzerothCore client.
-
-Cons:
-
-- Very large.
-- Requires careful protocol work.
-- Much slower path.
-- Easy to get stuck before anything feels playable.
-
-Recommendation:
-
-- Build Path A first.
-- Only attempt Path B after Godot has a working original multiplayer RPG loop.
+Path A completion does not end the project. It only opens Path B.
 
 ## Stage 10 - Protocol Research Spike
 
-Goal: understand whether Path B is worth attempting.
+Goal: begin the full replacement-client path by understanding what Godot must implement to talk to AzerothCore as a WotLK-compatible client.
 
 Research:
 
@@ -325,8 +287,6 @@ Done when:
 - We can estimate the first true Godot-to-AzerothCore protocol milestone.
 
 ## Stage 11 - Minimal Protocol Client Prototype
-
-Only if Stage 10 looks feasible.
 
 Goal: prove Godot can talk to AzerothCore at the protocol level.
 
@@ -415,6 +375,20 @@ Done when:
 
 ## Stage 16 - Client Feature March
 
+Godot implements:
+
+- Login/auth protocol.
+- Realm connection.
+- WotLK packet handling.
+- Object updates.
+- Movement.
+- Spells.
+- Inventory.
+- Quests.
+- Chat.
+- Groups.
+- Combat.
+
 Add systems one at a time:
 
 - Chat.
@@ -434,6 +408,24 @@ Add systems one at a time:
 Rule:
 
 - Each system gets one small vertical slice before broadening.
+- Each system must move toward faithful WotLK behavior unless a documented compatibility deviation is required.
+- The original WotLK client may be used for local comparison, but it is not an acceptable runtime dependency.
+
+## Stage 17 - Full Port Acceptance Gate
+
+Goal: decide whether the Godot client is a functional WotLK port, not just a prototype.
+
+Required:
+
+- Godot can log in, select a character, enter world, move, interact, fight, chat, loot, manage inventory/equipment, quest, use vendors/trainers, use map/minimap, and perform major social/economy flows.
+- Godot can run without launching the original WotLK client.
+- Required local asset/data pipelines are documented and keep proprietary files local-only.
+- Deviations from original WotLK behavior are documented, justified, and tracked.
+- Manual or automated regression checks cover major systems.
+
+Done when:
+
+- The user can use Godot as the player-facing client for normal AzerothCore WotLK play.
 
 ## Suggested Immediate Build Order
 
@@ -447,14 +439,15 @@ Rule:
 8. Simple Godot gameplay sandbox.
 9. Data-driven creature/quest viewer.
 10. Godot-native multiplayer test.
-11. Decide Path A or Path B.
+11. Complete the Path A gate and begin Path B protocol work.
+12. Continue until Stage 17 full-port acceptance is met.
 
 ## Risks
 
 - Snap/external-drive permissions can break Godot access.
 - AzerothCore source has local modified files; accidental resets would be bad.
 - Direct database writes can corrupt data if done casually.
-- WotLK protocol work can consume a lot of time before it becomes visible.
+- WotLK protocol work can consume a lot of time before it becomes visible, but it remains the required path.
 - Asset/legal risk increases if client assets are copied into the repo.
 
 ## Best Next Task
@@ -468,5 +461,4 @@ Build Stage 1:
   - open logs,
   - launch WotLK client.
 
-This gives immediate value and creates the command layer needed for every later stage.
-
+This gives immediate value and creates the command layer needed for every later stage. It is not the destination.

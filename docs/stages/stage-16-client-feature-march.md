@@ -6,6 +6,8 @@ Status: Planned
 
 Rebuild the WotLK client feature set in Godot as faithfully as possible, one vertical slice at a time.
 
+This stage is not a loose inspiration pass. It is the long feature-parity march toward a fully functional Godot-native WotLK client. The original WotLK client may be used for local comparison and validation, but it is not an acceptable runtime dependency.
+
 ## Feature Areas
 
 - Chat.
@@ -30,7 +32,9 @@ Rebuild the WotLK client feature set in Godot as faithfully as possible, one ver
 
 ## Done Criteria
 
-- Each feature area has a working Godot implementation or a documented reason it is deferred.
+- Each feature area has a working Godot implementation, a test checklist, and a documented parity status.
+- Any deviation from original WotLK behavior is documented as a compatibility tweak with a reason.
+- No feature is permanently skipped unless a later explicit decision says exact parity is impossible or intentionally deferred.
 
 ## Documentation To Update During Work
 
@@ -39,4 +43,3 @@ Rebuild the WotLK client feature set in Godot as faithfully as possible, one ver
 - UI screens.
 - Known behavior differences from WotLK.
 - Test cases against AzerothCore.
-
