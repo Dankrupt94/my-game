@@ -58,6 +58,7 @@ The first implementation checkpoint should be a safe local smoke harness that ca
 
 ## Next Checkpoint
 
+- Extract the validated CLI-only protocol flow into reusable C++ files that can be linked by a future GDExtension/native Godot module.
 - Replace the blocking helper process bridge with a true asynchronous GDExtension or native Godot TCP module.
 - Track Warden handling separately before claiming full default-server compatibility.
 - Decide when to restore random bot autologin for gameplay-load testing after protocol smoke tests are stable.

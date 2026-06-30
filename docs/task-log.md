@@ -1,5 +1,16 @@
 # Task Log
 
+## 2026-06-30 - Stage 11 Reusable Protocol Flow Checkpoint Started
+
+Goal: refactor the validated native helper so the auth/realm/world-auth/character-enum flow is reusable by Godot-native integration instead of being trapped inside the CLI entrypoint.
+
+Plan:
+
+- Move reusable socket/auth/world-flow code out of `main.cpp`.
+- Keep the existing `acore_protocol_client` commands and output stable.
+- Validate self-tests, safe probes, guarded password behavior, and live `CODEXPROTO` character flow.
+- Keep local credentials, packet captures, and proprietary files out of Git.
+
 ## 2026-06-30 - Stage 11 World Packet Parser Checkpoint Started
 
 Goal: continue Stage 11 by adding world-auth packet construction and character-list parsing without requiring account credentials.
