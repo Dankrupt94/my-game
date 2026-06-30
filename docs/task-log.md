@@ -76,3 +76,16 @@ Result:
 - Added `.gitignore` rules for local-only asset folders and common WotLK client/extracted asset extensions.
 - Linked the policy from the README and master plan.
 - Recorded that the project owner authorizes local-only proprietary client file use for this prototype, while Git/GitHub must stay code, documentation, tooling, manifests, and references only.
+
+## 2026-06-30 - Record Local Blizzard File Authorization
+
+Goal: make the project owner's clarified instruction explicit: all Blizzard/WotLK files available on this machine are authorized inputs for the local Godot porting prototype, but proprietary files must not be pushed to GitHub.
+
+Plan:
+
+- Save this before-task note.
+- Add a dedicated local authorization and autonomous-work directive.
+- Link the directive from the README and master plan.
+- Tighten `AGENTS.md` so future agents know the local files are expected inputs.
+- Verify Git still tracks no proprietary client asset files.
+- Commit and push the completed documentation.
