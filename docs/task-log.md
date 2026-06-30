@@ -181,3 +181,11 @@ Plan:
 - Keep proprietary files and local reports out of Git.
 - Validate the Godot scene loads with Godot 4.7.
 - Commit and push the completed dashboard changes.
+
+Result:
+
+- Replaced the static dashboard with status rows and action buttons.
+- Added status refresh through `tools/audit_server_stack.py`.
+- Added buttons for start stack, stop stack, opening logs, opening local reports, and launching the bundle client.
+- Validated that Godot 4.7 loads the scene headlessly.
+- Found that Snap Godot cannot see Docker from child processes; guarded direct start/stop and documented the need for a localhost bridge or native runner.

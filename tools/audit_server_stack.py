@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -63,6 +64,17 @@ CLIENT_CANDIDATES = [
 ]
 
 
+def find_executable(name: str) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    for directory in ["/usr/bin", "/usr/local/bin", "/snap/bin", "/home/doodbro/.local/bin"]:
+        candidate = Path(directory) / name
+        if candidate.exists() and candidate.is_file():
+            return str(candidate)
+    return None
+
+
 @dataclass
 class PathStatus:
     path: str
@@ -115,9 +127,11 @@ def run_command(command: list[str], timeout: int = 5) -> tuple[int, str]:
 
 
 def process_status() -> dict[str, dict[str, object]]:
+    pgrep_path = find_executable("pgrep") or "pgrep"
     results: dict[str, dict[str, object]] = {}
     for name, command in PROCESSES.items():
-        code, output = run_command(command)
+        command_with_path = [pgrep_path] + command[1:]
+        code, output = run_command(command_with_path)
         lines = [line for line in output.splitlines() if line.strip()]
         results[name] = {
             "running": code == 0 and bool(lines),
@@ -127,10 +141,11 @@ def process_status() -> dict[str, dict[str, object]]:
 
 
 def docker_mysql_status() -> dict[str, object]:
-    if shutil.which("docker") is None:
+    docker_path = find_executable("docker")
+    if docker_path is None:
         return {"docker_present": False, "container_found": False, "container_running": False, "rows": []}
 
-    code, output = run_command(["docker", "ps", "-a", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}"], timeout=8)
+    code, output = run_command([docker_path, "ps", "-a", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}"], timeout=8)
     rows = []
     for line in output.splitlines():
         parts = line.split("\t")
@@ -178,6 +193,13 @@ def build_report(include_bundle_status: bool, timeout: int) -> dict[str, object]
         "binaries": binaries,
         "logs": logs,
         "client_candidates": clients,
+        "runtime_environment": {
+            "inside_snap": bool(os.environ.get("SNAP")),
+            "snap_name": os.environ.get("SNAP_NAME"),
+            "snap_path": os.environ.get("SNAP"),
+            "docker_executable": find_executable("docker"),
+            "docker_socket_exists": Path("/var/run/docker.sock").exists(),
+        },
     }
 
     if include_bundle_status:
@@ -208,6 +230,7 @@ def write_markdown(report: dict[str, object], path: Path) -> None:
         lines.append(f"- `{name}`: {state}")
 
     docker = report["docker_mysql"]  # type: ignore[assignment]
+    runtime = report["runtime_environment"]  # type: ignore[assignment]
     lines.extend(
         [
             "",
@@ -216,6 +239,10 @@ def write_markdown(report: dict[str, object], path: Path) -> None:
             f"- Docker present: {docker['docker_present']}",
             f"- `ac-mysql` container found: {docker['container_found']}",
             f"- `ac-mysql` running: {docker['container_running']}",
+            f"- Running inside Snap: {runtime['inside_snap']}",
+            f"- Snap name: {runtime['snap_name']}",
+            f"- Docker executable seen: `{runtime['docker_executable']}`",
+            f"- Docker socket seen: {runtime['docker_socket_exists']}",
             "",
             "## Scripts",
             "",

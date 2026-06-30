@@ -55,9 +55,19 @@ Current safe-status result:
 
 This matches the read-only database audit result: the database configs are present, but the local MySQL runtime is not currently up.
 
+## Godot Snap Runtime Note
+
+When the dashboard is launched through Snap Godot, its child processes cannot currently see Docker. Terminal-launched audits can see `/usr/bin/docker`, but Godot-launched audits report Docker as unavailable inside the Snap sandbox.
+
+Current dashboard behavior:
+
+- Status refresh still works for paths, ports, and client checks.
+- Start/stop buttons are guarded when Docker is unavailable inside Snap.
+- A localhost bridge or native/non-Snap Godot runner is the next clean way to let the Godot UI control Docker-backed services.
+
 ## Next Stage 01 Actions
 
 - Add Godot dashboard buttons for status, start, stop, and log opening.
 - Make the dashboard show the current status from this tool or an equivalent Godot-side status check.
 - Keep start/stop actions routed through the existing AzerothCore scripts.
-- Run start actions only as explicit UI commands or planned automation checkpoints, because they change local runtime state.
+- Add a localhost bridge or native runner so the Snap dashboard can request host-side start/stop safely.

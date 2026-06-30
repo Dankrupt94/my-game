@@ -5,9 +5,23 @@ const AZEROTHCORE_SOURCE := "/run/media/doodbro/New 1tb/AzerothCore/source"
 const AZEROTHCORE_BUILD := "/home/doodbro/azeroth-build"
 const AZEROTHCORE_RUN := "/run/media/doodbro/New 1tb/AzerothCore/run"
 const WOTLK_CLIENT := "/run/media/doodbro/5e07d7d7-039f-43a8-94da-999f100ab1fb/World of Warcraft - WoTLK"
+const BUNDLE_CLIENT := "/run/media/doodbro/New 1tb/AzerothCore/client"
+const START_SCRIPT := "/run/media/doodbro/New 1tb/AzerothCore/scripts/start.sh"
+const STOP_SCRIPT := "/run/media/doodbro/New 1tb/AzerothCore/scripts/stop.sh"
+const STATUS_TOOL := "res://tools/audit_server_stack.py"
+const STATUS_REPORT := "res://local_reports/server-stack-audit.json"
+const LOCAL_REPORTS := "res://local_reports"
+const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
+
+var status_labels := {}
+var output_log: TextEdit
+var start_stop_blocked := false
+
 
 func _ready() -> void:
 	_build_dashboard()
+	_refresh_status()
+
 
 func _build_dashboard() -> void:
 	var background := ColorRect.new()
@@ -19,14 +33,14 @@ func _build_dashboard() -> void:
 	var margin := MarginContainer.new()
 	margin.anchor_right = 1.0
 	margin.anchor_bottom = 1.0
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_bottom", 24)
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_bottom", 20)
 	add_child(margin)
 
 	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation", 18)
+	columns.add_theme_constant_override("separation", 16)
 	margin.add_child(columns)
 
 	var main_panel := _panel()
@@ -34,50 +48,237 @@ func _build_dashboard() -> void:
 	columns.add_child(main_panel)
 
 	var main_stack := VBoxContainer.new()
-	main_stack.add_theme_constant_override("separation", 14)
+	main_stack.add_theme_constant_override("separation", 12)
 	main_panel.add_child(main_stack)
 
 	var title := Label.new()
 	title.text = "AzerothCore Godot Companion"
-	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_font_size_override("font_size", 28)
 	main_stack.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "Local companion shell for the AzerothCore server, build folder, and WotLK client paths."
+	subtitle.text = "Local control panel for the AzerothCore server stack, tooling reports, and WotLK client path."
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	main_stack.add_child(subtitle)
+
+	main_stack.add_child(_section_title("Actions"))
+	var actions := GridContainer.new()
+	actions.columns = 3
+	actions.add_theme_constant_override("h_separation", 8)
+	actions.add_theme_constant_override("v_separation", 8)
+	main_stack.add_child(actions)
+
+	actions.add_child(_button("Refresh Status", Callable(self, "_refresh_status")))
+	actions.add_child(_button("Start Stack", Callable(self, "_start_stack")))
+	actions.add_child(_button("Stop Stack", Callable(self, "_stop_stack")))
+	actions.add_child(_button("Open Logs", Callable(self, "_open_logs")))
+	actions.add_child(_button("Open Reports", Callable(self, "_open_reports")))
+	actions.add_child(_button("Launch Client", Callable(self, "_launch_client")))
 
 	main_stack.add_child(_section_title("Local Paths"))
 	main_stack.add_child(_path_row("AzerothCore bundle", AZEROTHCORE_ROOT))
 	main_stack.add_child(_path_row("Source checkout", AZEROTHCORE_SOURCE))
 	main_stack.add_child(_path_row("Linux build", AZEROTHCORE_BUILD))
 	main_stack.add_child(_path_row("Run output", AZEROTHCORE_RUN))
-	main_stack.add_child(_path_row("WotLK client", WOTLK_CLIENT))
+	main_stack.add_child(_path_row("Bundle client", BUNDLE_CLIENT))
+	main_stack.add_child(_path_row("Original client", WOTLK_CLIENT))
 
-	main_stack.add_child(_section_title("Current Direction"))
-	main_stack.add_child(_body_text("This project is now the Godot-side companion workspace for local AzerothCore experiments and tooling."))
+	main_stack.add_child(_section_title("Command Output"))
+	output_log = TextEdit.new()
+	output_log.editable = false
+	output_log.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	output_log.custom_minimum_size = Vector2(0, 190)
+	output_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_stack.add_child(output_log)
 
 	var side_panel := _panel()
-	side_panel.custom_minimum_size = Vector2(330, 0)
+	side_panel.custom_minimum_size = Vector2(360, 0)
 	columns.add_child(side_panel)
 
 	var side_stack := VBoxContainer.new()
-	side_stack.add_theme_constant_override("separation", 12)
+	side_stack.add_theme_constant_override("separation", 10)
 	side_panel.add_child(side_stack)
 
-	side_stack.add_child(_section_title("Quick Checks"))
-	side_stack.add_child(_status_row("Client realmlist", "127.0.0.1"))
-	side_stack.add_child(_status_row("Server source branch", "Playerbot"))
-	side_stack.add_child(_status_row("Godot project", "4.7"))
-	side_stack.add_child(_status_row("Asset policy", "No copied client assets"))
+	side_stack.add_child(_section_title("Runtime Status"))
+	side_stack.add_child(_status_row("mysql", "MySQL"))
+	side_stack.add_child(_status_row("authserver", "Authserver"))
+	side_stack.add_child(_status_row("worldserver", "Worldserver"))
+	side_stack.add_child(_status_row("ollama", "Ollama"))
+	side_stack.add_child(_status_row("docker_mysql", "Docker MySQL"))
+	side_stack.add_child(_status_row("auth_binary", "Auth binary"))
+	side_stack.add_child(_status_row("world_binary", "World binary"))
+	side_stack.add_child(_status_row("wow_exe", "Bundle Wow.exe"))
 
-	side_stack.add_child(_section_title("Next Build Step"))
-	side_stack.add_child(_body_text("Add controls here for server status, start/stop helpers, account setup, client launch, and safe local diagnostics."))
+	side_stack.add_child(_section_title("Project Rules"))
+	side_stack.add_child(_status_row("asset_policy", "Asset policy"))
+	_set_status("asset_policy", "Local only", true)
+	side_stack.add_child(_body_text("Reports are generated under local_reports/ and ignored by Git. Start and stop actions use the existing AzerothCore scripts."))
+
+
+func _refresh_status() -> void:
+	_append_log("Refreshing local server-stack status...")
+	var tool_path := ProjectSettings.globalize_path(STATUS_TOOL)
+	var result := _run_command("/usr/bin/python3", [tool_path])
+	_append_log(result["output"])
+	_append_log("Status refresh exit code: " + str(result["exit_code"]))
+	_load_status_report()
+
+
+func _start_stack() -> void:
+	_run_stack_script(START_SCRIPT, "Start stack")
+
+
+func _stop_stack() -> void:
+	_run_stack_script(STOP_SCRIPT, "Stop stack")
+
+
+func _run_stack_script(script_path: String, label: String) -> void:
+	if start_stop_blocked:
+		_append_log("Start/stop from Snap Godot is blocked because Docker is not visible inside the app sandbox. Use the host script directly for now; the next bridge step will fix this.")
+		return
+
+	if not FileAccess.file_exists(script_path):
+		_append_log(label + " script missing: " + script_path)
+		return
+
+	_append_log("Running: " + label)
+	var result := _run_command("/usr/bin/env", ["bash", script_path])
+	_append_log(result["output"])
+	_append_log(label + " exit code: " + str(result["exit_code"]))
+	_refresh_status()
+
+
+func _open_logs() -> void:
+	OS.shell_open(LOGS_DIR)
+	_append_log("Opened logs folder: " + LOGS_DIR)
+
+
+func _open_reports() -> void:
+	var reports_path := ProjectSettings.globalize_path(LOCAL_REPORTS)
+	OS.shell_open(reports_path)
+	_append_log("Opened local reports folder: " + reports_path)
+
+
+func _launch_client() -> void:
+	var wow_path := BUNDLE_CLIENT + "/Wow.exe"
+	if not FileAccess.file_exists(wow_path):
+		_append_log("Bundle Wow.exe not found at: " + wow_path)
+		return
+
+	if not _command_exists("wine"):
+		_append_log("Wine is not installed yet, so the Windows client cannot be launched from this Linux dashboard.")
+		return
+
+	var pid := OS.create_process("/usr/bin/env", PackedStringArray(["wine", wow_path]), false)
+	if pid <= 0:
+		_append_log("Client launch failed.")
+	else:
+		_append_log("Client launch started with process id: " + str(pid))
+
+
+func _load_status_report() -> void:
+	var report_path := ProjectSettings.globalize_path(STATUS_REPORT)
+	if not FileAccess.file_exists(report_path):
+		_append_log("Status report not found yet: " + report_path)
+		return
+
+	var file := FileAccess.open(report_path, FileAccess.READ)
+	if file == null:
+		_append_log("Could not open status report: " + report_path)
+		return
+
+	var parsed = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		_append_log("Status report JSON could not be parsed.")
+		return
+
+	var report: Dictionary = parsed
+	var ports: Dictionary = report.get("ports", {})
+	_set_port_status(ports, "mysql")
+	_set_port_status(ports, "authserver")
+	_set_port_status(ports, "worldserver")
+	_set_port_status(ports, "ollama")
+
+	var docker_mysql: Dictionary = report.get("docker_mysql", {})
+	var runtime_environment: Dictionary = report.get("runtime_environment", {})
+	var docker_running := bool(docker_mysql.get("container_running", false))
+	var docker_found := bool(docker_mysql.get("container_found", false))
+	var docker_present := bool(docker_mysql.get("docker_present", false))
+	var inside_snap := bool(runtime_environment.get("inside_snap", false))
+	start_stop_blocked = inside_snap and not docker_present
+	if start_stop_blocked:
+		_set_status("docker_mysql", "Snap blocked", false)
+	else:
+		_set_status("docker_mysql", "Running" if docker_running else ("Stopped" if docker_found else "Not found"), docker_running)
+
+	var binaries: Dictionary = report.get("binaries", {})
+	_set_path_status(binaries, "authserver", "auth_binary")
+	_set_path_status(binaries, "worldserver", "world_binary")
+
+	var clients: Dictionary = report.get("client_candidates", {})
+	_set_path_status(clients, "Wow.exe", "wow_exe")
+
+
+func _set_port_status(ports: Dictionary, name: String) -> void:
+	var info: Dictionary = ports.get(name, {})
+	var listening := bool(info.get("listening", false))
+	_set_status(name, "Listening" if listening else "Not listening", listening)
+
+
+func _set_path_status(section: Dictionary, name: String, label_key: String) -> void:
+	var info: Dictionary = section.get(name, {})
+	var exists := bool(info.get("exists", false))
+	var executable := bool(info.get("executable", false))
+	var value := "Executable" if executable else ("Found" if exists else "Missing")
+	_set_status(label_key, value, exists)
+
+
+func _command_exists(command: String) -> bool:
+	var result := _run_command("/usr/bin/env", ["bash", "-lc", "command -v " + command])
+	return int(result["exit_code"]) == 0
+
+
+func _run_command(executable: String, args: Array) -> Dictionary:
+	var output := []
+	var packed_args := PackedStringArray()
+	for arg in args:
+		packed_args.append(str(arg))
+
+	var exit_code := OS.execute(executable, packed_args, output, true, false)
+	var text := ""
+	for chunk in output:
+		text += str(chunk)
+	if text.strip_edges().is_empty():
+		text = "(no output)"
+
+	return {
+		"exit_code": exit_code,
+		"output": text.strip_edges(),
+	}
+
+
+func _append_log(text: String) -> void:
+	if output_log == null:
+		return
+	var stamp := Time.get_datetime_string_from_system(false, true)
+	output_log.text += "[" + stamp + "] " + text.strip_edges() + "\n"
+	output_log.scroll_vertical = output_log.get_line_count()
+
+
+func _set_status(key: String, value: String, ok: bool) -> void:
+	if not status_labels.has(key):
+		return
+	var label: Label = status_labels[key]
+	label.text = value
+	var color := Color(0.45, 0.84, 0.58) if ok else Color(0.95, 0.61, 0.42)
+	label.add_theme_color_override("font_color", color)
+
 
 func _panel() -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _panel_style())
 	return panel
+
 
 func _panel_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -91,17 +292,29 @@ func _panel_style() -> StyleBoxFlat:
 	style.set_content_margin(SIDE_BOTTOM, 16)
 	return style
 
+
+func _button(text: String, callback: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(0, 38)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(callback)
+	return button
+
+
 func _section_title(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_font_size_override("font_size", 17)
 	return label
+
 
 func _body_text(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
 
 func _path_row(name: String, path: String) -> VBoxContainer:
 	var row := VBoxContainer.new()
@@ -119,7 +332,8 @@ func _path_row(name: String, path: String) -> VBoxContainer:
 
 	return row
 
-func _status_row(name: String, value: String) -> HBoxContainer:
+
+func _status_row(key: String, name: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 
 	var name_label := Label.new()
@@ -128,8 +342,10 @@ func _status_row(name: String, value: String) -> HBoxContainer:
 	row.add_child(name_label)
 
 	var value_label := Label.new()
-	value_label.text = value
+	value_label.text = "Unknown"
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.custom_minimum_size = Vector2(120, 0)
 	row.add_child(value_label)
+	status_labels[key] = value_label
 
 	return row

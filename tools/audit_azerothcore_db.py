@@ -23,6 +23,17 @@ DEFAULT_CONFIGS = [
 DATABASE_KEYS = ["LoginDatabaseInfo", "WorldDatabaseInfo", "CharacterDatabaseInfo"]
 
 
+def find_executable(name: str) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    for directory in ["/usr/bin", "/usr/local/bin", "/snap/bin", "/home/doodbro/.local/bin"]:
+        candidate = Path(directory) / name
+        if candidate.exists() and candidate.is_file():
+            return str(candidate)
+    return None
+
+
 @dataclass(frozen=True)
 class DatabaseConnection:
     source_config: str
@@ -112,11 +123,11 @@ def write_defaults_file(connection: DatabaseConnection, directory: Path) -> Path
     return defaults
 
 
-def run_mysql_query(connection: DatabaseConnection, query: str, timeout: int) -> tuple[bool, str]:
+def run_mysql_query(connection: DatabaseConnection, query: str, timeout: int, mysql_path: str) -> tuple[bool, str]:
     with tempfile.TemporaryDirectory(prefix="acore-db-audit-") as tmp:
         defaults = write_defaults_file(connection, Path(tmp))
         command = [
-            "mysql",
+            mysql_path,
             f"--defaults-extra-file={defaults}",
             "--batch",
             "--raw",
@@ -156,11 +167,12 @@ def audit_connection(connection: DatabaseConnection, timeout: int, no_query: boo
         result["error"] = "query skipped by --no-query"
         return result
 
-    if shutil.which("mysql") is None:
+    mysql_path = find_executable("mysql")
+    if mysql_path is None:
         result["error"] = "mysql command not found"
         return result
 
-    version_ok, version_output = run_mysql_query(connection, "SELECT VERSION();", timeout)
+    version_ok, version_output = run_mysql_query(connection, "SELECT VERSION();", timeout, mysql_path)
     if not version_ok:
         result["error"] = version_output
         return result
@@ -172,6 +184,7 @@ def audit_connection(connection: DatabaseConnection, timeout: int, no_query: boo
         connection,
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE();",
         timeout,
+        mysql_path,
     )
     if table_ok and table_output:
         try:
@@ -183,6 +196,7 @@ def audit_connection(connection: DatabaseConnection, timeout: int, no_query: boo
         connection,
         "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name LIMIT 20;",
         timeout,
+        mysql_path,
     )
     if sample_ok and sample_output:
         result["sample_tables"] = sample_output.splitlines()
@@ -245,7 +259,7 @@ def main() -> int:
         "config_files_found": sum(1 for config in configs if config.exists()),
         "connections": [connection.redacted() for connection in unique],
         "connection_count": len(unique),
-        "mysql_client_present": shutil.which("mysql") is not None,
+        "mysql_client_present": find_executable("mysql") is not None,
         "reachable_count": sum(1 for audit in audits if audit["reachable"]),
         "audits": audits,
     }
