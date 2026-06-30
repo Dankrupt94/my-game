@@ -68,3 +68,15 @@ Fix:
 
 - Connected `godot-4:removable-media` to `:removable-media`.
 - Verified the real non-headless launch command can open `res://main.tscn` from the external drive.
+
+## 2026-06-30 - Relocate Godot Prototype Into AzerothCore Bundle
+
+Goal: move the Godot prototype out of the SSD trash and into the local AzerothCore bundle where it is easier to find and manage.
+
+Plan:
+
+- Save this pre-move note as a before-task commit.
+- Move the project to `/run/media/doodbro/New 1tb/AzerothCore/godot-frostbound-prototype`.
+- Update desktop shortcuts and scripts that contain the old path.
+- Verify Godot can still launch the scene.
+- Commit and push the completed move.
