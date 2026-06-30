@@ -1,5 +1,17 @@
 # Task Log
 
+## 2026-06-30 - Stage 08 Started
+
+Goal: persist Godot-native sandbox state safely without touching AzerothCore core tables.
+
+Plan:
+
+- Preserve this before-task note.
+- Use ignored local storage under `local_runtime/`.
+- Add save/load support for a Godot test identity, test character, position, health, focus, and placeholder inventory.
+- Add a logout/login-style reload flow in the sandbox.
+- Add a headless persistence self-test.
+
 ## 2026-06-30 - Stage 07 Started
 
 Goal: prove a small Godot-native multiplayer loop on localhost before any WotLK protocol work.
