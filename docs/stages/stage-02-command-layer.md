@@ -1,6 +1,6 @@
 # Stage 02 - Command Layer
 
-Status: In Progress
+Status: Complete
 
 ## Goal
 
@@ -35,5 +35,12 @@ Create a safe command layer so UI buttons call named actions instead of scattere
 - Added a named action registry in `scripts/companion_dashboard.gd`.
 - Dashboard buttons now route through action IDs instead of direct one-off callbacks.
 - Added a `restart_stack` action to the registry and UI.
+- Added a `data_browser` action for Stage 03 read-only views.
 - The current action list is documented in [../command-layer.md](../command-layer.md).
 - Godot 4.7 loads the dashboard scene headlessly after the refactor.
+
+## Completion Notes
+
+- Dashboard buttons use named command actions.
+- Command output is visible inside Godot.
+- Failed or unavailable bridge actions report to the output panel instead of crashing the app.

@@ -13,7 +13,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,8 +22,12 @@ LOCAL_REPORTS = ROOT / "local_reports"
 TOKEN_PATH = LOCAL_RUNTIME / "host-bridge-token.txt"
 STATUS_TOOL = ROOT / "tools" / "audit_server_stack.py"
 STATUS_REPORT = LOCAL_REPORTS / "server-stack-audit.json"
+DATA_TOOL = ROOT / "tools" / "read_only_data_browser.py"
+DATA_REPORT = LOCAL_REPORTS / "read-only-data-browser.json"
 START_SCRIPT = Path("/run/media/doodbro/New 1tb/AzerothCore/scripts/start.sh")
 STOP_SCRIPT = Path("/run/media/doodbro/New 1tb/AzerothCore/scripts/stop.sh")
+ALLOWED_DATA_VIEWS = {"summary", "accounts", "characters", "online", "creatures", "items", "quests", "spells", "all"}
+MAX_DATA_SEARCH_LENGTH = 80
 
 
 def utc_now() -> str:
@@ -66,11 +70,11 @@ def run_command(command: list[str], timeout: int) -> dict[str, Any]:
     }
 
 
-def load_status_report() -> dict[str, Any]:
-    if not STATUS_REPORT.exists():
+def load_json_report(path: Path) -> dict[str, Any]:
+    if not path.exists():
         return {}
     try:
-        return json.loads(STATUS_REPORT.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
 
@@ -111,7 +115,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
         return False
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
         if path == "/health":
             self._send_json(
                 HTTPStatus.OK,
@@ -134,7 +139,61 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     "generated_at": utc_now(),
                     "command": "audit_server_stack",
                     "result": result,
-                    "report": load_status_report(),
+                    "report": load_json_report(STATUS_REPORT),
+                },
+            )
+            return
+
+        if path == "/data":
+            params = parse_qs(parsed_url.query)
+            view = params.get("view", ["summary"])[0]
+            search = params.get("search", [""])[0]
+            limit_text = params.get("limit", ["25"])[0]
+
+            if view not in ALLOWED_DATA_VIEWS:
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"ok": False, "error": f"unsupported data view: {view}", "generated_at": utc_now()},
+                )
+                return
+
+            if len(search) > MAX_DATA_SEARCH_LENGTH:
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"ok": False, "error": "search term is too long", "generated_at": utc_now()},
+                )
+                return
+
+            try:
+                limit_value = int(limit_text)
+            except ValueError:
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"ok": False, "error": "limit must be a number", "generated_at": utc_now()},
+                )
+                return
+
+            limit = str(max(1, min(limit_value, 100)))
+            command = [
+                sys.executable,
+                str(DATA_TOOL),
+                "--view",
+                view,
+                "--search",
+                search,
+                "--limit",
+                limit,
+                "--compact",
+            ]
+            result = run_command(command, timeout=30)
+            self._send_json(
+                HTTPStatus.OK if result["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR,
+                {
+                    "ok": result["ok"],
+                    "generated_at": utc_now(),
+                    "command": "read_only_data_browser",
+                    "result": result,
+                    "report": load_json_report(DATA_REPORT),
                 },
             )
             return

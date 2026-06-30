@@ -67,6 +67,23 @@ local_reports/azerothcore-db-audit.md
 
 The script parses local AzerothCore config files, redacts credentials, and runs read-only connectivity/table-count checks when `mysql` is available and the database server is reachable.
 
+## Read-Only Data Browser
+
+Run:
+
+```bash
+python3 tools/read_only_data_browser.py --view summary --compact
+```
+
+Outputs:
+
+```text
+local_reports/read-only-data-browser.json
+local_reports/read-only-data-browser.md
+```
+
+The tool runs `SELECT` queries only and avoids credential, email, registration mail, and IP fields. It provides summary counts plus read-only views for accounts, characters, online characters, creature templates, item templates, quest templates, and spell metadata.
+
 ## Server Stack Audit
 
 Run:
@@ -105,4 +122,5 @@ CLI client:
 ```bash
 python3 tools/bridge_client.py health
 python3 tools/bridge_client.py status --compact
+python3 tools/bridge_client.py data --view summary --compact
 ```

@@ -4,29 +4,27 @@ Status: Planned
 
 ## Goal
 
-Enter the AzerothCore world from Godot as a real client session.
+Initiate character world entry, verify authentication responses, extract player coordinates, and render a basic 3D marker at the server-reported starting location.
 
 ## Deliverables
 
-- Select character.
-- Send enter-world request.
-- Receive initial world data.
-- Parse own character identity.
-- Parse own character position.
-- Display a placeholder player marker at the received position.
+- **Login Selection Request:** Send the selected character's GUID via `CMSG_PLAYER_LOGIN`.
+- **Verify World Packets Parser:** Read and extract Map ID, position coordinates `(X, Y, Z)`, and player orientation from the `SMSG_LOGIN_VERIFY_WORLD` packet.
+- **Initial Update Object Parser:** Parse the initial `SMSG_UPDATE_OBJECT` data payload. Identify the player's own GUID within the object values blocks and save the character's properties (such as race, class, level).
+- **Godot 3D Grid Space:** Instantiating a clean 3D coordinate space containing basic axis indicators and grid line visual aids.
+- **Player Marker Placement:** Position a camera and a custom 3D player mesh placeholder at the server-reported coordinates.
 
 ## Entry Criteria
 
-- Stage 11 minimal protocol client works.
+- Stage 11 minimal protocol client successfully retrieves character enumeration data over TCP.
 
 ## Done Criteria
 
-- Godot can enter the world and display the character's server-reported position.
+- Godot completes the world login sequence and transitions the UI to the 3D grid viewport.
+- The 3D player mesh aligns exactly with the `(X, Y, Z)` coordinates returned in the login verification payload.
 
 ## Documentation To Update During Work
 
-- Enter-world packet notes.
-- Object update notes.
-- Initial-position parse notes.
-- Test results.
-
+- Login verify packet fields map.
+- SMSG_UPDATE_OBJECT value bitmask specifications.
+- World space coordinate orientation documentation (mapping WoW coordinates to Godot coordinate space).

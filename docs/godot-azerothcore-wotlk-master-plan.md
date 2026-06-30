@@ -140,11 +140,19 @@ Path B:
 - [Stage 16 - WotLK Client Feature March](stages/stage-16-client-feature-march.md)
 - [Stage 17 - Full Port Acceptance Gate](stages/stage-17-full-port-acceptance-gate.md)
 
+## Logical Plan Concerns & Risks
+
+To ensure the logical porting plan remains sound, the following technical and architectural concerns must be actively managed:
+
+- **SRP6 & RC4 Cryptography (Stage 11):** The WotLK login flow utilizes SRP6, and the world server connection encrypts packet headers using an RC4-like cipher. Because pure GDScript is computationally slow and complex for this, compiled libraries (such as C# libraries or a C++ GDExtension helper) should be prioritized during Stage 10 research.
+- **Proprietary Asset Pipeline (Stage 14 / Path B):** Faithfully porting the client requires parsing proprietary client assets (`.m2` models, `.blp` textures, `.adt` terrain, `.wmo` world objects) from local MPQ archives. A dedicated offline/runtime local converter must be designed to dump standard structures (e.g., GLTF, PNG) into Git-ignored local folders, ensuring proprietary files remain local-only while keeping conversion tools tracked.
+- **Movement Synchronization & Desyncs (Stage 13):** WoW uses client-predicted movement verified by server heartbeats and fall/jump speed checks. Desyncs cause server-side rubber-banding or disconnects. Stage 13 must focus on simple "read-only movement mimicry" (mimicking a character controlled by an official client) before introducing direct client-authoritative movement inputs from Godot.
+
 ## Current Status
 
-Current stage: Stage 02 is in progress.
+Current stage: Stage 03 is complete; pause before Stage 04.
 
-Reason: the project already has a Godot shell, known local paths, a bridge-aware dashboard, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, and a host bridge that can report and idempotently start the live stack. Stage 02 has begun by routing dashboard buttons through named actions. The next useful step is finishing command-layer polish, then moving into the read-only data browser that makes real AzerothCore data visible inside Godot.
+Reason: the project already has a Godot shell, known local paths, a bridge-aware dashboard, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a host bridge that can report and idempotently start the live stack, and a completed read-only data browser for real AzerothCore data. Per the current user instruction, work pauses here before Stage 04.
 
 ## Non-Negotiable Safety Rules
 

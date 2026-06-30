@@ -393,3 +393,31 @@ Result:
 - Marked Stage 02 as in progress.
 - Used local `qwen-agent:latest` as a bounded advisory reviewer on the GDScript diff; no code changes were needed from its review.
 - Verified Godot 4.7 loads the scene headlessly after the refactor.
+
+## 2026-06-30 - Complete Stage 03 Read-Only Data Browser
+
+Goal: finish the read-only data browser stage, then pause before moving into the next stage.
+
+Plan:
+
+- Preserve Antigravity's plan-hardening updates and risk flags.
+- Add a read-only data browser tool that runs `SELECT` queries only.
+- Add a bridge endpoint and bridge client action for read-only data.
+- Add Godot dashboard controls for view selection, search, limits, and result display.
+- Document the tables, fields, endpoint, safety boundary, and validation.
+- Validate against the live local stack.
+
+Result:
+
+- Added `tools/read_only_data_browser.py`.
+- Added `GET /data` to `tools/host_control_bridge.py`.
+- Added `data` to `tools/bridge_client.py`.
+- Added a `Read-Only Data Browser` panel to the Godot dashboard.
+- Added `docs/read-only-data-browser.md`.
+- Marked Stage 02 complete and Stage 03 complete.
+- Restored the Stage 17 master-plan link while preserving Antigravity's SRP6/RC4, asset-pipeline, and movement-desync risk notes.
+- Used local `qwen-agent:latest` as a bounded advisory reviewer on the read-only data path and added bridge-side validation for data view, limit, and search length.
+- Validated summary, account, character, online, creature, item, quest, and spell views.
+- Validated bridge `data` calls against the live local stack.
+- Validated Godot 4.7 loads the dashboard scene headlessly.
+- Pausing here before Stage 04 per user instruction.

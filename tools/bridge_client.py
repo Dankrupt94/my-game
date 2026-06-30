@@ -8,6 +8,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
+import urllib.parse
 from pathlib import Path
 
 
@@ -23,10 +24,15 @@ def read_token() -> str | None:
     return token or None
 
 
-def request_json(base_url: str, action: str, timeout: int) -> tuple[int, dict[str, object]]:
+def request_json(base_url: str, action: str, timeout: int, view: str, search: str, limit: int) -> tuple[int, dict[str, object]]:
     method = "GET" if action in ["health", "status"] else "POST"
     path = "/" + action
     headers = {}
+
+    if action == "data":
+        method = "GET"
+        query = urllib.parse.urlencode({"view": view, "search": search, "limit": str(limit)})
+        path += "?" + query
 
     if method == "POST":
         token = read_token()
@@ -57,9 +63,18 @@ def compact_summary(action: str, status: int, payload: dict[str, object]) -> dic
 
     report = payload.get("report")
     if isinstance(report, dict):
-        summary["ports"] = report.get("ports", {})
-        summary["docker_mysql"] = report.get("docker_mysql", {})
-        summary["runtime_environment"] = report.get("runtime_environment", {})
+        if action == "data":
+            summary["data"] = {
+                "view": report.get("view"),
+                "search": report.get("search"),
+                "limit": report.get("limit"),
+                "summary": report.get("views", {}).get("summary", {}) if isinstance(report.get("views"), dict) else {},
+                "errors": report.get("errors", {}),
+            }
+        else:
+            summary["ports"] = report.get("ports", {})
+            summary["docker_mysql"] = report.get("docker_mysql", {})
+            summary["runtime_environment"] = report.get("runtime_environment", {})
     elif "error" in payload:
         summary["error"] = payload["error"]
 
@@ -74,13 +89,16 @@ def compact_summary(action: str, status: int, payload: dict[str, object]) -> dic
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["health", "status", "start", "stop"])
+    parser.add_argument("action", choices=["health", "status", "start", "stop", "data"])
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--compact", action="store_true")
+    parser.add_argument("--view", default="summary")
+    parser.add_argument("--search", default="")
+    parser.add_argument("--limit", type=int, default=25)
     args = parser.parse_args()
 
-    status, payload = request_json(args.base_url, args.action, args.timeout)
+    status, payload = request_json(args.base_url, args.action, args.timeout, args.view, args.search, args.limit)
     output = compact_summary(args.action, status, payload) if args.compact else payload
     print(json.dumps(output, indent=2, sort_keys=True))
 

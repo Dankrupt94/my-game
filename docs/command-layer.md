@@ -16,6 +16,7 @@ Current actions:
 - `start_stack`: start the AzerothCore stack through the host bridge when available, with direct script fallback.
 - `stop_stack`: stop the AzerothCore stack through the host bridge when available, with direct script fallback.
 - `restart_stack`: run stop then start through the same command path.
+- `data_browser`: fetch the selected read-only AzerothCore data view through the host bridge and update the dashboard Data Snapshot/results panel.
 - `open_logs`: open the local AzerothCore logs folder.
 - `open_reports`: open this repo's ignored local reports folder.
 - `launch_client`: launch the bundle `Wow.exe` through Wine if Wine is installed.
@@ -34,6 +35,7 @@ Command results include:
 ## Safety Notes
 
 - The status action is read-only.
+- The data summary action is read-only.
 - Start/stop/restart use the existing local AzerothCore scripts.
 - Snap-limited direct start/stop remains guarded when the host bridge is offline.
 - No database writes are introduced by this command layer.

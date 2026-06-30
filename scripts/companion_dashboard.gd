@@ -11,12 +11,18 @@ const STOP_SCRIPT := "/run/media/doodbro/New 1tb/AzerothCore/scripts/stop.sh"
 const STATUS_TOOL := "res://tools/audit_server_stack.py"
 const BRIDGE_CLIENT := "res://tools/bridge_client.py"
 const STATUS_REPORT := "res://local_reports/server-stack-audit.json"
+const DATA_REPORT := "res://local_reports/read-only-data-browser.json"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
+const DATA_VIEWS := ["summary", "accounts", "characters", "online", "creatures", "items", "quests", "spells"]
 
 var command_actions := {}
 var status_labels := {}
 var output_log: TextEdit
+var data_view_selector: OptionButton
+var data_search_input: LineEdit
+var data_limit_input: SpinBox
+var data_results: TextEdit
 var start_stop_blocked := false
 var bridge_available := false
 
@@ -44,6 +50,10 @@ func _register_command_actions() -> void:
 		"restart_stack": {
 			"label": "Restart Stack",
 			"handler": Callable(self, "_action_restart_stack"),
+		},
+		"data_browser": {
+			"label": "Browse Data",
+			"handler": Callable(self, "_action_data_browser"),
 		},
 		"open_logs": {
 			"label": "Open Logs",
@@ -109,6 +119,7 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("start_stack"))
 	actions.add_child(_action_button("stop_stack"))
 	actions.add_child(_action_button("restart_stack"))
+	actions.add_child(_action_button("data_browser"))
 	actions.add_child(_action_button("open_logs"))
 	actions.add_child(_action_button("open_reports"))
 	actions.add_child(_action_button("launch_client"))
@@ -120,6 +131,39 @@ func _build_dashboard() -> void:
 	main_stack.add_child(_path_row("Run output", AZEROTHCORE_RUN))
 	main_stack.add_child(_path_row("Bundle client", BUNDLE_CLIENT))
 	main_stack.add_child(_path_row("Original client", WOTLK_CLIENT))
+
+	main_stack.add_child(_section_title("Read-Only Data Browser"))
+	var data_controls := HBoxContainer.new()
+	data_controls.add_theme_constant_override("separation", 8)
+	main_stack.add_child(data_controls)
+
+	data_view_selector = OptionButton.new()
+	data_view_selector.custom_minimum_size = Vector2(150, 38)
+	for view in DATA_VIEWS:
+		data_view_selector.add_item(view.capitalize())
+	data_controls.add_child(data_view_selector)
+
+	data_search_input = LineEdit.new()
+	data_search_input.placeholder_text = "Search creatures, items, quests, spells"
+	data_search_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	data_controls.add_child(data_search_input)
+
+	data_limit_input = SpinBox.new()
+	data_limit_input.min_value = 1
+	data_limit_input.max_value = 100
+	data_limit_input.step = 1
+	data_limit_input.value = 25
+	data_limit_input.custom_minimum_size = Vector2(90, 38)
+	data_controls.add_child(data_limit_input)
+
+	data_controls.add_child(_action_button("data_browser"))
+
+	data_results = TextEdit.new()
+	data_results.editable = false
+	data_results.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	data_results.custom_minimum_size = Vector2(0, 210)
+	data_results.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_stack.add_child(data_results)
 
 	main_stack.add_child(_section_title("Command Output"))
 	output_log = TextEdit.new()
@@ -148,6 +192,16 @@ func _build_dashboard() -> void:
 	side_stack.add_child(_status_row("world_binary", "World binary"))
 	side_stack.add_child(_status_row("runtime_data", "Runtime data"))
 	side_stack.add_child(_status_row("wow_exe", "Bundle Wow.exe"))
+
+	side_stack.add_child(_section_title("Data Snapshot"))
+	side_stack.add_child(_status_row("data_realm", "Realm"))
+	side_stack.add_child(_status_row("data_accounts", "Accounts"))
+	side_stack.add_child(_status_row("data_characters", "Characters"))
+	side_stack.add_child(_status_row("data_online", "Online"))
+	side_stack.add_child(_status_row("data_creatures", "Creatures"))
+	side_stack.add_child(_status_row("data_items", "Items"))
+	side_stack.add_child(_status_row("data_quests", "Quests"))
+	side_stack.add_child(_status_row("data_spells", "Spells"))
 
 	side_stack.add_child(_section_title("Project Rules"))
 	side_stack.add_child(_status_row("asset_policy", "Asset policy"))
@@ -186,6 +240,8 @@ func _action_refresh_status() -> void:
 		var result := _run_command("/usr/bin/python3", [tool_path])
 		_append_command_result("Direct status", result)
 	_load_status_report()
+	if bridge_available:
+		_refresh_data_summary(false)
 
 
 func _action_start_stack() -> void:
@@ -200,6 +256,42 @@ func _action_restart_stack() -> void:
 	_append_log("Restart stack: stop then start.")
 	_run_stack_script(STOP_SCRIPT, "Stop stack")
 	_run_stack_script(START_SCRIPT, "Start stack")
+
+
+func _action_data_browser() -> void:
+	if data_view_selector == null:
+		_refresh_data_summary(true)
+		return
+
+	var index := data_view_selector.selected
+	if index < 0 or index >= DATA_VIEWS.size():
+		index = 0
+	var view := str(DATA_VIEWS[index])
+	var search := data_search_input.text.strip_edges() if data_search_input != null else ""
+	var limit := int(data_limit_input.value) if data_limit_input != null else 25
+	_refresh_data_view(view, search, limit, true)
+
+
+func _refresh_data_summary(log_result: bool) -> void:
+	if not bridge_available:
+		_append_log("Read-only data browser needs the host bridge to be online.")
+		return
+
+	var result := _run_bridge_data_action("summary", "", 25, 35)
+	if log_result:
+		_append_command_result("Bridge data summary", result)
+	_load_data_report()
+
+
+func _refresh_data_view(view: String, search: String, limit: int, log_result: bool) -> void:
+	if not bridge_available:
+		_append_log("Read-only data browser needs the host bridge to be online.")
+		return
+
+	var result := _run_bridge_data_action(view, search, limit, 35)
+	if log_result:
+		_append_command_result("Bridge data " + view, result)
+	_load_data_report()
 
 
 func _run_stack_script(script_path: String, label: String) -> void:
@@ -301,6 +393,104 @@ func _load_status_report() -> void:
 	_set_path_status(clients, "Wow.exe", "wow_exe")
 
 
+func _load_data_report() -> void:
+	var report_path := ProjectSettings.globalize_path(DATA_REPORT)
+	if not FileAccess.file_exists(report_path):
+		_append_log("Data report not found yet: " + report_path)
+		return
+
+	var file := FileAccess.open(report_path, FileAccess.READ)
+	if file == null:
+		_append_log("Could not open data report: " + report_path)
+		return
+
+	var parsed = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		_append_log("Data report JSON could not be parsed.")
+		return
+
+	var report: Dictionary = parsed
+	var views: Dictionary = report.get("views", {})
+	var summary: Dictionary = views.get("summary", {})
+	var counts: Dictionary = summary.get("counts", {})
+	_set_status("data_accounts", str(counts.get("accounts", "?")), counts.has("accounts"))
+	_set_status("data_characters", str(counts.get("characters", "?")), counts.has("characters"))
+	_set_status("data_online", str(counts.get("online_characters", "?")), counts.has("online_characters"))
+	_set_status("data_creatures", str(counts.get("creature_templates", "?")), counts.has("creature_templates"))
+	_set_status("data_items", str(counts.get("item_templates", "?")), counts.has("item_templates"))
+	_set_status("data_quests", str(counts.get("quest_templates", "?")), counts.has("quest_templates"))
+	_set_status("data_spells", str(counts.get("spell_dbc_rows", "?")), counts.has("spell_dbc_rows"))
+
+	var realms: Array = summary.get("realms", [])
+	if realms.is_empty():
+		_set_status("data_realm", "Missing", false)
+	else:
+		var realm: Dictionary = realms[0]
+		_set_status("data_realm", str(realm.get("name", "Unknown")) + ":" + str(realm.get("port", "?")), true)
+
+	if data_results != null:
+		data_results.text = _format_data_report(report)
+		data_results.scroll_vertical = 0
+
+
+func _format_data_report(report: Dictionary) -> String:
+	var view := str(report.get("view", "summary"))
+	var lines := PackedStringArray()
+	lines.append("View: " + view)
+
+	var search := str(report.get("search", ""))
+	if not search.is_empty():
+		lines.append("Search: " + search)
+
+	var errors: Dictionary = report.get("errors", {})
+	if not errors.is_empty():
+		lines.append("Errors:")
+		for key in errors.keys():
+			lines.append("  " + str(key) + ": " + str(errors[key]))
+		return "\n".join(lines)
+
+	var views: Dictionary = report.get("views", {})
+	if view == "summary":
+		var summary: Dictionary = views.get("summary", {})
+		var counts: Dictionary = summary.get("counts", {})
+		lines.append("Counts:")
+		for key in ["accounts", "characters", "online_characters", "creature_templates", "item_templates", "quest_templates", "spell_dbc_rows"]:
+			lines.append("  " + key + ": " + str(counts.get(key, "?")))
+		var realms: Array = summary.get("realms", [])
+		if not realms.is_empty():
+			lines.append("Realms:")
+			for realm in realms:
+				if typeof(realm) == TYPE_DICTIONARY:
+					lines.append("  " + str(realm.get("name", "Unknown")) + " " + str(realm.get("address", "?")) + ":" + str(realm.get("port", "?")) + " build " + str(realm.get("gamebuild", "?")))
+		return "\n".join(lines)
+
+	var payload: Dictionary = views.get(view, {})
+	var rows: Array = payload.get("rows", [])
+	lines.append("Rows: " + str(rows.size()))
+	for row in rows:
+		if typeof(row) == TYPE_DICTIONARY:
+			lines.append(_format_data_row(view, row))
+	return "\n".join(lines)
+
+
+func _format_data_row(view: String, row: Dictionary) -> String:
+	match view:
+		"accounts":
+			return str(row.get("id", "?")) + " | " + str(row.get("username", "?")) + " | online " + str(row.get("online", "?")) + " | expansion " + str(row.get("expansion", "?"))
+		"characters", "online":
+			return str(row.get("guid", "?")) + " | " + str(row.get("name", "?")) + " | level " + str(row.get("level", "?")) + " | map " + str(row.get("map", "?")) + " zone " + str(row.get("zone", "?"))
+		"creatures":
+			return str(row.get("entry", "?")) + " | " + str(row.get("name", "?")) + " | levels " + str(row.get("minlevel", "?")) + "-" + str(row.get("maxlevel", "?")) + " | faction " + str(row.get("faction", "?"))
+		"items":
+			return str(row.get("entry", "?")) + " | " + str(row.get("name", "?")) + " | item level " + str(row.get("item_level", "?")) + " | required " + str(row.get("required_level", "?"))
+		"quests":
+			return str(row.get("id", "?")) + " | " + str(row.get("title", "?")) + " | level " + str(row.get("quest_level", "?")) + " | min " + str(row.get("min_level", "?"))
+		"spells":
+			return str(row.get("id", "?")) + " | " + str(row.get("name", "?")) + " | level " + str(row.get("spell_level", "?")) + " | mana " + str(row.get("mana_cost", "?"))
+		_:
+			return JSON.stringify(row)
+
+
 func _set_port_status(ports: Dictionary, name: String) -> void:
 	var info: Dictionary = ports.get(name, {})
 	var listening := bool(info.get("listening", false))
@@ -349,6 +539,14 @@ func _command_exists(command: String) -> bool:
 func _run_bridge_action(action: String, timeout: int) -> Dictionary:
 	var client_path := ProjectSettings.globalize_path(BRIDGE_CLIENT)
 	return _run_command("/usr/bin/python3", [client_path, action, "--compact", "--timeout", str(timeout)])
+
+
+func _run_bridge_data_action(view: String, search: String, limit: int, timeout: int) -> Dictionary:
+	var client_path := ProjectSettings.globalize_path(BRIDGE_CLIENT)
+	return _run_command(
+		"/usr/bin/python3",
+		[client_path, "data", "--view", view, "--search", search, "--limit", str(limit), "--compact", "--timeout", str(timeout)]
+	)
 
 
 func _run_command(executable: String, args: Array) -> Dictionary:

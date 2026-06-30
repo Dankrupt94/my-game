@@ -35,6 +35,7 @@ local_runtime/host-bridge.log
 
 - `GET /health`
 - `GET /status`
+- `GET /data?view=summary&search=&limit=25`
 - `POST /start`
 - `POST /stop`
 
@@ -85,6 +86,12 @@ Status check:
 python3 tools/bridge_client.py status --compact
 ```
 
+Read-only data check:
+
+```bash
+python3 tools/bridge_client.py data --view summary --compact
+```
+
 ## Next Dashboard Work
 
 The Godot dashboard uses this bridge for status/start/stop when it is reachable. Direct start/stop from Snap Godot remains guarded as a fallback.
@@ -112,3 +119,9 @@ Live-stack validation completed after runtime data extraction:
 - `tools/bridge_client.py status --compact` sees MySQL `3306`, authserver `3724`, worldserver `8085`, Ollama `11434`, Docker, and runtime data ready.
 - `tools/bridge_client.py start --compact` succeeds while the stack is already running and reports the existing live ports.
 - Godot 4.7 loads the dashboard scene headlessly through `scripts/run_game.sh` with the bridge online.
+
+Read-only data validation completed:
+
+- `GET /data` runs `tools/read_only_data_browser.py`.
+- `tools/bridge_client.py data --view summary --compact` returns live realm and data counts.
+- `tools/bridge_client.py data --view items --search sword --limit 5 --compact` returns successfully.

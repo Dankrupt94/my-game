@@ -91,60 +91,53 @@ Done when:
 
 ## Stage 3 - Read-Only AzerothCore Database Browser
 
-Goal: let Godot understand the server world without controlling it yet.
+Goal: let Godot inspect and browse real server world templates and user tables safely without direct access.
 
-Build read-only views for:
+Build read-only browser panels in Godot for:
 
-- Realmlist
-- Accounts
-- Characters
-- Online characters
-- Character position
-- Creature templates
-- Game object templates
-- Quest templates
-- Item templates
-- Spell names/basic metadata
-- Module config summaries
+- **Realmlist:** Retrieve ID, name, port, address, and builds.
+- **Accounts:** Retrieve ID, username, online status, expansion, and locale.
+- **Characters:** Retrieve GUID, account ID, name, level, online status, race, class, and zone.
+- **Creature Templates:** Filter/search templates by entry, name, min/max level, and rank.
+- **Item Templates:** Filter/search by name, quality, class, item level, and required level.
+- **Quest Templates:** Filter/search by title, level, min level, and type.
+- **Spell Metadata:** Filter/search `spell_dbc` rows by name and spell level.
 
 Implementation approach:
 
-- Prefer a small local bridge service over direct database access from Godot.
-- Bridge reads MySQL and returns JSON.
-- Godot displays JSON as simple tables/cards.
+- Godot initiates HTTP `GET /data` requests to the localhost control bridge (`127.0.0.1:8765`).
+- Query parameters: `view` (e.g. `items`), `search` (string pattern), and `limit` (max 100 rows).
+- Parse the returned JSON payload and render it using simple structured data tables, cards, and text search bars.
 
 Done when:
 
-- Godot can show actual AzerothCore data without editing it.
+- Godot UI can query and display real AzerothCore database records without error.
+- The UI contains zero input fields or trigger buttons capable of executing write operations (GET only).
 
 ## Stage 4 - Local Bridge Service
 
-Goal: create a clean boundary between Godot and AzerothCore.
+Goal: formalize the localhost bridge as the absolute network/database security boundary for Godot companion tooling.
 
-Build a local bridge process with endpoints like:
+Build a local bridge process with endpoints:
 
-- `GET /status`
-- `GET /paths`
-- `GET /accounts`
-- `GET /characters`
-- `GET /character/{guid}`
-- `GET /creature-templates?search=`
-- `GET /quest-templates?search=`
-- `POST /server/start`
-- `POST /server/stop`
-- `POST /client/launch`
+- `GET /status`: Run server stack audits on the host system.
+- `GET /health`: Verify the bridge is reachable.
+- `GET /data`: Execute read-only SELECT queries on the local MySQL server.
+- `POST /start`: Start the Docker/local stack (requires token).
+- `POST /stop`: Stop the Docker/local stack (requires token).
+- `POST /client/launch`: Start `Wow.exe` via Wine (requires token).
 
-Rules:
+Hardened Rules:
 
-- Start with read-only endpoints.
-- Add write endpoints slowly.
-- Log every write action.
-- Do not store secrets in Godot scenes.
+- **No Direct MySQL Connections:** Godot must never bundle MySQL libraries or credentials. The bridge is the sole DB boundary.
+- **Token Security:** All mutating endpoints (`POST`) require the `X-Acore-Bridge-Token` header. The token is generated using a secure cryptographically strong random generator, stored in local host-readable permissions (`0600`) at `local_runtime/host-bridge-token.txt`, and kept out of Git.
+- **Transaction Logs:** Any mutative SQL write queries (introduced in Stage 8) or stack control commands executed by the bridge must log a structured, timestamps-audited entry to `local_runtime/database-transactions.log`.
+- **Localhost Only:** The bridge must only bind to `127.0.0.1`.
 
 Done when:
 
-- Godot talks to the bridge over localhost.
-- The bridge becomes the only thing touching scripts/database directly.
+- Godot communicates exclusively with the host control bridge over HTTP.
+- Low-level scripts, Docker commands, and MySQL clients are completely hidden from the Godot process.
 
 ## Stage 5 - Original Godot Gameplay Sandbox
 
@@ -260,104 +253,95 @@ Path A completion does not end the project. It only opens Path B.
 
 ## Stage 10 - Protocol Research Spike
 
-Goal: begin the full replacement-client path by understanding what Godot must implement to talk to AzerothCore as a WotLK-compatible client.
+Goal: research and document the exact network protocol structures, handshake mathematics, and packet boundaries needed to connect Godot natively to the local AzerothCore server.
 
 Research:
 
-- Login handshake.
-- Realm list flow.
-- Session key handling.
-- Client opcodes.
-- Server opcodes.
-- Object update packet structure.
-- Movement packet structure.
-- Existing open documentation/code references inside AzerothCore.
+- **SRP6 Authentication (Authserver):** Understand the SRP6 client/server auth handshake (`CMD_AUTH_LOGON_CHALLENGE` & `CMD_AUTH_LOGON_PROOF`). Document the large-prime arithmetic and hashing sequence.
+- **Realm List Request:** Document the `CMD_REALM_LIST` payload structure.
+- **Header Encryption (RC4-like Cipher):** Analyze the customized RC4 encryption stream used to encipher client packet headers (6 bytes: 2 size, 4 opcode) and decipher server headers (4 bytes: 2 size, 2 opcode).
+- **Opcode Structures:** Document opcode headers, boundaries, and session key handshakes (`SMSG_AUTH_CHALLENGE`, `CMSG_AUTH_PROOF`, `SMSG_AUTH_RESPONSE`).
+- **AzerothCore Source Mapping:** Map packet headers to specific source handlers in AzerothCore (`source/src/server/shared/Packets/` and `Opcodes.cpp`).
 
-Deliverable:
+Deliverables:
 
-- A document explaining the minimum packet subset needed for:
-  - log in,
-  - enter world,
-  - see own character,
-  - move,
-  - see one creature.
+- **Integration Strategy:** Assess whether to implement SRP6/RC4 in pure GDScript (slow, risky) or write a compiled native wrapper (e.g. C# assembly or C++ GDExtension helper).
+- **Minimal Packet Manifest:** A document detailing the raw byte structure for the logon challenge, logon proof, realm list query, auth session proof, character enumeration query, and character login.
 
 Done when:
 
-- We can estimate the first true Godot-to-AzerothCore protocol milestone.
+- A concrete protocol document and cryptography wrapper strategy are completed.
 
 ## Stage 11 - Minimal Protocol Client Prototype
 
-Goal: prove Godot can talk to AzerothCore at the protocol level.
-
-Minimum target:
-
-- Connect to authserver.
-- Get realm list.
-- Connect to worldserver.
-- Authenticate session.
-- Request character list.
-
-No 3D world yet.
-
-Done when:
-
-- Godot can show the real character list through the AzerothCore protocol, not just through the database bridge.
-
-## Stage 12 - Minimal Enter-World Prototype
-
-Goal: enter the world as a real AzerothCore session.
-
-Minimum target:
-
-- Select character.
-- Enter world.
-- Receive initial object data.
-- Parse own character position.
-- Display a placeholder player marker in Godot.
-
-Done when:
-
-- A Godot scene can show "you are at this world position" from a live AzerothCore session.
-
-## Stage 13 - Movement Prototype
-
-Goal: move a Godot-controlled character in AzerothCore.
+Goal: establish the first live TCP connection from Godot to the auth and world servers using authentic protocol structures.
 
 Build:
 
-- Local Godot movement input.
-- Convert Godot movement to server movement packets.
-- Receive movement updates.
-- Reconcile position.
-- Keep the WotLK client offline during test, or use separate accounts.
+- **TCP Connect & Handshake:** Open a raw TCP socket in Godot to authserver (`3724`). Execute logon challenge/proof utilizing the SRP6 wrapper library.
+- **Realm Redirection:** Parse `CMD_REALM_LIST` to retrieve the worldserver ports/IPs.
+- **World Server Auth:** Connect to worldserver (`8085`). Receive `SMSG_AUTH_CHALLENGE` containing the seed. Use the shared session key to initialize the RC4 header cipher (separately for read and write channels).
+- **Session Verification:** Send the encrypted `CMSG_AUTH_PROOF`. Parse `SMSG_AUTH_RESPONSE` to confirm successful auth.
+- **Character Enum Query:** Send `CMSG_CHAR_ENUM` and print the returned character names, classes, levels, and GUIDs directly in the Godot log.
 
 Done when:
 
-- Moving in Godot updates the AzerothCore session without desyncing immediately.
+- Godot retrieves the account character list natively via TCP/opcodes, verified with the official WotLK client offline.
+
+## Stage 12 - Minimal Enter-World Prototype
+
+Goal: select a character and enter the world, receiving the first server-authoritative coordinate map.
+
+Build:
+
+- **Select Character:** Send `CMSG_PLAYER_LOGIN` with the selected character's GUID.
+- **Parse Login Verification:** Read the incoming `SMSG_LOGIN_VERIFY_WORLD` packet. Extract the target Map ID, coordinates `(X, Y, Z)`, and orientation.
+- **World Object Spawning:** Parse initial object creation blocks (`UPDATETYPE_CREATE_OBJECT` or `UPDATETYPE_CREATE_OBJECT2`) inside `SMSG_UPDATE_OBJECT` to identify the player's own entity GUID and its corresponding values.
+- **Camera Setup:** Instantiating a basic 3D grid environment in Godot. Position the player camera and a placeholder cube at the exact `(X, Y, Z)` coordinates returned by the server.
+
+Done when:
+
+- Godot enters the world session and places a placeholder player mesh at the server-reported start coordinates.
+
+## Stage 13 - Movement Prototype
+
+Goal: synchronize player movement between Godot and AzerothCore while managing latency and server validation limits.
+
+Build (Two-phase Implementation):
+
+- **Phase 13a: Passive Mimicry (Coord Tracking)**
+  - Open two client sessions: official WotLK client and Godot.
+  - Let Godot read the official client character's movement update packets sent by the server.
+  - Verify that Godot parses these coordinates, orientations, and fall-states in real time, moving the Godot replica avatar without rubber-banding.
+- **Phase 13b: Active Input & Synchronization**
+  - Implement WASD keybind inputs in Godot.
+  - Convert inputs to `CMSG_MOVE_START_FORWARD`, `CMSG_MOVE_START_BACKWARD`, `CMSG_MOVE_STOP` packets containing sequence counters, movement flags, orientation, current time, and local coordinate vectors.
+  - Monitor `MSG_MOVE_TELEPORT_ACK` and server-forced repositioning updates to implement simple coordinate reconciliation/interpolation when local and server positions mismatch.
+
+Done when:
+
+- Godot can move the player character around the server map with standard WASD keys, verified as smooth by watching from an external spectator account.
 
 ## Stage 14 - Object Visibility Prototype
 
-Goal: show nearby server objects.
+Goal: parse and manage nearby entity updates (players, creatures, items, game objects) as they enter and leave the client's visibility bubble.
 
-Build parsers for:
+Build:
 
-- Nearby players.
-- Creatures.
-- Game objects.
-- Basic names/IDs.
-- Positions.
-
-Render:
-
-- Placeholder capsules for players.
-- Placeholder capsules for creatures.
-- Placeholder cubes for game objects.
+- **Client Object Manager:** Implement a clean, local hash map tracking active GUIDs.
+- **Update Object Parser:** Write a parser for `SMSG_UPDATE_OBJECT` that reads bitmasks and handles the 4 primary update types:
+  - `UPDATETYPE_VALUES`: Modify properties of an existing entity.
+  - `UPDATETYPE_CREATE_OBJECT` / `UPDATETYPE_CREATE_OBJECT2`: Add a new entity (extract type, GUID, coordinates, parent, and status).
+  - `UPDATETYPE_OUT_OF_RANGE_OBJECTS`: Remove entities that are no longer visible.
+- **3D Placeholder Spawner:**
+  - Instantiate a capsule mesh for other players (marked with character name labels).
+  - Instantiate a red capsule mesh for NPC/creatures.
+  - Instantiate a cube mesh for interactive game objects.
+  - Automatically free (`queue_free()`) nodes when their GUID leaves range.
 
 Done when:
 
-- Godot can show a simple live world bubble around the player.
-
+- Godot displays placeholder shapes for nearby NPCs, objects, and players, updating their positions in real-time as they move.
 ## Stage 15 - Combat And Interaction Prototype
 
 Goal: perform one real server interaction.
@@ -449,6 +433,9 @@ Done when:
 - Direct database writes can corrupt data if done casually.
 - WotLK protocol work can consume a lot of time before it becomes visible, but it remains the required path.
 - Asset/legal risk increases if client assets are copied into the repo.
+- **SRP6 / RC4 Cryptography (Stage 11):** The WotLK login flow utilizes SRP6, and world packet headers are encrypted via an RC4-like cipher. Pure GDScript implementation is computationally slow and complex; using compiled libraries (like C# or a C++ GDExtension) should be investigated early.
+- **Proprietary Asset Pipeline (Stage 14 / Path B):** Faithfully porting the client requires parsing `.m2` models, `.blp` textures, `.adt` terrain, and `.wmo` world objects from local MPQ archives. A local-only, Git-ignored asset pipeline must convert these into standard formats (GLTF, PNG) without checking them into the repository.
+- **Movement Synchronization & Desyncs (Stage 13):** WoW uses client-predicted movement verified by server heartbeats. Desyncs cause rubber-banding or disconnects. Stage 13 must focus on simple "read-only movement mimicry" (tracking a character moved by the official client) before introducing direct client-authoritative movement inputs from Godot.
 
 ## Best Next Task
 
