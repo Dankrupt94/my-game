@@ -13,6 +13,7 @@ add_executable(acore_protocol_client
     src/auth_crypt.cpp
     src/main.cpp
     src/protocol_bytes.cpp
+    src/srp6.cpp
 )
 
 target_include_directories(acore_protocol_client PRIVATE src)

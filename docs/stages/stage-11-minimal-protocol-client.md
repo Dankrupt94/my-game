@@ -38,6 +38,8 @@ The first implementation checkpoint should be a safe local smoke harness that ca
   - client world headers: 2-byte big-endian size plus 4-byte little-endian opcode,
   - server world headers: 2-byte or 3-byte big-endian size plus 2-byte little-endian opcode,
   - server header parsing.
+- Added SRP6 registration/proof math with a synthetic client/server self-test.
+- SRP6 intentionally uses SHA-1 and little-endian byte conversion because those are compatibility requirements of the WotLK/AzerothCore protocol being implemented.
 - Added `--self-test` to validate first header encoding and header crypto initialization.
 - Added `--auth-challenge <host> <port> <account>` to send `AUTH_LOGON_CHALLENGE` and parse the public SRP6 challenge response without a password.
 - Added `--world-challenge <host> <port>` to connect to the live worldserver and parse the initial plaintext `SMSG_AUTH_CHALLENGE`.
@@ -48,7 +50,7 @@ Completed on 2026-06-30:
 
 - `cmake -S native/protocol_client -B native/protocol_client/build` succeeded.
 - `cmake --build native/protocol_client/build` succeeded.
-- `native/protocol_client/build/acore_protocol_client --self-test` printed `PROTOCOL_CLIENT_SELF_TEST_OK`.
+- `native/protocol_client/build/acore_protocol_client --self-test` printed `PROTOCOL_CLIENT_SELF_TEST_OK` and `SRP6_SELF_TEST_OK`.
 - `native/protocol_client/build/acore_protocol_client --auth-challenge 127.0.0.1 3724 ADMIN` prints `AUTH_CHALLENGE_OK` when the local `ADMIN` account exists and the authserver accepts build `12340`.
 - `native/protocol_client/build/acore_protocol_client --world-challenge 127.0.0.1 8085` printed `WORLD_CHALLENGE_OK`.
 - No account credentials, session keys, packet captures, proprietary client files, or local runtime files were committed.

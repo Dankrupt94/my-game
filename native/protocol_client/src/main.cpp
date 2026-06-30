@@ -1,5 +1,6 @@
 #include "auth_crypt.h"
 #include "protocol_bytes.h"
+#include "srp6.h"
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -202,6 +203,11 @@ int self_test()
 
     std::cout << "PROTOCOL_CLIENT_SELF_TEST_OK encrypted_char_enum_header="
               << hex(encrypted) << "\n";
+    if (!srp6::self_test())
+    {
+        throw std::runtime_error("SRP6 self-test failed");
+    }
+    std::cout << "SRP6_SELF_TEST_OK\n";
     return 0;
 }
 
