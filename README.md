@@ -37,6 +37,8 @@ Server stack discovery is tracked in [docs/server-stack-discovery-summary.md](do
 
 The localhost bridge for host-side start/stop/status control is documented in [docs/host-control-bridge.md](docs/host-control-bridge.md).
 
+The original Godot gameplay sandbox is documented in [docs/gameplay-sandbox.md](docs/gameplay-sandbox.md).
+
 ## How To Open
 
 Use the desktop shortcut named `Open AzerothCore Companion in Godot`, or open this project folder in Godot 4.7.

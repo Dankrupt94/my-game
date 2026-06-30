@@ -12,6 +12,15 @@ Plan:
 - Link the dashboard to the sandbox and provide a return path.
 - Validate the scene with Godot 4.7 headless launch and Git asset-boundary checks.
 
+Result:
+
+- Added `scenes/gameplay_sandbox.tscn` and `scripts/gameplay_sandbox.gd`.
+- Added a dashboard `Open Sandbox` action and a sandbox `Dashboard` return button.
+- Implemented original placeholder third-person movement, camera follow, collision, NPC, enemy, targeting, strike action, health/focus UI, target health UI, and a simple task loop.
+- Documented controls, files, gameplay systems, and placeholder asset policy in `docs/gameplay-sandbox.md`.
+- Added and passed a headless sandbox self-test for mentor interaction, enemy defeat, task completion, and target health UI state.
+- Validated the dashboard and sandbox scenes in Godot 4.7 headless mode.
+
 ## 2026-06-30 - Stage 04 Started
 
 Goal: harden the localhost bridge into the formal security boundary between Godot and host-level AzerothCore operations.

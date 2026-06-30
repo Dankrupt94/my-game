@@ -8,6 +8,7 @@ const WOTLK_CLIENT := "/run/media/doodbro/5e07d7d7-039f-43a8-94da-999f100ab1fb/W
 const BUNDLE_CLIENT := "/run/media/doodbro/New 1tb/AzerothCore/client"
 const BRIDGE_BASE_URL := "http://127.0.0.1:8765"
 const BRIDGE_TOKEN_PATH := "res://local_runtime/host-bridge-token.txt"
+const SANDBOX_SCENE := "res://scenes/gameplay_sandbox.tscn"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
 const DATA_VIEWS := ["summary", "accounts", "characters", "online", "creatures", "items", "quests", "spells"]
@@ -50,6 +51,10 @@ func _register_command_actions() -> void:
 		"data_browser": {
 			"label": "Browse Data",
 			"handler": Callable(self, "_action_data_browser"),
+		},
+		"open_sandbox": {
+			"label": "Open Sandbox",
+			"handler": Callable(self, "_action_open_sandbox"),
 		},
 		"open_logs": {
 			"label": "Open Logs",
@@ -116,6 +121,7 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("stop_stack"))
 	actions.add_child(_action_button("restart_stack"))
 	actions.add_child(_action_button("data_browser"))
+	actions.add_child(_action_button("open_sandbox"))
 	actions.add_child(_action_button("open_logs"))
 	actions.add_child(_action_button("open_reports"))
 	actions.add_child(_action_button("launch_client"))
@@ -322,6 +328,12 @@ func _action_open_reports() -> void:
 	var reports_path := ProjectSettings.globalize_path(LOCAL_REPORTS)
 	OS.shell_open(reports_path)
 	_append_log("Opened local reports folder: " + reports_path)
+
+
+func _action_open_sandbox() -> void:
+	var error := get_tree().change_scene_to_file(SANDBOX_SCENE)
+	if error != OK:
+		_append_log("Could not open sandbox scene. Error code: " + str(error))
 
 
 func _action_launch_client() -> void:

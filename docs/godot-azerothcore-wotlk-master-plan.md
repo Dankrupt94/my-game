@@ -160,9 +160,9 @@ These optimizations and visual enhancements can be introduced in later stages or
 
 ## Current Status
 
-Current stage: Stage 05 is in progress.
+Current stage: Stage 05 is complete; Stage 06 is next.
 
-Reason: the project already has a Godot shell, known local paths, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a completed read-only data browser, and a hardened localhost bridge boundary for Godot dashboard actions. Stage 05 now begins the original playable Godot sandbox required by Path A.
+Reason: the project already has a Godot shell, known local paths, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a completed read-only data browser, a hardened localhost bridge boundary, and a playable original Godot sandbox scene. Stage 06 should make the sandbox consume AzerothCore-shaped data through the bridge.
 
 ## Non-Negotiable Safety Rules
 

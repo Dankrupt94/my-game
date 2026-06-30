@@ -1,0 +1,507 @@
+extends Node3D
+
+const MOVE_SPEED := 6.0
+const GRAVITY := 18.0
+const CAMERA_DISTANCE := 8.0
+const CAMERA_HEIGHT := 4.6
+const ATTACK_RANGE := 3.2
+const INTERACT_RANGE := 3.0
+const RESOURCE_MAX := 100.0
+const PLAYER_HEALTH_MAX := 100.0
+const ENEMY_HEALTH_MAX := 100.0
+
+var player_body: CharacterBody3D
+var camera: Camera3D
+var npc: Node3D
+var enemy: Node3D
+var target_marker: MeshInstance3D
+var status_label: Label
+var target_label: Label
+var quest_label: Label
+var health_bar: ProgressBar
+var resource_bar: ProgressBar
+var enemy_bar: ProgressBar
+var strike_button: Button
+var talk_button: Button
+
+var camera_yaw := 0.0
+var player_health := PLAYER_HEALTH_MAX
+var player_resource := RESOURCE_MAX
+var enemy_health := ENEMY_HEALTH_MAX
+var quest_started := false
+var quest_complete := false
+var selected_index := -1
+var selectable_targets: Array[Node3D] = []
+var enemy_pulse_timer := 0.0
+var tab_was_pressed := false
+var attack_was_pressed := false
+var interact_was_pressed := false
+var reset_was_pressed := false
+
+
+func _ready() -> void:
+	_build_world()
+	_build_ui()
+	selectable_targets = [npc, enemy]
+	_select_target(0)
+	_update_ui("Sandbox ready.")
+	if OS.get_environment("ACORE_SANDBOX_SELF_TEST") == "1":
+		_run_self_test()
+
+
+func _physics_process(delta: float) -> void:
+	_update_camera_input(delta)
+	_update_player_movement(delta)
+	_update_key_actions()
+	_update_enemy_pressure(delta)
+	_regenerate_resource(delta)
+	_update_camera()
+	_update_target_marker()
+	_update_ui()
+
+
+func _build_world() -> void:
+	var world_env := WorldEnvironment.new()
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.09, 0.14, 0.16)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.58, 0.63, 0.68)
+	environment.ambient_light_energy = 0.9
+	world_env.environment = environment
+	add_child(world_env)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-48, 32, 0)
+	sun.light_energy = 2.1
+	add_child(sun)
+
+	_add_floor()
+	_add_obstacles()
+	player_body = _create_actor("Player", Vector3(0, 1.0, 4.0), Color(0.28, 0.67, 0.93), true)
+	npc = _create_actor("Bridge Mentor", Vector3(-5.5, 1.0, -2.5), Color(0.45, 0.84, 0.58), false)
+	enemy = _create_actor("Training Echo", Vector3(5.0, 1.0, -3.0), Color(0.95, 0.35, 0.28), false)
+	target_marker = _create_target_marker()
+
+	camera = Camera3D.new()
+	camera.current = true
+	add_child(camera)
+	_update_camera()
+
+
+func _add_floor() -> void:
+	var floor_body := StaticBody3D.new()
+	floor_body.name = "SandboxFloor"
+	add_child(floor_body)
+
+	var floor_mesh := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(34, 0.25, 34)
+	floor_mesh.mesh = box
+	floor_mesh.material_override = _material(Color(0.18, 0.23, 0.20))
+	floor_body.add_child(floor_mesh)
+
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = box.size
+	collision.shape = shape
+	floor_body.add_child(collision)
+
+
+func _add_obstacles() -> void:
+	for data in [
+		{"position": Vector3(-2.0, 0.5, -5.5), "size": Vector3(3.0, 1.0, 1.2), "color": Color(0.32, 0.39, 0.42)},
+		{"position": Vector3(3.0, 0.5, 2.0), "size": Vector3(1.4, 1.0, 3.4), "color": Color(0.40, 0.36, 0.30)},
+		{"position": Vector3(-6.0, 0.5, 4.5), "size": Vector3(2.2, 1.0, 2.2), "color": Color(0.26, 0.31, 0.36)},
+	]:
+		var body := StaticBody3D.new()
+		body.position = data["position"]
+		add_child(body)
+
+		var mesh_instance := MeshInstance3D.new()
+		var mesh := BoxMesh.new()
+		mesh.size = data["size"]
+		mesh_instance.mesh = mesh
+		mesh_instance.material_override = _material(data["color"])
+		body.add_child(mesh_instance)
+
+		var collision := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = data["size"]
+		collision.shape = shape
+		body.add_child(collision)
+
+
+func _create_actor(actor_name: String, actor_position: Vector3, color: Color, controllable: bool) -> CharacterBody3D:
+	var body := CharacterBody3D.new()
+	body.name = actor_name
+	body.position = actor_position
+	add_child(body)
+
+	var collision := CollisionShape3D.new()
+	var capsule_shape := CapsuleShape3D.new()
+	capsule_shape.radius = 0.45
+	capsule_shape.height = 1.8
+	collision.shape = capsule_shape
+	body.add_child(collision)
+
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := CapsuleMesh.new()
+	mesh.radius = 0.45
+	mesh.height = 1.8
+	mesh_instance.mesh = mesh
+	mesh_instance.material_override = _material(color)
+	body.add_child(mesh_instance)
+
+	var label := Label3D.new()
+	label.text = actor_name
+	label.position = Vector3(0, 1.55, 0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.modulate = Color(0.92, 0.95, 0.94)
+	body.add_child(label)
+
+	if controllable:
+		var shoulder := MeshInstance3D.new()
+		var shoulder_mesh := BoxMesh.new()
+		shoulder_mesh.size = Vector3(1.0, 0.2, 0.25)
+		shoulder.mesh = shoulder_mesh
+		shoulder.position = Vector3(0, 0.35, -0.05)
+		shoulder.material_override = _material(Color(0.10, 0.20, 0.28))
+		body.add_child(shoulder)
+
+	return body
+
+
+func _create_target_marker() -> MeshInstance3D:
+	var marker := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.9
+	mesh.bottom_radius = 0.9
+	mesh.height = 0.05
+	marker.mesh = mesh
+	marker.material_override = _material(Color(1.0, 0.82, 0.24, 0.72))
+	marker.visible = false
+	add_child(marker)
+	return marker
+
+
+func _build_ui() -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+
+	var root := MarginContainer.new()
+	root.anchor_right = 1.0
+	root.anchor_bottom = 1.0
+	root.add_theme_constant_override("margin_left", 20)
+	root.add_theme_constant_override("margin_top", 16)
+	root.add_theme_constant_override("margin_right", 20)
+	root.add_theme_constant_override("margin_bottom", 16)
+	layer.add_child(root)
+
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 8)
+	root.add_child(layout)
+
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 8)
+	layout.add_child(top_row)
+
+	health_bar = _bar("Health", PLAYER_HEALTH_MAX)
+	top_row.add_child(health_bar)
+	resource_bar = _bar("Focus", RESOURCE_MAX)
+	top_row.add_child(resource_bar)
+	enemy_bar = _bar("Target", ENEMY_HEALTH_MAX)
+	top_row.add_child(enemy_bar)
+
+	target_label = _hud_label()
+	layout.add_child(target_label)
+	quest_label = _hud_label()
+	layout.add_child(quest_label)
+	status_label = _hud_label()
+	layout.add_child(status_label)
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	layout.add_child(spacer)
+
+	var action_bar := HBoxContainer.new()
+	action_bar.add_theme_constant_override("separation", 8)
+	layout.add_child(action_bar)
+
+	var target_button := _action_button("Target", Callable(self, "_select_next_target"))
+	action_bar.add_child(target_button)
+	strike_button = _action_button("Strike", Callable(self, "_try_attack"))
+	action_bar.add_child(strike_button)
+	talk_button = _action_button("Talk", Callable(self, "_try_interact"))
+	action_bar.add_child(talk_button)
+	action_bar.add_child(_action_button("Reset", Callable(self, "_reset_sandbox")))
+	action_bar.add_child(_action_button("Dashboard", Callable(self, "_return_to_dashboard")))
+
+
+func _update_camera_input(delta: float) -> void:
+	if Input.is_key_pressed(KEY_Q):
+		camera_yaw += 1.9 * delta
+	if Input.is_key_pressed(KEY_E):
+		camera_yaw -= 1.9 * delta
+
+
+func _update_player_movement(delta: float) -> void:
+	var input := Vector3.ZERO
+	if Input.is_key_pressed(KEY_W):
+		input.z -= 1.0
+	if Input.is_key_pressed(KEY_S):
+		input.z += 1.0
+	if Input.is_key_pressed(KEY_A):
+		input.x -= 1.0
+	if Input.is_key_pressed(KEY_D):
+		input.x += 1.0
+
+	var direction := Vector3.ZERO
+	if input.length() > 0.0:
+		var basis := Basis(Vector3.UP, camera_yaw)
+		direction = (basis * input).normalized()
+
+	player_body.velocity.x = direction.x * MOVE_SPEED
+	player_body.velocity.z = direction.z * MOVE_SPEED
+	if player_body.is_on_floor():
+		player_body.velocity.y = 0.0
+	else:
+		player_body.velocity.y -= GRAVITY * delta
+
+	player_body.move_and_slide()
+	if direction.length() > 0.01:
+		player_body.look_at(player_body.global_position + Vector3(direction.x, 0, direction.z), Vector3.UP)
+
+
+func _update_key_actions() -> void:
+	var tab_pressed := Input.is_key_pressed(KEY_TAB)
+	if tab_pressed and not tab_was_pressed:
+		_select_next_target()
+	tab_was_pressed = tab_pressed
+
+	var attack_pressed := Input.is_key_pressed(KEY_1)
+	if attack_pressed and not attack_was_pressed:
+		_try_attack()
+	attack_was_pressed = attack_pressed
+
+	var interact_pressed := Input.is_key_pressed(KEY_F)
+	if interact_pressed and not interact_was_pressed:
+		_try_interact()
+	interact_was_pressed = interact_pressed
+
+	var reset_pressed := Input.is_key_pressed(KEY_R)
+	if reset_pressed and not reset_was_pressed:
+		_reset_sandbox()
+	reset_was_pressed = reset_pressed
+
+
+func _update_enemy_pressure(delta: float) -> void:
+	if enemy_health <= 0.0 or player_health <= 0.0:
+		return
+
+	enemy_pulse_timer -= delta
+	if enemy_pulse_timer > 0.0:
+		return
+
+	if player_body.global_position.distance_to(enemy.global_position) <= 2.35:
+		player_health = max(0.0, player_health - 6.0)
+		enemy_pulse_timer = 1.1
+		if player_health <= 0.0:
+			_update_ui("Training reset needed.")
+		else:
+			_update_ui("The echo pushes back.")
+
+
+func _regenerate_resource(delta: float) -> void:
+	player_resource = min(RESOURCE_MAX, player_resource + 14.0 * delta)
+
+
+func _update_camera() -> void:
+	var target := player_body.global_position + Vector3(0, 1.05, 0)
+	var offset := Basis(Vector3.UP, camera_yaw) * Vector3(0, CAMERA_HEIGHT, CAMERA_DISTANCE)
+	camera.global_position = target + offset
+	camera.look_at(target, Vector3.UP)
+
+
+func _update_target_marker() -> void:
+	var target := _current_target()
+	if target == null:
+		target_marker.visible = false
+		return
+
+	target_marker.visible = true
+	target_marker.global_position = target.global_position + Vector3(0, 0.07, 0)
+
+
+func _select_next_target() -> void:
+	_select_target(selected_index + 1)
+
+
+func _select_target(index: int) -> void:
+	if selectable_targets.is_empty():
+		selected_index = -1
+		return
+	selected_index = wrapi(index, 0, selectable_targets.size())
+	_update_ui("Target selected.")
+
+
+func _current_target() -> Node3D:
+	if selected_index < 0 or selected_index >= selectable_targets.size():
+		return null
+	return selectable_targets[selected_index]
+
+
+func _try_attack() -> void:
+	var target := _current_target()
+	if target != enemy:
+		_update_ui("No enemy targeted.")
+		return
+	if enemy_health <= 0.0:
+		_update_ui("Target already down.")
+		return
+	if player_body.global_position.distance_to(enemy.global_position) > ATTACK_RANGE:
+		_update_ui("Target out of range.")
+		return
+	if player_resource < 15.0:
+		_update_ui("Not enough focus.")
+		return
+
+	player_resource -= 15.0
+	enemy_health = max(0.0, enemy_health - 22.0)
+	if enemy_health <= 0.0:
+		if quest_started:
+			quest_complete = true
+		enemy.visible = false
+		_update_ui("Training echo defeated.")
+	else:
+		_update_ui("Strike landed.")
+
+
+func _try_interact() -> void:
+	var target := _current_target()
+	if target != npc:
+		_update_ui("No one to talk to.")
+		return
+	if player_body.global_position.distance_to(npc.global_position) > INTERACT_RANGE:
+		_update_ui("Move closer.")
+		return
+
+	quest_started = true
+	if enemy_health <= 0.0:
+		quest_complete = true
+	if quest_complete:
+		_update_ui("Task complete.")
+	else:
+		_update_ui("Task accepted.")
+
+
+func _reset_sandbox() -> void:
+	player_body.global_position = Vector3(0, 1.0, 4.0)
+	player_body.velocity = Vector3.ZERO
+	player_health = PLAYER_HEALTH_MAX
+	player_resource = RESOURCE_MAX
+	enemy_health = ENEMY_HEALTH_MAX
+	enemy.visible = true
+	quest_started = false
+	quest_complete = false
+	_select_target(0)
+	_update_ui("Sandbox reset.")
+
+
+func _run_self_test() -> void:
+	_select_target(0)
+	player_body.global_position = npc.global_position + Vector3(0, 0, 1.4)
+	_try_interact()
+	if not quest_started:
+		_fail_self_test("mentor interaction did not start the task")
+		return
+
+	_select_target(1)
+	player_body.global_position = enemy.global_position + Vector3(0, 0, 2.0)
+	var attempts := 0
+	while enemy_health > 0.0 and attempts < 8:
+		player_resource = RESOURCE_MAX
+		_try_attack()
+		attempts += 1
+
+	_update_ui()
+	if enemy_health > 0.0:
+		_fail_self_test("enemy was not defeated")
+		return
+	if not quest_complete:
+		_fail_self_test("task did not complete after enemy defeat")
+		return
+	if enemy.visible:
+		_fail_self_test("enemy did not hide after defeat")
+		return
+	if int(enemy_bar.value) != int(enemy_health):
+		_fail_self_test("enemy health UI did not match enemy health")
+		return
+
+	print("SANDBOX_SELF_TEST_OK")
+	get_tree().quit(0)
+
+
+func _fail_self_test(message: String) -> void:
+	push_error("SANDBOX_SELF_TEST_FAILED: " + message)
+	get_tree().quit(1)
+
+
+func _return_to_dashboard() -> void:
+	get_tree().change_scene_to_file("res://main.tscn")
+
+
+func _update_ui(message: String = "") -> void:
+	if health_bar == null:
+		return
+
+	health_bar.value = player_health
+	resource_bar.value = player_resource
+	enemy_bar.value = enemy_health
+	enemy_bar.visible = _current_target() == enemy
+	strike_button.disabled = _current_target() != enemy or enemy_health <= 0.0
+	talk_button.disabled = _current_target() != npc
+
+	var target := _current_target()
+	target_label.text = "Target: " + (str(target.name) if target != null else "None")
+	if quest_complete:
+		quest_label.text = "Task: Complete"
+	elif quest_started:
+		quest_label.text = "Task: Defeat the training echo"
+	else:
+		quest_label.text = "Task: Talk to the mentor"
+
+	if not message.is_empty():
+		status_label.text = message
+
+
+func _bar(label: String, max_value: float) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.max_value = max_value
+	bar.value = max_value
+	bar.custom_minimum_size = Vector2(190, 24)
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.show_percentage = false
+	bar.tooltip_text = label
+	return bar
+
+
+func _hud_label() -> Label:
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 16)
+	return label
+
+
+func _action_button(text: String, callback: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(120, 40)
+	button.pressed.connect(callback)
+	return button
+
+
+func _material(color: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.8
+	return material

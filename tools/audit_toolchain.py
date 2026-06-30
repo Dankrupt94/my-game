@@ -30,21 +30,29 @@ TOOL_GROUPS = {
     "core": ["git", "gh", "python3", "pip3", "node", "npm", "rg", "jq"],
     "godot": ["godot-4"],
     "build": ["cmake", "make", "gcc", "g++", "rustc", "cargo", "go"],
-    "data": ["sqlite3", "mysql", "mysql_config", "mysqldump", "mycli"],
+    "data": ["sqlite3", "mysql", "mysql_config", "mysqldump", "mycli", "sqlite-utils"],
     "containers": ["docker", "podman"],
-    "diagnostics": ["tshark", "termshark", "socat", "hexyl", "gdformat", "gdlint", "mpqtool"],
+    "diagnostics": ["tshark", "termshark", "socat", "hexyl", "heaptrack", "gdb", "strace", "lsof", "ss", "scapy"],
+    "shell": ["gdformat", "gdlint", "mpqtool", "tc", "delta", "btop", "entr", "direnv", "shellcheck"],
     "assets": ["ffmpeg", "blender", "7z", "unzip", "wine"],
     "ai": ["ollama"],
+    "automation": ["xdotool", "wmctrl", "xvfb-run", "cargo-watch"],
 }
 
 VERSION_COMMANDS = {
     "7z": ["7z"],
     "blender": ["blender", "--version"],
+    "btop": ["btop", "--version"],
     "cargo": ["cargo", "--version"],
+    "cargo-watch": ["cargo", "watch", "--version"],
     "cmake": ["cmake", "--version"],
+    "delta": ["delta", "--version"],
+    "direnv": ["direnv", "version"],
     "docker": ["docker", "--version"],
+    "entr": ["bash", "-c", "entr 2>&1 | head -n 1"],
     "ffmpeg": ["ffmpeg", "-version"],
     "g++": ["g++", "--version"],
+    "gdb": ["gdb", "--version"],
     "gcc": ["gcc", "--version"],
     "gdformat": ["gdformat", "--version"],
     "gdlint": ["gdlint", "--version"],
@@ -52,8 +60,10 @@ VERSION_COMMANDS = {
     "git": ["git", "--version"],
     "godot-4": ["godot-4", "--version"],
     "go": ["go", "version"],
+    "heaptrack": ["heaptrack", "--version"],
     "hexyl": ["hexyl", "--version"],
     "jq": ["jq", "--version"],
+    "lsof": ["lsof", "-v"],
     "make": ["make", "--version"],
     "mpqtool": ["mpqtool", "--version"],
     "mycli": ["mycli", "--version"],
@@ -68,12 +78,21 @@ VERSION_COMMANDS = {
     "python3": ["python3", "--version"],
     "rg": ["rg", "--version"],
     "rustc": ["rustc", "--version"],
+    "scapy": ["python3", "-c", "import scapy; print(scapy.__version__)"],
+    "shellcheck": ["shellcheck", "--version"],
     "socat": ["socat", "-V"],
+    "sqlite-utils": ["sqlite-utils", "--version"],
     "sqlite3": ["sqlite3", "--version"],
+    "ss": ["ss", "--version"],
+    "strace": ["strace", "--version"],
+    "tc": ["tc", "-V"],
     "tshark": ["tshark", "--version"],
     "termshark": ["termshark", "--version"],
     "unzip": ["unzip", "-v"],
     "wine": ["wine", "--version"],
+    "xdotool": ["xdotool", "--version"],
+    "wmctrl": ["bash", "-c", "wmctrl -h 2>&1 | head -n 1"],
+    "xvfb-run": ["bash", "-c", "xvfb-run --help 2>&1 | head -n 1"],
 }
 
 MISSING_TOOL_NOTES = {
@@ -93,6 +112,10 @@ MISSING_TOOL_NOTES = {
         "priority": "recommended",
         "note": "Terminal MySQL client with auto-completion and syntax highlighting.",
     },
+    "sqlite-utils": {
+        "priority": "recommended",
+        "note": "Useful for exporting world/template tables to local SQLite files.",
+    },
     "tshark": {
         "priority": "recommended",
         "note": "Lightweight packet capture utility for analyzing the WotLK socket protocol.",
@@ -109,6 +132,30 @@ MISSING_TOOL_NOTES = {
         "priority": "recommended",
         "note": "Colored hex viewer for inspecting binary packets and client files.",
     },
+    "heaptrack": {
+        "priority": "recommended",
+        "note": "Memory profiler for finding leaks in compiled GDExtension binaries.",
+    },
+    "gdb": {
+        "priority": "recommended",
+        "note": "GNU Debugger for inspecting core dumps or tracing native binary errors.",
+    },
+    "strace": {
+        "priority": "recommended",
+        "note": "System call tracer for debugging filesystem access, Snap restrictions, and network sockets.",
+    },
+    "lsof": {
+        "priority": "recommended",
+        "note": "Utility to list open files and track down processes holding server/database ports.",
+    },
+    "ss": {
+        "priority": "recommended",
+        "note": "Modern socket statistics command for viewing active TCP connections.",
+    },
+    "scapy": {
+        "priority": "recommended",
+        "note": "Python framework for packet crafting and protocol dissection.",
+    },
     "gdformat": {
         "priority": "recommended",
         "note": "GDScript code formatter for style guidelines.",
@@ -120,6 +167,46 @@ MISSING_TOOL_NOTES = {
     "mpqtool": {
         "priority": "recommended",
         "note": "CLI reader and extractor for Blizzard .MPQ archives.",
+    },
+    "tc": {
+        "priority": "recommended",
+        "note": "Traffic control tool to inject lag/packet-loss when testing movement prediction (Stage 13).",
+    },
+    "delta": {
+        "priority": "optional",
+        "note": "Syntax-highlighting terminal diff-viewer.",
+    },
+    "btop": {
+        "priority": "optional",
+        "note": "Interactive system monitor for watching server CPU/RAM usage.",
+    },
+    "entr": {
+        "priority": "recommended",
+        "note": "Filewatcher to run actions or trigger rebuilds on save.",
+    },
+    "direnv": {
+        "priority": "optional",
+        "note": "Per-directory environment variable manager.",
+    },
+    "shellcheck": {
+        "priority": "recommended",
+        "note": "Static analysis tool for shell scripts (checks launcher wrappers).",
+    },
+    "xdotool": {
+        "priority": "recommended",
+        "note": "Simulates keyboard and mouse inputs for automated UI layout checks.",
+    },
+    "wmctrl": {
+        "priority": "recommended",
+        "note": "Window manager controller for spawning side-by-side test clients.",
+    },
+    "xvfb-run": {
+        "priority": "recommended",
+        "note": "Virtual framebuffer runner for executing automated GUI tests headlessly.",
+    },
+    "cargo-watch": {
+        "priority": "recommended",
+        "note": "Cargo helper to compile Rust GDExtensions automatically on file changes.",
     },
     "podman": {
         "priority": "optional",

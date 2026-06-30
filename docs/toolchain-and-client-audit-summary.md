@@ -29,11 +29,22 @@ Confirmed present on this machine:
 Missing or deferred developer/debugging tools:
 
 - **Protocol Sniffing:** `tshark` (recommended for packet capture) and `termshark` (optional TUI for packet analysis).
-- **Socket Testing:** `socat` (optional socket debugger).
+- **Socket Diagnostics:** `socat` (optional socket debugger) and `ss` (recommended socket statistics tool).
 - **Hex/Binary Inspection:** `hexyl` (recommended colored hex viewer).
-- **Auto-complete SQL:** `mycli` (recommended MySQL shell).
+- **Syscall & Lock Auditing:** `strace` (recommended system call tracer) and `lsof` (recommended for listing open files/ports).
+- **Compiled Debugging:** `gdb` (recommended for core dump inspection) and `heaptrack` (recommended memory/VRAM allocator profiler).
+- **Auto-complete SQL:** `mycli` (recommended MySQL terminal shell).
 - **GDScript Quality:** `gdformat` (recommended formatter) and `gdlint` (recommended linter).
 - **MPQ Parsing:** `mpqtool` (recommended MPQ viewer/extractor).
+- **Network Simulation:** `tc` (recommended for injecting packet lag/loss to test prediction models in Stage 13).
+- **Git Diff Visuals:** `delta` (optional syntax-highlighting terminal diff-viewer).
+- **Shell Automation:** `entr` (recommended filewatcher for auto-running tests/builds), `direnv` (optional env variable manager), and `shellcheck` (recommended script static analysis).
+- **Interactive Monitoring:** `btop` (optional CPU/RAM process viewer).
+- **Multi-Client Test Automation:** `xdotool` (recommended for simulating keyboard/mouse inputs) and `wmctrl` (recommended for managing window positioning of test clients).
+- **Headless GUI Testing:** `xvfb-run` (recommended virtual framebuffer runner).
+- **Rust GDExtension Building:** `cargo-watch` (recommended automatic recompiler utility).
+- **Local DB Exporters:** `sqlite-utils` (recommended Python sqlite table exporter).
+- **Protocol Crafting:** `scapy` (recommended Python packet crafting and dissection framework).
 - **Graphics/Visuals:** `blender` (needed later for model conversions).
 - **Client Automation:** `wine` (needed later for launching Windows client binary).
 - **Other:** `go` (optional) and `podman` (optional, since Docker is present).
