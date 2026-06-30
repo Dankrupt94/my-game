@@ -12,6 +12,14 @@ Plan:
 - Add a logout/login-style reload flow in the sandbox.
 - Add a headless persistence self-test.
 
+Result:
+
+- Added sandbox `Save`, `Load`, and `Reload` buttons.
+- Added ignored local persistence at `local_runtime/sandbox-state.json`.
+- Saved local test identity, test character, position, health, focus, quest flags, and placeholder inventory.
+- Added and passed `ACORE_SANDBOX_PERSISTENCE_SELF_TEST=1`.
+- Documented storage choice, schema, migration notes, and backup/restore process in `docs/persistence-layer.md`.
+
 ## 2026-06-30 - Stage 07 Started
 
 Goal: prove a small Godot-native multiplayer loop on localhost before any WotLK protocol work.

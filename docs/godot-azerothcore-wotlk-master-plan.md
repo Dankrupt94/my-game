@@ -160,9 +160,9 @@ These optimizations and visual enhancements can be introduced in later stages or
 
 ## Current Status
 
-Current stage: Stage 08 is in progress.
+Current stage: Stage 08 is complete; Stage 09 is next.
 
-Reason: the project already has a Godot shell, known local paths, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a completed read-only data browser, a hardened localhost bridge boundary, a playable original Godot sandbox scene, a data-driven sandbox slice, and a Godot-native ENet multiplayer smoke test with one server and two local clients. Stage 08 now adds a local persistence layer for Godot-side test state.
+Reason: the project already has a Godot shell, known local paths, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a completed read-only data browser, a hardened localhost bridge boundary, a playable original Godot sandbox scene, a data-driven sandbox slice, a Godot-native ENet multiplayer smoke test, and local ignored persistence for Godot-side test state. Stage 09 should review whether Path A is complete enough to open Path B.
 
 ## Non-Negotiable Safety Rules
 

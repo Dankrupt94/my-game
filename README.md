@@ -41,6 +41,8 @@ The original Godot gameplay sandbox is documented in [docs/gameplay-sandbox.md](
 
 The Godot-native multiplayer sandbox is documented in [docs/multiplayer-sandbox.md](docs/multiplayer-sandbox.md).
 
+The local Godot sandbox persistence layer is documented in [docs/persistence-layer.md](docs/persistence-layer.md).
+
 ## How To Open
 
 Use the desktop shortcut named `Open AzerothCore Companion in Godot`, or open this project folder in Godot 4.7.

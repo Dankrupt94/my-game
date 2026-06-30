@@ -10,6 +10,7 @@ const RESOURCE_MAX := 100.0
 const PLAYER_HEALTH_MAX := 100.0
 const ENEMY_HEALTH_MAX := 100.0
 const BRIDGE_BASE_URL := "http://127.0.0.1:8765"
+const SAVE_PATH := "res://local_runtime/sandbox-state.json"
 
 var player_body: CharacterBody3D
 var camera: Camera3D
@@ -44,6 +45,7 @@ var reset_was_pressed := false
 var pending_data_requests := 0
 var data_records := {}
 var spawned_data_nodes: Array[Node3D] = []
+var loaded_inventory := PackedStringArray()
 
 
 func _ready() -> void:
@@ -54,6 +56,9 @@ func _ready() -> void:
 	_update_ui("Sandbox ready.")
 	if OS.get_environment("ACORE_SANDBOX_SELF_TEST") == "1":
 		_run_self_test()
+		return
+	if OS.get_environment("ACORE_SANDBOX_PERSISTENCE_SELF_TEST") == "1":
+		_run_persistence_self_test()
 		return
 	_load_bridge_data()
 
@@ -254,6 +259,9 @@ func _build_ui() -> void:
 	talk_button = _action_button("Talk", Callable(self, "_try_interact"))
 	action_bar.add_child(talk_button)
 	action_bar.add_child(_action_button("Reset", Callable(self, "_reset_sandbox")))
+	action_bar.add_child(_action_button("Save", Callable(self, "_save_state")))
+	action_bar.add_child(_action_button("Load", Callable(self, "_load_state")))
+	action_bar.add_child(_action_button("Reload", Callable(self, "_logout_login_reload")))
 	action_bar.add_child(_action_button("Dashboard", Callable(self, "_return_to_dashboard")))
 
 
@@ -423,6 +431,7 @@ func _reset_sandbox() -> void:
 	enemy.visible = true
 	quest_started = false
 	quest_complete = false
+	loaded_inventory.clear()
 	_select_target(0)
 	_update_ui("Sandbox reset.")
 
@@ -518,12 +527,11 @@ func _update_data_ui() -> void:
 
 	var characters: Array = data_records.get("characters", [])
 	var quests: Array = data_records.get("quests", [])
-	var items: Array = data_records.get("items", [])
 	var creatures: Array = data_records.get("creatures", [])
 
 	var character_text := _record_list(characters, "name", "No characters")
 	var quest_text := _record_list(quests, "title", "No quests")
-	var item_text := _record_list(items, "name", "No items")
+	var item_text := _inventory_text()
 	data_label.text = "Characters: " + character_text + " | Quest data: " + quest_text
 	inventory_label.text = "Items: " + item_text + " | Creature placeholders: " + str(creatures.size())
 
@@ -536,6 +544,109 @@ func _record_list(rows: Array, key: String, empty_text: String) -> String:
 		if typeof(row) == TYPE_DICTIONARY:
 			names.append(str(row.get(key, "?")))
 	return ", ".join(names)
+
+
+func _inventory_text() -> String:
+	if not loaded_inventory.is_empty():
+		return ", ".join(loaded_inventory)
+	var items: Array = data_records.get("items", [])
+	return _record_list(items, "name", "No items")
+
+
+func _inventory_names() -> Array:
+	if not loaded_inventory.is_empty():
+		return Array(loaded_inventory)
+	var items: Array = data_records.get("items", [])
+	var names := []
+	for row in items:
+		if typeof(row) == TYPE_DICTIONARY:
+			names.append(str(row.get("name", "Unknown Item")))
+	if names.is_empty():
+		names.append("Practice Token")
+	return names
+
+
+func _save_state() -> bool:
+	var save_path := ProjectSettings.globalize_path(SAVE_PATH)
+	DirAccess.make_dir_recursive_absolute(save_path.get_base_dir())
+	var state := {
+		"schema_version": 1,
+		"identity": {
+			"id": "local_sandbox_user",
+			"display_name": "Local Sandbox User",
+		},
+		"character": {
+			"id": "local_sandbox_character",
+			"name": "Sandbox Scout",
+		},
+		"position": _vector_to_dict(player_body.global_position),
+		"health": player_health,
+		"focus": player_resource,
+		"quest_started": quest_started,
+		"quest_complete": quest_complete,
+		"inventory": _inventory_names(),
+	}
+	var file := FileAccess.open(save_path, FileAccess.WRITE)
+	if file == null:
+		_update_ui("Save failed.")
+		return false
+	file.store_string(JSON.stringify(state, "\t") + "\n")
+	_update_ui("State saved.")
+	return true
+
+
+func _load_state(message: String = "State loaded.") -> bool:
+	var save_path := ProjectSettings.globalize_path(SAVE_PATH)
+	if not FileAccess.file_exists(save_path):
+		_update_ui("No saved state yet.")
+		return false
+	var file := FileAccess.open(save_path, FileAccess.READ)
+	if file == null:
+		_update_ui("Load failed.")
+		return false
+	var parsed = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		_update_ui("Save file was not valid JSON.")
+		return false
+	var state: Dictionary = parsed
+	var position: Dictionary = state.get("position", {})
+	player_body.global_position = _dict_to_vector(position, player_body.global_position)
+	player_body.velocity = Vector3.ZERO
+	player_health = float(state.get("health", PLAYER_HEALTH_MAX))
+	player_resource = float(state.get("focus", RESOURCE_MAX))
+	quest_started = bool(state.get("quest_started", false))
+	quest_complete = bool(state.get("quest_complete", false))
+	loaded_inventory.clear()
+	var inventory: Array = state.get("inventory", [])
+	for item in inventory:
+		loaded_inventory.append(str(item))
+	_update_data_ui()
+	_update_ui(message)
+	return true
+
+
+func _logout_login_reload() -> void:
+	if not _save_state():
+		return
+	player_body.global_position = Vector3(0, 1.0, 4.0)
+	player_health = PLAYER_HEALTH_MAX
+	player_resource = RESOURCE_MAX
+	quest_started = false
+	quest_complete = false
+	loaded_inventory.clear()
+	_load_state("Logout/login reload complete.")
+
+
+func _vector_to_dict(value: Vector3) -> Dictionary:
+	return {"x": value.x, "y": value.y, "z": value.z}
+
+
+func _dict_to_vector(value: Dictionary, fallback: Vector3) -> Vector3:
+	return Vector3(
+		float(value.get("x", fallback.x)),
+		float(value.get("y", fallback.y)),
+		float(value.get("z", fallback.z))
+	)
 
 
 func _note_data_error(view: String, message: String) -> void:
@@ -562,6 +673,46 @@ func _maybe_finish_data_self_test() -> void:
 
 func _fail_data_self_test(message: String) -> void:
 	push_error("SANDBOX_DATA_SELF_TEST_FAILED: " + message)
+	get_tree().quit(1)
+
+
+func _run_persistence_self_test() -> void:
+	player_body.global_position = Vector3(2.5, 1.0, -2.5)
+	player_health = 73.0
+	player_resource = 44.0
+	quest_started = true
+	quest_complete = true
+	loaded_inventory = PackedStringArray(["Saved Token", "Practice Blade"])
+	if not _save_state():
+		_fail_persistence_self_test("save failed")
+		return
+	player_body.global_position = Vector3.ZERO
+	player_health = 1.0
+	player_resource = 1.0
+	quest_started = false
+	quest_complete = false
+	loaded_inventory.clear()
+	if not _load_state("Persistence self-test loaded."):
+		_fail_persistence_self_test("load failed")
+		return
+	if player_body.global_position.distance_to(Vector3(2.5, 1.0, -2.5)) > 0.01:
+		_fail_persistence_self_test("position did not restore")
+		return
+	if int(player_health) != 73 or int(player_resource) != 44:
+		_fail_persistence_self_test("health/focus did not restore")
+		return
+	if not quest_started or not quest_complete:
+		_fail_persistence_self_test("quest flags did not restore")
+		return
+	if loaded_inventory.size() != 2 or loaded_inventory[0] != "Saved Token":
+		_fail_persistence_self_test("inventory did not restore")
+		return
+	print("SANDBOX_PERSISTENCE_SELF_TEST_OK")
+	get_tree().quit(0)
+
+
+func _fail_persistence_self_test(message: String) -> void:
+	push_error("SANDBOX_PERSISTENCE_SELF_TEST_FAILED: " + message)
 	get_tree().quit(1)
 
 
