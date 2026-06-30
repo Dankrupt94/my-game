@@ -12,6 +12,14 @@ Plan:
 - Synchronize player spawn/despawn, positions, target selection, attack messages, and shared placeholder NPC health.
 - Add an automated local self-test where practical and document manual two-client test steps.
 
+Result:
+
+- Added `scenes/multiplayer_sandbox.tscn`, `scripts/multiplayer_sandbox.gd`, and `tools/run_multiplayer_smoke_test.py`.
+- Added a dashboard `Open Multiplayer` action.
+- Implemented ENet server mode and client mode on localhost.
+- Implemented player registration, spawn/despawn snapshots, position/state updates, target sync, attack messages, and shared placeholder NPC health replication.
+- Added and passed a headless smoke test with one server and two clients.
+
 ## 2026-06-30 - Stage 06 Started
 
 Goal: make the playable Godot sandbox consume real AzerothCore-shaped data through the read-only bridge.
