@@ -121,3 +121,18 @@ Result:
 - Ran both tools successfully.
 - Recorded safe counts and missing/deferred tools in `docs/toolchain-and-client-audit-summary.md`.
 - Used `qwen-agent:latest` as a safe advisory reviewer and applied its large-directory scanner feedback.
+
+## 2026-06-30 - Begin Read-Only AzerothCore Database Audit
+
+Goal: continue autonomously by installing/enabling local MySQL client tools and adding a safe read-only database audit for the local AzerothCore configuration.
+
+Plan:
+
+- Save this before-task note.
+- Install or enable `mysql` and `mysqldump` locally.
+- Add a script that parses AzerothCore config database connection strings without committing secrets.
+- Run read-only connectivity and table-count checks if the local database server is reachable.
+- Write detailed output only to ignored `local_reports/`.
+- Track a safe summary in documentation.
+- Verify no secrets, local reports, or proprietary files are tracked.
+- Commit and push the completed non-proprietary code and docs.
