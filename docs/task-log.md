@@ -96,3 +96,18 @@ Result:
 - Documented that all Blizzard/WotLK files available on this machine are authorized local inputs for the porting prototype.
 - Documented that GitHub must receive only non-proprietary code, docs, tooling, manifests, references, and original/placeholder assets.
 - Linked the directive from `README.md`, the master plan, `AGENTS.md`, and the asset policy.
+
+## 2026-06-30 - Begin Autonomous Toolchain And Client Manifest Work
+
+Goal: begin the porting process without further user input by creating repeatable local audits for development tools and WotLK client file metadata.
+
+Plan:
+
+- Save this before-task note.
+- Add a tools folder for local audit/scanner scripts.
+- Add a toolchain audit that reports installed/missing development tools.
+- Add a client manifest scanner that reads local file metadata only and writes ignored local reports.
+- Document how future agents should run the tools.
+- Run the tools against this machine and record a safe summary.
+- Verify no proprietary files or local report payloads are tracked.
+- Commit and push the completed non-proprietary code and docs.
