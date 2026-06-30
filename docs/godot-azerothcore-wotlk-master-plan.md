@@ -150,9 +150,9 @@ To ensure the logical porting plan remains sound, the following technical and ar
 
 ## Current Status
 
-Current stage: Stage 03 is complete; pause before Stage 04.
+Current stage: Stage 04 is in progress.
 
-Reason: the project already has a Godot shell, known local paths, a bridge-aware dashboard, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a host bridge that can report and idempotently start the live stack, and a completed read-only data browser for real AzerothCore data. Per the current user instruction, work pauses here before Stage 04.
+Reason: the project already has a Godot shell, known local paths, a bridge-aware dashboard, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, a host bridge that can report and idempotently start the live stack, and a completed read-only data browser for real AzerothCore data. Stage 04 now hardens that host bridge into the formal local security boundary.
 
 ## Non-Negotiable Safety Rules
 

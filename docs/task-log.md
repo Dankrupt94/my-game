@@ -1,5 +1,17 @@
 # Task Log
 
+## 2026-06-30 - Stage 04 Started
+
+Goal: harden the localhost bridge into the formal security boundary between Godot and host-level AzerothCore operations.
+
+Plan:
+
+- Preserve this before-task note.
+- Add the missing bridge endpoint for launching the local client process.
+- Add structured local mutation logging for bridge-controlled start, stop, and launch actions.
+- Remove direct Godot dashboard fallbacks to host scripts or Wine so dashboard actions go through the bridge.
+- Validate the bridge, dashboard launch, local-stack status, and Git asset boundaries before committing the finished stage.
+
 ## 2026-06-30 - Move Godot Project Into AzerothCore Bundle
 
 Goal: move the Godot project out of the SSD trash and into the local AzerothCore bundle where it is easier to find and manage.

@@ -1,6 +1,6 @@
 # Stage 04 - Local Bridge Service
 
-Status: Planned
+Status: In Progress
 
 ## Goal
 
@@ -28,6 +28,13 @@ Establish the host control bridge as the formal, isolated security boundary sepa
 ## Entry Criteria
 
 - Stage 03 read-only browser panels successfully retrieve and display data via HTTP.
+
+## Stage Start Notes
+
+- Stage 04 began after the completed Stage 03 read-only data browser.
+- The bridge already has health, status, data, start, and stop routes.
+- Remaining hardening work is to add the client launch route, structured mutation logging, bridge-side security metadata, and remove direct dashboard fallbacks to host shell/client execution.
+- Godot should use the localhost bridge as the single boundary for dashboard actions. If the bridge is offline, the dashboard should explain that the bridge must be started rather than falling back to raw scripts.
 
 ## Done Criteria
 
