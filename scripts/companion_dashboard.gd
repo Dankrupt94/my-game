@@ -14,6 +14,7 @@ const STATUS_REPORT := "res://local_reports/server-stack-audit.json"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
 
+var command_actions := {}
 var status_labels := {}
 var output_log: TextEdit
 var start_stop_blocked := false
@@ -21,8 +22,42 @@ var bridge_available := false
 
 
 func _ready() -> void:
+	_register_command_actions()
 	_build_dashboard()
-	_refresh_status()
+	_run_action("status")
+
+
+func _register_command_actions() -> void:
+	command_actions = {
+		"status": {
+			"label": "Refresh Status",
+			"handler": Callable(self, "_action_refresh_status"),
+		},
+		"start_stack": {
+			"label": "Start Stack",
+			"handler": Callable(self, "_action_start_stack"),
+		},
+		"stop_stack": {
+			"label": "Stop Stack",
+			"handler": Callable(self, "_action_stop_stack"),
+		},
+		"restart_stack": {
+			"label": "Restart Stack",
+			"handler": Callable(self, "_action_restart_stack"),
+		},
+		"open_logs": {
+			"label": "Open Logs",
+			"handler": Callable(self, "_action_open_logs"),
+		},
+		"open_reports": {
+			"label": "Open Reports",
+			"handler": Callable(self, "_action_open_reports"),
+		},
+		"launch_client": {
+			"label": "Launch Client",
+			"handler": Callable(self, "_action_launch_client"),
+		},
+	}
 
 
 func _build_dashboard() -> void:
@@ -70,12 +105,13 @@ func _build_dashboard() -> void:
 	actions.add_theme_constant_override("v_separation", 8)
 	main_stack.add_child(actions)
 
-	actions.add_child(_button("Refresh Status", Callable(self, "_refresh_status")))
-	actions.add_child(_button("Start Stack", Callable(self, "_start_stack")))
-	actions.add_child(_button("Stop Stack", Callable(self, "_stop_stack")))
-	actions.add_child(_button("Open Logs", Callable(self, "_open_logs")))
-	actions.add_child(_button("Open Reports", Callable(self, "_open_reports")))
-	actions.add_child(_button("Launch Client", Callable(self, "_launch_client")))
+	actions.add_child(_action_button("status"))
+	actions.add_child(_action_button("start_stack"))
+	actions.add_child(_action_button("stop_stack"))
+	actions.add_child(_action_button("restart_stack"))
+	actions.add_child(_action_button("open_logs"))
+	actions.add_child(_action_button("open_reports"))
+	actions.add_child(_action_button("launch_client"))
 
 	main_stack.add_child(_section_title("Local Paths"))
 	main_stack.add_child(_path_row("AzerothCore bundle", AZEROTHCORE_ROOT))
@@ -119,7 +155,24 @@ func _build_dashboard() -> void:
 	side_stack.add_child(_body_text("Reports are generated under local_reports/ and ignored by Git. Start and stop actions use the existing AzerothCore scripts."))
 
 
-func _refresh_status() -> void:
+func _run_action(action_id: String) -> void:
+	var action: Dictionary = command_actions.get(action_id, {})
+	if action.is_empty():
+		_append_log("Unknown action: " + action_id)
+		return
+
+	var label := str(action.get("label", action_id))
+	_append_log("Action: " + label)
+
+	var handler: Callable = action.get("handler", Callable())
+	if not handler.is_valid():
+		_append_log("Action has no handler: " + action_id)
+		return
+
+	handler.call()
+
+
+func _action_refresh_status() -> void:
 	_append_log("Refreshing local server-stack status...")
 	var health := _run_bridge_action("health", 8)
 	bridge_available = int(health["exit_code"]) == 0
@@ -135,12 +188,18 @@ func _refresh_status() -> void:
 	_load_status_report()
 
 
-func _start_stack() -> void:
+func _action_start_stack() -> void:
 	_run_stack_script(START_SCRIPT, "Start stack")
 
 
-func _stop_stack() -> void:
+func _action_stop_stack() -> void:
 	_run_stack_script(STOP_SCRIPT, "Stop stack")
+
+
+func _action_restart_stack() -> void:
+	_append_log("Restart stack: stop then start.")
+	_run_stack_script(STOP_SCRIPT, "Stop stack")
+	_run_stack_script(START_SCRIPT, "Start stack")
 
 
 func _run_stack_script(script_path: String, label: String) -> void:
@@ -148,7 +207,7 @@ func _run_stack_script(script_path: String, label: String) -> void:
 		var bridge_action := "start" if script_path == START_SCRIPT else "stop"
 		var bridge_result := _run_bridge_action(bridge_action, 260)
 		_append_command_result("Bridge " + bridge_action, bridge_result)
-		_refresh_status()
+		_run_action("status")
 		return
 
 	if start_stop_blocked:
@@ -163,21 +222,21 @@ func _run_stack_script(script_path: String, label: String) -> void:
 	var result := _run_command("/usr/bin/env", ["bash", script_path])
 	_append_log(result["output"])
 	_append_log(label + " exit code: " + str(result["exit_code"]))
-	_refresh_status()
+	_run_action("status")
 
 
-func _open_logs() -> void:
+func _action_open_logs() -> void:
 	OS.shell_open(LOGS_DIR)
 	_append_log("Opened logs folder: " + LOGS_DIR)
 
 
-func _open_reports() -> void:
+func _action_open_reports() -> void:
 	var reports_path := ProjectSettings.globalize_path(LOCAL_REPORTS)
 	OS.shell_open(reports_path)
 	_append_log("Opened local reports folder: " + reports_path)
 
 
-func _launch_client() -> void:
+func _action_launch_client() -> void:
 	var wow_path := BUNDLE_CLIENT + "/Wow.exe"
 	if not FileAccess.file_exists(wow_path):
 		_append_log("Bundle Wow.exe not found at: " + wow_path)
@@ -352,6 +411,12 @@ func _panel_style() -> StyleBoxFlat:
 	style.set_content_margin(SIDE_RIGHT, 18)
 	style.set_content_margin(SIDE_BOTTOM, 16)
 	return style
+
+
+func _action_button(action_id: String) -> Button:
+	var action: Dictionary = command_actions.get(action_id, {})
+	var label := str(action.get("label", action_id))
+	return _button(label, Callable(self, "_run_action").bind(action_id))
 
 
 func _button(text: String, callback: Callable) -> Button:

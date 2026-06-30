@@ -142,9 +142,9 @@ Path B:
 
 ## Current Status
 
-Current stage: Stage 01 is in progress.
+Current stage: Stage 02 is in progress.
 
-Reason: the project already has a Godot shell, known local paths, a bridge-aware dashboard, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, and a host bridge that can report and idempotently start the live stack. The next useful step is continuing Stage 01 polish only if needed, then moving into the bridge/data/tooling stages that make the full Godot client port possible.
+Reason: the project already has a Godot shell, known local paths, a bridge-aware dashboard, installed Linux server binaries, reachable local databases, generated local runtime data, a verified live AzerothCore stack on ports `3306`, `3724`, `8085`, and `11434`, and a host bridge that can report and idempotently start the live stack. Stage 02 has begun by routing dashboard buttons through named actions. The next useful step is finishing command-layer polish, then moving into the read-only data browser that makes real AzerothCore data visible inside Godot.
 
 ## Non-Negotiable Safety Rules
 

@@ -370,3 +370,26 @@ Result:
 - Verified `tools/bridge_client.py status --compact` sees MySQL `3306`, authserver `3724`, worldserver `8085`, Ollama `11434`, Docker, and runtime data ready.
 - Verified `tools/bridge_client.py start --compact` succeeds while the stack is already running and reports the existing live ports.
 - Verified `scripts/run_game.sh` loads the Godot 4.7 scene headlessly with the bridge online.
+
+## 2026-06-30 - Begin Stage 02 Command Layer
+
+Goal: route dashboard controls through named actions so future AzerothCore/Godot commands have one predictable command layer.
+
+Plan:
+
+- Add an action registry in the dashboard script.
+- Route visible buttons through action IDs.
+- Keep current status/start/stop/log/report/client behavior working.
+- Add a restart action to the registry and UI.
+- Document the action list and expected output behavior.
+- Validate the Godot scene still loads.
+
+Result:
+
+- Added a `command_actions` registry in `scripts/companion_dashboard.gd`.
+- Routed dashboard buttons through `_run_action`.
+- Added the `restart_stack` action.
+- Added `docs/command-layer.md`.
+- Marked Stage 02 as in progress.
+- Used local `qwen-agent:latest` as a bounded advisory reviewer on the GDScript diff; no code changes were needed from its review.
+- Verified Godot 4.7 loads the scene headlessly after the refactor.
