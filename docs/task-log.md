@@ -1,5 +1,20 @@
 # Task Log
 
+## 2026-06-30 - Stage 11 World Packet Parser Checkpoint Started
+
+Goal: continue Stage 11 by adding world-auth packet construction and character-list parsing without requiring account credentials.
+
+Plan:
+
+- Build `CMSG_AUTH_SESSION` payload/header helpers.
+- Build encrypted `CMSG_CHAR_ENUM` header support using the existing header crypto.
+- Add a synthetic `SMSG_CHAR_ENUM` parser test with safe fake character data.
+- Keep live credential-backed auth optional through ignored local environment variables.
+
+Result:
+
+- In progress.
+
 ## 2026-06-30 - Stage 11 Started
 
 Goal: begin the minimal local protocol client helper for direct AzerothCore auth, realm, world auth, and character enumeration.

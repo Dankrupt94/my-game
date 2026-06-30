@@ -45,6 +45,12 @@ The first implementation checkpoint should be a safe local smoke harness that ca
 - Added guarded `--auth-flow <host> <port> <account>`, which reads the password only from `ACORE_PROTOCOL_PASSWORD`, verifies SRP6 server proof, requests realm list, and prints the first realm endpoint.
 - Added `--world-challenge <host> <port>` to connect to the live worldserver and parse the initial plaintext `SMSG_AUTH_CHALLENGE`.
 
+## Next Checkpoint
+
+- Add world-auth packet construction for `CMSG_AUTH_SESSION`.
+- Add a character enumeration parser that can read `SMSG_CHAR_ENUM` summaries.
+- Validate both with synthetic packets before attempting live password-backed character enumeration.
+
 ## Validation
 
 Completed on 2026-06-30:
