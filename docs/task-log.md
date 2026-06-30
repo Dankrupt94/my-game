@@ -37,3 +37,15 @@ Result:
 - Added `docs/godot-as-engine-roadmap.md`.
 - Broke the path into companion tooling, bridge/data work, original Godot gameplay, Godot-native multiplayer, and optional protocol-client milestones.
 - Marked Stage 1 companion dashboard controls as the best next task.
+
+## 2026-06-30 - Create Master Port Plan And Stage Docs
+
+Goal: create an explicit reference plan for building toward a Godot-AzerothCore-WotLK game, beginning with Path A and moving to Path B after Path A is achieved.
+
+Plan:
+
+- Save this before-task note.
+- Add a master plan file for the whole project direction.
+- Add one documentation file per stage so progress can be tracked as changes occur.
+- Link the master plan from the README.
+- Commit and push the completed documentation.
