@@ -243,9 +243,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 search,
                 "--limit",
                 limit,
-                "--compact",
             ]
             result = run_command(command, timeout=30)
+            report: dict[str, Any] = {}
+            if result["output"]:
+                try:
+                    parsed_report = json.loads(result["output"])
+                    if isinstance(parsed_report, dict):
+                        report = parsed_report
+                except json.JSONDecodeError:
+                    report = load_json_report(DATA_REPORT)
             self._send_json(
                 HTTPStatus.OK if result["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR,
                 {
@@ -253,7 +260,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     "generated_at": utc_now(),
                     "command": "read_only_data_browser",
                     "result": result,
-                    "report": load_json_report(DATA_REPORT),
+                    "report": report,
                 },
             )
             return

@@ -9,15 +9,19 @@ const INTERACT_RANGE := 3.0
 const RESOURCE_MAX := 100.0
 const PLAYER_HEALTH_MAX := 100.0
 const ENEMY_HEALTH_MAX := 100.0
+const BRIDGE_BASE_URL := "http://127.0.0.1:8765"
 
 var player_body: CharacterBody3D
 var camera: Camera3D
 var npc: Node3D
 var enemy: Node3D
+var data_spawn_root: Node3D
 var target_marker: MeshInstance3D
 var status_label: Label
 var target_label: Label
 var quest_label: Label
+var data_label: Label
+var inventory_label: Label
 var health_bar: ProgressBar
 var resource_bar: ProgressBar
 var enemy_bar: ProgressBar
@@ -37,6 +41,9 @@ var tab_was_pressed := false
 var attack_was_pressed := false
 var interact_was_pressed := false
 var reset_was_pressed := false
+var pending_data_requests := 0
+var data_records := {}
+var spawned_data_nodes: Array[Node3D] = []
 
 
 func _ready() -> void:
@@ -47,6 +54,8 @@ func _ready() -> void:
 	_update_ui("Sandbox ready.")
 	if OS.get_environment("ACORE_SANDBOX_SELF_TEST") == "1":
 		_run_self_test()
+		return
+	_load_bridge_data()
 
 
 func _physics_process(delta: float) -> void:
@@ -81,6 +90,9 @@ func _build_world() -> void:
 	player_body = _create_actor("Player", Vector3(0, 1.0, 4.0), Color(0.28, 0.67, 0.93), true)
 	npc = _create_actor("Bridge Mentor", Vector3(-5.5, 1.0, -2.5), Color(0.45, 0.84, 0.58), false)
 	enemy = _create_actor("Training Echo", Vector3(5.0, 1.0, -3.0), Color(0.95, 0.35, 0.28), false)
+	data_spawn_root = Node3D.new()
+	data_spawn_root.name = "AzerothCoreDataPlaceholders"
+	add_child(data_spawn_root)
 	target_marker = _create_target_marker()
 
 	camera = Camera3D.new()
@@ -132,11 +144,14 @@ func _add_obstacles() -> void:
 		body.add_child(collision)
 
 
-func _create_actor(actor_name: String, actor_position: Vector3, color: Color, controllable: bool) -> CharacterBody3D:
+func _create_actor(actor_name: String, actor_position: Vector3, color: Color, controllable: bool, parent: Node = null) -> CharacterBody3D:
 	var body := CharacterBody3D.new()
 	body.name = actor_name
 	body.position = actor_position
-	add_child(body)
+	if parent == null:
+		add_child(body)
+	else:
+		parent.add_child(body)
 
 	var collision := CollisionShape3D.new()
 	var capsule_shape := CapsuleShape3D.new()
@@ -219,6 +234,10 @@ func _build_ui() -> void:
 	layout.add_child(quest_label)
 	status_label = _hud_label()
 	layout.add_child(status_label)
+	data_label = _hud_label()
+	layout.add_child(data_label)
+	inventory_label = _hud_label()
+	layout.add_child(inventory_label)
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -406,6 +425,144 @@ func _reset_sandbox() -> void:
 	quest_complete = false
 	_select_target(0)
 	_update_ui("Sandbox reset.")
+
+
+func _load_bridge_data() -> void:
+	data_records = {}
+	pending_data_requests = 0
+	for request in [
+		{"view": "characters", "search": "", "limit": 3},
+		{"view": "creatures", "search": "wolf", "limit": 3},
+		{"view": "quests", "search": "wolf", "limit": 3},
+		{"view": "items", "search": "sword", "limit": 3},
+	]:
+		_request_data_view(str(request["view"]), str(request["search"]), int(request["limit"]))
+
+
+func _request_data_view(view: String, search: String, limit: int) -> void:
+	pending_data_requests += 1
+	var request := HTTPRequest.new()
+	request.timeout = 20
+	add_child(request)
+	request.request_completed.connect(Callable(self, "_on_data_request_completed").bind(view, request))
+	var path := "/data?view=" + view.uri_encode() + "&search=" + search.uri_encode() + "&limit=" + str(limit)
+	var error := request.request(BRIDGE_BASE_URL + path)
+	if error != OK:
+		request.queue_free()
+		pending_data_requests -= 1
+		_note_data_error(view, "request could not start")
+
+
+func _on_data_request_completed(
+	result: int,
+	response_code: int,
+	_headers: PackedStringArray,
+	body: PackedByteArray,
+	view: String,
+	request: HTTPRequest
+) -> void:
+	var body_text := body.get_string_from_utf8()
+	var parsed = JSON.parse_string(body_text)
+	var payload: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+	var request_ok := result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300 and bool(payload.get("ok", false))
+	if request_ok:
+		var rows := _rows_from_data_payload(payload, view)
+		data_records[view] = rows
+		if view == "creatures":
+			_spawn_data_creatures(rows)
+		_update_data_ui()
+	else:
+		_note_data_error(view, "bridge data request failed")
+
+	pending_data_requests -= 1
+	request.queue_free()
+	_maybe_finish_data_self_test()
+
+
+func _rows_from_data_payload(payload: Dictionary, view: String) -> Array:
+	var report: Dictionary = payload.get("report", {})
+	var views: Dictionary = report.get("views", {})
+	var view_payload: Dictionary = views.get(view, {})
+	var rows: Array = view_payload.get("rows", [])
+	return rows
+
+
+func _spawn_data_creatures(rows: Array) -> void:
+	for child in data_spawn_root.get_children():
+		child.queue_free()
+	spawned_data_nodes.clear()
+
+	var count: int = min(rows.size(), 3)
+	for index in range(count):
+		var row: Dictionary = rows[index]
+		var level: int = int(str(row.get("maxlevel", "1")))
+		var color: Color = Color(0.82, 0.58 + min(level, 20) * 0.01, 0.28)
+		var actor := _create_actor(
+			str(row.get("name", "Data Creature")),
+			Vector3(-6.5 + index * 3.2, 1.0, -8.2),
+			color,
+			false,
+			data_spawn_root
+		)
+		actor.set_meta("acore_entry", str(row.get("entry", "")))
+		actor.set_meta("acore_level", str(row.get("minlevel", "?")) + "-" + str(row.get("maxlevel", "?")))
+		spawned_data_nodes.append(actor)
+
+	selectable_targets = [npc, enemy]
+	selectable_targets.append_array(spawned_data_nodes)
+
+
+func _update_data_ui() -> void:
+	if data_label == null:
+		return
+
+	var characters: Array = data_records.get("characters", [])
+	var quests: Array = data_records.get("quests", [])
+	var items: Array = data_records.get("items", [])
+	var creatures: Array = data_records.get("creatures", [])
+
+	var character_text := _record_list(characters, "name", "No characters")
+	var quest_text := _record_list(quests, "title", "No quests")
+	var item_text := _record_list(items, "name", "No items")
+	data_label.text = "Characters: " + character_text + " | Quest data: " + quest_text
+	inventory_label.text = "Items: " + item_text + " | Creature placeholders: " + str(creatures.size())
+
+
+func _record_list(rows: Array, key: String, empty_text: String) -> String:
+	if rows.is_empty():
+		return empty_text
+	var names := PackedStringArray()
+	for row in rows:
+		if typeof(row) == TYPE_DICTIONARY:
+			names.append(str(row.get(key, "?")))
+	return ", ".join(names)
+
+
+func _note_data_error(view: String, message: String) -> void:
+	data_records[view] = []
+	_update_ui("Data " + view + ": " + message)
+	_maybe_finish_data_self_test()
+
+
+func _maybe_finish_data_self_test() -> void:
+	if OS.get_environment("ACORE_SANDBOX_DATA_SELF_TEST") != "1":
+		return
+	if pending_data_requests > 0:
+		return
+	for view in ["characters", "creatures", "quests", "items"]:
+		if not data_records.has(view) or data_records[view].is_empty():
+			_fail_data_self_test(view + " did not load rows")
+			return
+	if spawned_data_nodes.is_empty():
+		_fail_data_self_test("creature placeholders were not spawned")
+		return
+	print("SANDBOX_DATA_SELF_TEST_OK")
+	get_tree().quit(0)
+
+
+func _fail_data_self_test(message: String) -> void:
+	push_error("SANDBOX_DATA_SELF_TEST_FAILED: " + message)
+	get_tree().quit(1)
 
 
 func _run_self_test() -> void:

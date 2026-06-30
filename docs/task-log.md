@@ -12,6 +12,14 @@ Plan:
 - Add a headless data self-test that proves data reached the sandbox and created placeholders.
 - Keep all database access read-only and all generated reports/runtime files out of Git.
 
+Result:
+
+- Fixed the host bridge `/data` endpoint to parse each data browser stdout report directly, preventing shared local report races during concurrent data requests.
+- Added read-only Godot `HTTPRequest` calls from the sandbox to `GET /data` for characters, creatures, quests, and items.
+- Mapped characters, quests, and items into sandbox UI text.
+- Mapped creature records into original capsule placeholders in the sandbox scene.
+- Added and passed `ACORE_SANDBOX_DATA_SELF_TEST=1` for bridge data loading and placeholder spawning.
+
 ## 2026-06-30 - Stage 05 Started
 
 Goal: add a fresh original playable Godot gameplay sandbox under the AzerothCore companion direction.

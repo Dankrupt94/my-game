@@ -44,6 +44,12 @@ Headless self-test:
 ACORE_SANDBOX_SELF_TEST=1 snap run godot-4 --headless --quit-after 5 --path "/run/media/doodbro/New 1tb/AzerothCore/godot-azerothcore-companion" --scene res://scenes/gameplay_sandbox.tscn
 ```
 
+Headless data self-test:
+
+```bash
+ACORE_SANDBOX_DATA_SELF_TEST=1 snap run godot-4 --headless --quit-after 600 --path "/run/media/doodbro/New 1tb/AzerothCore/godot-azerothcore-companion" --scene res://scenes/gameplay_sandbox.tscn
+```
+
 ## Controls
 
 - `WASD`: move.
@@ -66,6 +72,17 @@ ACORE_SANDBOX_SELF_TEST=1 snap run godot-4 --headless --quit-after 5 --path "/ru
 - Player health, focus, target health, task status, and action buttons.
 - Simple task loop: talk to the mentor, defeat the training echo, and return to the dashboard.
 
+## Data-Driven Slice
+
+Stage 06 adds read-only bridge data to the sandbox:
+
+- Character rows are displayed as UI text.
+- Creature template rows spawn original capsule placeholders in the test zone.
+- Quest template rows are displayed as task data text.
+- Item template rows are displayed as inventory placeholder text.
+
+The sandbox uses only `GET /data` and does not write to AzerothCore databases.
+
 ## Placeholder Asset Policy
 
 The scene uses only Godot-created primitive meshes, colors, labels, and UI controls.
@@ -79,5 +96,6 @@ Validated on 2026-06-30:
 - Dashboard scene loads in Godot 4.7 headless.
 - Sandbox scene loads directly in Godot 4.7 headless.
 - Sandbox self-test prints `SANDBOX_SELF_TEST_OK` after exercising mentor interaction, enemy defeat, task completion, and target health UI state.
+- Sandbox data self-test prints `SANDBOX_DATA_SELF_TEST_OK` after loading bridge records and spawning creature placeholders.
 - Modular scaffold scripts parse successfully with Godot 4.7 `--check-only --script`.
 - Tracked-file guard found no proprietary client assets, local reports, local runtime files, or logs in Git.

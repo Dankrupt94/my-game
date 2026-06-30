@@ -143,6 +143,7 @@ Live-stack validation completed after runtime data extraction:
 Read-only data validation completed:
 
 - `GET /data` runs `tools/read_only_data_browser.py`.
+- `GET /data` returns the report parsed from that exact helper process stdout, avoiding shared local report races during concurrent requests.
 - `tools/bridge_client.py data --view summary --compact` returns live realm and data counts.
 - `tools/bridge_client.py data --view items --search sword --limit 5 --compact` returns successfully.
 
