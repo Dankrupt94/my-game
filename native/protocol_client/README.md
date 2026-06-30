@@ -14,4 +14,13 @@ ACORE_PROTOCOL_PASSWORD='local password only' native/protocol_client/build/acore
 native/protocol_client/build/acore_protocol_client --world-challenge 127.0.0.1 8085
 ```
 
+For the local disposable protocol account, load the ignored file first:
+
+```bash
+set -a; . local_runtime/protocol-test-account.env; set +a
+native/protocol_client/build/acore_protocol_client --character-flow 127.0.0.1 3724 "$ACORE_PROTOCOL_ACCOUNT"
+```
+
+Set `ACORE_PROTOCOL_TRACE=1` only when debugging world packet headers. It prints opcodes and sizes, not payloads.
+
 The helper must not print passwords, session keys, packet captures with account secrets, or proprietary client data.

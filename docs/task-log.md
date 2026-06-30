@@ -17,12 +17,18 @@ Result:
 - Added a synthetic character enum parser test using safe fake character data.
 - Added guarded `--character-flow`, which performs authserver login, realm parsing, world auth, encrypted char enum request, and live char enum parsing when `ACORE_PROTOCOL_PASSWORD` is supplied.
 - Hardened the character enum parser against truncated character records.
+- Fixed auth logon-challenge OS byte order after live world auth exposed that AzerothCore was storing an empty client OS.
+- Added socket timeouts, flushed progress markers, and optional header-only world packet tracing.
 - Used local `qwen-agent` as an advisory reviewer for the narrow character-flow packet block; final checks remained the local build and live safe probes.
+- Created a disposable local `CODEXPROTO` protocol account with its password kept only in ignored `local_runtime/protocol-test-account.env`.
+- Documented the local server smoke profile in `docs/local-server-smoke-profile.md`.
+- Temporarily disabled Warden and random bot autologin in the local AzerothCore config to validate the protocol path without anti-cheat module traffic or hundreds of startup bot logins.
 - Validated a clean CMake build.
 - `--self-test` now prints `WORLD_PACKET_SELF_TEST_OK`.
 - Live no-secret auth challenge and world challenge probes still pass.
 - Guarded auth flow still fails safely when `ACORE_PROTOCOL_PASSWORD` is not set.
 - Guarded character flow fails safely when `ACORE_PROTOCOL_PASSWORD` is not set.
+- Live credential-backed `--character-flow` now prints `AUTH_FLOW_OK`, `WORLD_AUTH_OK`, and `CHAR_ENUM_OK count=0` against the local smoke-profile server.
 
 ## 2026-06-30 - Stage 11 Started
 

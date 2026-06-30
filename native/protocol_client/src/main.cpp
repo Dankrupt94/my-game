@@ -8,10 +8,12 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -25,6 +27,7 @@ namespace
 constexpr std::uint16_t SMSG_AUTH_CHALLENGE = 0x1EC;
 constexpr std::uint16_t SMSG_AUTH_RESPONSE = 0x1EE;
 constexpr std::uint8_t AUTH_LOGON_CHALLENGE = 0x00;
+constexpr int SocketTimeoutSeconds = 30;
 
 class SocketFd
 {
@@ -76,6 +79,15 @@ SocketFd connect_tcp(std::string const& host, std::string const& port)
 
         if (connect(fd, entry->ai_addr, entry->ai_addrlen) == 0)
         {
+            timeval timeout{};
+            timeout.tv_sec = SocketTimeoutSeconds;
+            timeout.tv_usec = 0;
+            if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0
+                || setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0)
+            {
+                close(fd);
+                throw std::runtime_error("could not configure socket timeout");
+            }
             return SocketFd(fd);
         }
 
@@ -92,6 +104,14 @@ std::vector<std::uint8_t> read_exact(int fd, std::size_t size)
     while (offset < size)
     {
         ssize_t const got = recv(fd, bytes.data() + offset, size - offset, 0);
+        if (got < 0 && errno == EINTR)
+        {
+            continue;
+        }
+        if (got < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+        {
+            throw std::runtime_error("socket read timed out");
+        }
         if (got <= 0)
         {
             throw std::runtime_error("socket closed while reading");
@@ -100,6 +120,18 @@ std::vector<std::uint8_t> read_exact(int fd, std::size_t size)
         offset += static_cast<std::size_t>(got);
     }
     return bytes;
+}
+
+std::vector<std::uint8_t> read_exact_context(int fd, std::size_t size, char const* context)
+{
+    try
+    {
+        return read_exact(fd, size);
+    }
+    catch (std::exception const& exc)
+    {
+        throw std::runtime_error(std::string(context) + ": " + exc.what());
+    }
 }
 
 std::uint32_t read_le_u32(std::span<const std::uint8_t> bytes, std::size_t offset)
@@ -132,6 +164,14 @@ void write_all(int fd, std::span<const std::uint8_t> bytes)
     while (offset < bytes.size())
     {
         ssize_t const sent = send(fd, bytes.data() + offset, bytes.size() - offset, 0);
+        if (sent < 0 && errno == EINTR)
+        {
+            continue;
+        }
+        if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+        {
+            throw std::runtime_error("socket write timed out");
+        }
         if (sent <= 0)
         {
             throw std::runtime_error("socket closed while writing");
@@ -172,8 +212,8 @@ std::vector<std::uint8_t> build_auth_logon_challenge(std::string const& account)
     bytes.push_back(3);
     bytes.push_back(5);
     append_u16_le(bytes, 12340);
-    bytes.insert(bytes.end(), {0, '6', '8', 'x'});
-    bytes.insert(bytes.end(), {0, 'n', 'i', 'W'});
+    bytes.insert(bytes.end(), {'6', '8', 'x', 0});
+    bytes.insert(bytes.end(), {'n', 'i', 'W', 0});
     bytes.insert(bytes.end(), {'S', 'U', 'n', 'e'});
     append_u32_le(bytes, 0);
     append_u32_le(bytes, 0x0100007F);
@@ -337,7 +377,7 @@ RealmInfo parse_realm_list(std::span<const std::uint8_t> body)
               << " flags=0x" << hex(std::span<const std::uint8_t>(&flags, 1))
               << " chars=" << static_cast<int>(character_count)
               << " timezone=" << static_cast<int>(timezone)
-              << "\n";
+              << "\n" << std::flush;
 
     return {
         .name = name,
@@ -370,7 +410,7 @@ std::array<std::uint8_t, 4> random_seed4()
 
 WorldPacketData read_world_packet(int fd, AuthCrypt* crypt)
 {
-    auto header = read_exact(fd, 4);
+    auto header = read_exact_context(fd, 4, "reading world packet header");
     if (crypt && crypt->initialized())
     {
         crypt->decrypt_server_header(header);
@@ -378,7 +418,7 @@ WorldPacketData read_world_packet(int fd, AuthCrypt* crypt)
 
     if ((header[0] & 0x80) != 0)
     {
-        auto extra = read_exact(fd, 1);
+        auto extra = read_exact_context(fd, 1, "reading large world packet header");
         if (crypt && crypt->initialized())
         {
             crypt->decrypt_server_header(extra);
@@ -391,10 +431,17 @@ WorldPacketData read_world_packet(int fd, AuthCrypt* crypt)
     {
         throw std::runtime_error("server packet size is smaller than opcode");
     }
+    if (std::getenv("ACORE_PROTOCOL_TRACE"))
+    {
+        std::cerr << "WORLD_PACKET_IN opcode=0x" << std::hex << parsed.opcode << std::dec
+                  << " payload_size=" << (parsed.size - 2)
+                  << " header=" << hex(header)
+                  << "\n";
+    }
 
     return {
         .opcode = parsed.opcode,
-        .payload = read_exact(fd, parsed.size - 2),
+        .payload = read_exact_context(fd, parsed.size - 2, "reading world packet payload"),
     };
 }
 
@@ -419,6 +466,13 @@ std::uint8_t parse_auth_response(std::span<const std::uint8_t> payload)
 
 int self_test()
 {
+    auto logon_challenge = build_auth_logon_challenge("TEST");
+    if (logon_challenge.size() != 38 || logon_challenge[17] != 'n' || logon_challenge[18] != 'i'
+        || logon_challenge[19] != 'W' || logon_challenge[20] != 0)
+    {
+        throw std::runtime_error("auth logon challenge OS encoding failed");
+    }
+
     auto client_header = build_client_header(CMSG_CHAR_ENUM, 0);
     if (hex(client_header) != "000437000000")
     {
@@ -591,6 +645,7 @@ int character_flow(std::string const& host, std::string const& port, std::string
     {
         throw std::runtime_error("did not receive SMSG_AUTH_RESPONSE");
     }
+    std::cout << "WORLD_AUTH_OK\n" << std::flush;
 
     write_world_packet(socket.get(), CMSG_CHAR_ENUM, {}, &crypt);
     for (int i = 0; i < 20; ++i)
@@ -602,7 +657,7 @@ int character_flow(std::string const& host, std::string const& port, std::string
         }
 
         auto characters = parse_char_enum(packet.payload);
-        std::cout << "CHAR_ENUM_OK count=" << characters.size() << "\n";
+        std::cout << "CHAR_ENUM_OK count=" << characters.size() << "\n" << std::flush;
         for (CharacterSummary const& character : characters)
         {
             std::cout << "CHAR guid=0x" << std::hex << character.guid << std::dec
