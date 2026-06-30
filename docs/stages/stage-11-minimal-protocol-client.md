@@ -42,6 +42,7 @@ The first implementation checkpoint should be a safe local smoke harness that ca
 - SRP6 intentionally uses SHA-1 and little-endian byte conversion because those are compatibility requirements of the WotLK/AzerothCore protocol being implemented.
 - Added `--self-test` to validate first header encoding and header crypto initialization.
 - Added `--auth-challenge <host> <port> <account>` to send `AUTH_LOGON_CHALLENGE` and parse the public SRP6 challenge response without a password.
+- Added guarded `--auth-flow <host> <port> <account>`, which reads the password only from `ACORE_PROTOCOL_PASSWORD`, verifies SRP6 server proof, requests realm list, and prints the first realm endpoint.
 - Added `--world-challenge <host> <port>` to connect to the live worldserver and parse the initial plaintext `SMSG_AUTH_CHALLENGE`.
 
 ## Validation
@@ -52,6 +53,7 @@ Completed on 2026-06-30:
 - `cmake --build native/protocol_client/build` succeeded.
 - `native/protocol_client/build/acore_protocol_client --self-test` printed `PROTOCOL_CLIENT_SELF_TEST_OK` and `SRP6_SELF_TEST_OK`.
 - `native/protocol_client/build/acore_protocol_client --auth-challenge 127.0.0.1 3724 ADMIN` prints `AUTH_CHALLENGE_OK` when the local `ADMIN` account exists and the authserver accepts build `12340`.
+- `native/protocol_client/build/acore_protocol_client --auth-flow 127.0.0.1 3724 ADMIN` fails safely with `ACORE_PROTOCOL_PASSWORD is not set` when no local password is supplied.
 - `native/protocol_client/build/acore_protocol_client --world-challenge 127.0.0.1 8085` printed `WORLD_CHALLENGE_OK`.
 - No account credentials, session keys, packet captures, proprietary client files, or local runtime files were committed.
 

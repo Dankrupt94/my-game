@@ -17,6 +17,7 @@ Result:
 - Added ARC4 header crypto, HMAC-SHA1 integration, world header byte helpers, and a CMake build.
 - Added a self-test for header encoding, header crypto initialization, and SRP6 client/server proof agreement.
 - Added an authserver challenge probe that sends no password and prints only public SRP parameter lengths/flags.
+- Added a guarded auth flow that reads `ACORE_PROTOCOL_PASSWORD` only from the local environment, verifies SRP6 proof, and parses realm list when a valid password is available.
 - Added a safe live worldserver challenge probe that parses `SMSG_AUTH_CHALLENGE` without credentials.
 - Validated the helper build, self-test, auth challenge probe, and live world challenge probe.
 
