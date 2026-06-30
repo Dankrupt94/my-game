@@ -1,6 +1,6 @@
 # Stage 09 - Path A Completion Gate
 
-Status: Planned
+Status: In Progress
 
 ## Goal
 
@@ -28,6 +28,14 @@ Only after this stage is complete should the project begin Path B protocol-clien
 - A written decision is added to this file.
 - Missing Path A work is either complete or intentionally deferred.
 - Risks for Path B are documented.
+
+## Gate Review Start
+
+Started on 2026-06-30.
+
+This review checks whether Path A has achieved its intended purpose: a safe Godot-side engine layer, a local bridge boundary, read-only AzerothCore data inspection, an original playable sandbox, local multiplayer proof, and ignored local persistence.
+
+The review must not mistake Path A for the final product. The final project goal remains a full Godot-native WotLK client/port that can replace the original WotLK client for normal play against AzerothCore as completely as possible.
 
 ## Documentation To Update During Work
 

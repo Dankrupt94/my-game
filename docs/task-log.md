@@ -1,5 +1,21 @@
 # Task Log
 
+## 2026-06-30 - Stage 09 Started
+
+Goal: review whether Path A is complete enough to begin Path B protocol-client work.
+
+Plan:
+
+- Check every Path A completion requirement against the current project state.
+- Clean up any stale stage status that no longer matches the built dashboard.
+- Record missing work as either completed or intentionally deferred.
+- Document the specific risks Path B must carry forward.
+- Make a written go/no-go decision for beginning Stage 10.
+
+Result:
+
+- In progress.
+
 ## 2026-06-30 - Stage 08 Started
 
 Goal: persist Godot-native sandbox state safely without touching AzerothCore core tables.
