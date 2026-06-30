@@ -8,6 +8,7 @@ Current safe commands:
 cmake -S native/protocol_client -B native/protocol_client/build
 cmake --build native/protocol_client/build
 native/protocol_client/build/acore_protocol_client --self-test
+native/protocol_client/build/acore_protocol_client --auth-challenge 127.0.0.1 3724 ADMIN
 native/protocol_client/build/acore_protocol_client --world-challenge 127.0.0.1 8085
 ```
 

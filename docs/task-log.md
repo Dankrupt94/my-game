@@ -16,8 +16,9 @@ Result:
 - Added the first native protocol helper under `native/protocol_client/`.
 - Added ARC4 header crypto, HMAC-SHA1 integration, world header byte helpers, and a CMake build.
 - Added a self-test for header encoding and header crypto initialization.
+- Added an authserver challenge probe that sends no password and prints only public SRP parameter lengths/flags.
 - Added a safe live worldserver challenge probe that parses `SMSG_AUTH_CHALLENGE` without credentials.
-- Validated the helper build, self-test, and live world challenge probe.
+- Validated the helper build, self-test, auth challenge probe, and live world challenge probe.
 
 ## 2026-06-30 - Stage 10 Started
 
