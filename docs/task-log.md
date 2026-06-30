@@ -1,5 +1,20 @@
 # Task Log
 
+## 2026-06-30 - Stage 11 Started
+
+Goal: begin the minimal local protocol client helper for direct AzerothCore auth, realm, world auth, and character enumeration.
+
+Plan:
+
+- Correct the Stage 11 world-auth opcode target to `CMSG_AUTH_SESSION`.
+- Start with a native C++ helper and smoke harness before Godot UI integration.
+- Keep account secrets and generated packet dumps out of Git.
+- Build only protocol code and safe local test output in this stage.
+
+Result:
+
+- In progress.
+
 ## 2026-06-30 - Stage 10 Started
 
 Goal: begin Path B protocol research for a Godot-native AzerothCore-compatible WotLK client.

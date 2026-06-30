@@ -160,9 +160,9 @@ These optimizations and visual enhancements can be introduced in later stages or
 
 ## Current Status
 
-Current stage: Stage 10 is complete; Stage 11 is next.
+Current stage: Stage 11 is in progress.
 
-Reason: Stage 10 documented the WotLK/AzerothCore auth, realm, world-session, opcode, and first character-flow requirements needed for a Godot-native client to connect directly to AzerothCore. Stage 11 should build the first minimal local protocol client helper.
+Reason: Stage 10 documented the WotLK/AzerothCore auth, realm, world-session, opcode, and first character-flow requirements needed for a Godot-native client to connect directly to AzerothCore. Stage 11 is building the first minimal local protocol client helper.
 
 ## Non-Negotiable Safety Rules
 
