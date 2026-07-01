@@ -247,7 +247,16 @@ func loot_open_probe(
 	target_name: String = "Nearby Creature",
 	host: String = "127.0.0.1",
 	port: String = "3724") -> Dictionary:
-	var native_result := _run_native_loot_open_probe(character_name, target_entry, target_name, host, port)
+	return loot_open_probe_selector(character_name, str(target_entry), target_name, host, port)
+
+
+func loot_open_probe_selector(
+	character_name: String = "Codexstage",
+	target_selector: String = "38",
+	target_name: String = "Nearby Creature",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_loot_open_probe_selector(character_name, target_selector, target_name, host, port)
 	if not native_result.is_empty():
 		return native_result
 
@@ -271,7 +280,7 @@ func loot_open_probe(
 			port,
 			str(credentials["account"]),
 			character_name,
-			str(target_entry),
+			target_selector,
 			target_name,
 		]),
 		str(credentials["password"]),
@@ -292,7 +301,16 @@ func corpse_loot_probe(
 	target_name: String = "Nearby Creature",
 	host: String = "127.0.0.1",
 	port: String = "3724") -> Dictionary:
-	var native_result := _run_native_corpse_loot_probe(character_name, target_entry, target_name, host, port)
+	return corpse_loot_probe_selector(character_name, str(target_entry), target_name, host, port)
+
+
+func corpse_loot_probe_selector(
+	character_name: String = "Codexstage",
+	target_selector: String = "299",
+	target_name: String = "Nearby Creature",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_corpse_loot_probe_selector(character_name, target_selector, target_name, host, port)
 	if not native_result.is_empty():
 		return native_result
 
@@ -316,7 +334,7 @@ func corpse_loot_probe(
 			port,
 			str(credentials["account"]),
 			character_name,
-			str(target_entry),
+			target_selector,
 			target_name,
 		]),
 		str(credentials["password"]),
@@ -340,7 +358,16 @@ func loot_inventory_handoff_probe(
 	target_name: String = "Nearby Creature",
 	host: String = "127.0.0.1",
 	port: String = "3724") -> Dictionary:
-	var native_result := _run_native_loot_inventory_handoff_probe(character_name, target_entry, target_name, host, port)
+	return loot_inventory_handoff_probe_selector(character_name, str(target_entry), target_name, host, port)
+
+
+func loot_inventory_handoff_probe_selector(
+	character_name: String = "Codexstage",
+	target_selector: String = "299",
+	target_name: String = "Nearby Creature",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_loot_inventory_handoff_probe_selector(character_name, target_selector, target_name, host, port)
 	if not native_result.is_empty():
 		return native_result
 
@@ -364,7 +391,7 @@ func loot_inventory_handoff_probe(
 			port,
 			str(credentials["account"]),
 			character_name,
-			str(target_entry),
+			target_selector,
 			target_name,
 		]),
 		str(credentials["password"]),
@@ -1050,22 +1077,31 @@ func _run_native_loot_open_probe(
 	target_name: String,
 	host: String,
 	port: String) -> Dictionary:
+	return _run_native_loot_open_probe_selector(character_name, str(target_entry), target_name, host, port)
+
+
+func _run_native_loot_open_probe_selector(
+	character_name: String,
+	target_selector: String,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
 	var credentials := _load_native_credentials()
 	if not credentials.get("available", false):
 		return credentials.get("result", {})
 
 	var client: Object = credentials["client"]
-	if not client.has_method("loot_open_probe"):
+	if not client.has_method("loot_open_probe_selector"):
 		return {}
 
 	var result = client.call(
-		"loot_open_probe",
+		"loot_open_probe_selector",
 		host,
 		port,
 		credentials["account"],
 		credentials["password"],
 		character_name,
-		target_entry,
+		target_selector,
 		target_name)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected loot result")
@@ -1083,22 +1119,31 @@ func _run_native_corpse_loot_probe(
 	target_name: String,
 	host: String,
 	port: String) -> Dictionary:
+	return _run_native_corpse_loot_probe_selector(character_name, str(target_entry), target_name, host, port)
+
+
+func _run_native_corpse_loot_probe_selector(
+	character_name: String,
+	target_selector: String,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
 	var credentials := _load_native_credentials()
 	if not credentials.get("available", false):
 		return credentials.get("result", {})
 
 	var client: Object = credentials["client"]
-	if not client.has_method("corpse_loot_probe"):
+	if not client.has_method("corpse_loot_probe_selector"):
 		return {}
 
 	var result = client.call(
-		"corpse_loot_probe",
+		"corpse_loot_probe_selector",
 		host,
 		port,
 		credentials["account"],
 		credentials["password"],
 		character_name,
-		target_entry,
+		target_selector,
 		target_name)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected corpse loot result")
@@ -1116,22 +1161,31 @@ func _run_native_loot_inventory_handoff_probe(
 	target_name: String,
 	host: String,
 	port: String) -> Dictionary:
+	return _run_native_loot_inventory_handoff_probe_selector(character_name, str(target_entry), target_name, host, port)
+
+
+func _run_native_loot_inventory_handoff_probe_selector(
+	character_name: String,
+	target_selector: String,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
 	var credentials := _load_native_credentials()
 	if not credentials.get("available", false):
 		return credentials.get("result", {})
 
 	var client: Object = credentials["client"]
-	if not client.has_method("loot_inventory_handoff_probe"):
+	if not client.has_method("loot_inventory_handoff_probe_selector"):
 		return {}
 
 	var result = client.call(
-		"loot_inventory_handoff_probe",
+		"loot_inventory_handoff_probe_selector",
 		host,
 		port,
 		credentials["account"],
 		credentials["password"],
 		character_name,
-		target_entry,
+		target_selector,
 		target_name)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected loot inventory result")
@@ -1993,12 +2047,29 @@ func _parse_corpse_loot_probe_output(output: String) -> Dictionary:
 func _parse_loot_inventory_handoff_output(output: String) -> Dictionary:
 	var result := {
 		"auth_flow_ok": false,
+		"live_target_found": false,
+		"target_has_position": false,
+		"target_health_seen": false,
+		"target_health": 0,
+		"target_max_health_seen": false,
+		"target_max_health": 0,
+		"target_dynamic_flags_seen": false,
+		"target_dynamic_flags": 0,
 		"target_dead_seen": false,
 		"target_lootable_seen": false,
+		"selection_sent": false,
+		"attack_sent": false,
+		"attack_stop_sent": false,
+		"attacker_state_updates": 0,
+		"total_damage": 0,
+		"loot_open_sent": false,
 		"loot_response_seen": false,
 		"loot_error": false,
+		"loot_item_pickup_sent_count": 0,
 		"loot_item_removed_count": 0,
+		"loot_release_sent": false,
 		"loot_release_response_seen": false,
+		"loot_release_success": false,
 		"response_opcode": 0,
 		"item_count": 0,
 		"gold": 0,
@@ -2026,12 +2097,29 @@ func _parse_loot_inventory_handoff_output(output: String) -> Dictionary:
 			result["target_guid"] = _extract_token_after(line, "target_guid=")
 			result["target_entry"] = _extract_int_field(line, "target_entry=")
 			result["target_name"] = _extract_quoted_field(line, "target_name=\"")
+			result["live_target_found"] = _extract_int_field(line, "live_target_found=") == 1
+			result["target_has_position"] = _extract_int_field(line, "target_has_position=") == 1
+			result["target_health_seen"] = _extract_int_field(line, "target_health_seen=") == 1
+			result["target_health"] = _extract_int_field(line, "target_health=")
+			result["target_max_health_seen"] = _extract_int_field(line, "target_max_health_seen=") == 1
+			result["target_max_health"] = _extract_int_field(line, "target_max_health=")
+			result["target_dynamic_flags_seen"] = _extract_int_field(line, "target_dynamic_flags_seen=") == 1
+			result["target_dynamic_flags"] = _extract_hex_field(line, "target_dynamic_flags=0x")
 			result["target_dead_seen"] = _extract_int_field(line, "target_dead_seen=") == 1
 			result["target_lootable_seen"] = _extract_int_field(line, "target_lootable_seen=") == 1
+			result["selection_sent"] = _extract_int_field(line, "selection_sent=") == 1
+			result["attack_sent"] = _extract_int_field(line, "attack_sent=") == 1
+			result["attack_stop_sent"] = _extract_int_field(line, "attack_stop_sent=") == 1
+			result["attacker_state_updates"] = _extract_int_field(line, "attacker_state_updates=")
+			result["total_damage"] = _extract_int_field(line, "total_damage=")
+			result["loot_open_sent"] = _extract_int_field(line, "loot_open_sent=") == 1
 			result["loot_response_seen"] = _extract_int_field(line, "loot_response_seen=") == 1
 			result["loot_error"] = _extract_int_field(line, "loot_error=") == 1
+			result["loot_item_pickup_sent_count"] = _extract_int_field(line, "loot_item_pickup_sent_count=")
 			result["loot_item_removed_count"] = _extract_int_field(line, "loot_item_removed_count=")
+			result["loot_release_sent"] = _extract_int_field(line, "loot_release_sent=") == 1
 			result["loot_release_response_seen"] = _extract_int_field(line, "loot_release_response_seen=") == 1
+			result["loot_release_success"] = _extract_int_field(line, "loot_release_success=") == 1
 			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
 			result["item_count"] = _extract_int_field(line, "item_count=")
 			result["gold"] = _extract_int_field(line, "gold=")

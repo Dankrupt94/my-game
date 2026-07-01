@@ -131,3 +131,13 @@ Mutating bridge actions write ignored local JSONL audit entries to:
 ```text
 local_runtime/database-transactions.log
 ```
+
+## Stage 17 Visible Target Report
+
+Run:
+
+```bash
+godot-4 --headless --path . --script res://tools/stage17_visible_targets_report.gd
+```
+
+The report logs visible creature candidates with entry, exact GUID, distance, health, and flags. Use it to diagnose loot/combat target selection without mutating server state.

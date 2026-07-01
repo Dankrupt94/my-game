@@ -1462,3 +1462,41 @@ Remaining work:
 - Let the scene send exact visible target GUIDs instead of only target entries.
 - Replace the list selection with actual in-world click picking.
 - Reuse a persistent world session across target scan, combat, loot, and inventory refresh.
+
+## 2026-07-01 - Add Stage 17 Parity Engine Spec And Exact Target Handoff Stabilization
+
+Goal: make the Stage 17 plan explicitly reference `wotlk_client_parity_engine_spec.md` while stabilizing the loot scene's exact-target handoff path.
+
+Plan:
+
+- Add `docs/wotlk_client_parity_engine_spec.md` as the Stage 17 engine-level definition of full playability.
+- Link the spec from the master plan, Stage 17 gate, and client feature parity matrix.
+- Preserve the rule that the original WotLK client is not a normal runtime dependency and proprietary inputs stay local-only.
+- Carry the visible-target picker forward from entry-only selection to exact runtime GUID selection.
+- Restore the loot-to-inventory handoff self-test to green through the Godot scene path.
+
+Result:
+
+- Added `docs/wotlk_client_parity_engine_spec.md` and linked it from the master plan, Stage 17 gate, and parity matrix.
+- Added selector-based Godot extension methods for loot open, corpse loot, and loot-to-inventory handoff so the scene can pass an exact runtime GUID instead of only a creature entry.
+- Updated `ProtocolClientBridge` to expose selector methods while keeping the older entry-based methods as wrappers.
+- Updated `scenes/stage17_loot_view.tscn` logic to scan visible targets before `Fight + Loot` and `Loot + Bag`, prefer live known-lootable local test entries, skip dead targets for automation, and pass the selected exact GUID.
+- Added `tools/stage17_visible_targets_report.gd` for safe local target diagnostics.
+- Diagnosed the previous handoff regression: a visible entry `299` exact GUID could be selected and attacked but did not reach dead/lootable state before the handoff check, while a closer exact entry `69` target completed combat and loot reliably.
+
+Validation:
+
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `godot-4 --headless --path . --quit` passed.
+- `ACORE_LOOT_TARGET_PICKER_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `target_count=140`, selected entry `69`, and selected GUID `0xf130000045000daa`.
+- `ACORE_LOOT_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `dead=true`, `loot_response_seen=true`, `item_removed=1`, `inventory_before=true`, `inventory_after=true`, `changed_slots=1`, `added_slots=1`, `handoff=true`, and opcode `0x160`.
+- `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with selected entry `69`, `dead=true`, `lootable=true`, `loot_response_seen=true`, `item_removed=2`, `release_response=true`, and opcode `0x160`.
+- `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with release response opcode `0x161`.
+- Local `qwen-agent` advisory review reported no blockers.
+
+Remaining work:
+
+- Replace the target list with real in-world click picking.
+- Reuse one persistent world session across target scan, combat, loot, and inventory refresh instead of reconnecting for each proof.
+- Turn the proof buttons into normal gameplay HUD flows.
+- Add full-bag, bind prompt, item-lock, nonzero-money, group loot, roll, and long-session checks.

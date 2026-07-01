@@ -5,6 +5,9 @@ const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
 const TEST_CHARACTER_NAME := "Codexstage"
 const LOOT_OPEN_TARGET_ENTRY := 38
 const CORPSE_LOOT_TARGET_ENTRY := 299
+const LOOTABLE_TEST_TARGET_ENTRIES := [69, CORPSE_LOOT_TARGET_ENTRY]
+const UNIT_DYNFLAG_LOOTABLE := 0x0001
+const UNIT_DYNFLAG_DEAD := 0x0020
 
 var status_label: Label
 var target_label: Label
@@ -15,6 +18,8 @@ var target_picker: ItemList
 var item_list: ItemList
 var inventory_list: ItemList
 var visible_targets: Array = []
+var selected_target_selector := ""
+var applying_scanned_target := false
 var self_test_finished := false
 
 
@@ -88,12 +93,14 @@ func _build_view() -> void:
 	target_entry_input.step = 1
 	target_entry_input.value = CORPSE_LOOT_TARGET_ENTRY
 	target_entry_input.custom_minimum_size = Vector2(130, 34)
+	target_entry_input.value_changed.connect(_on_target_manual_changed)
 	target_row.add_child(target_entry_input)
 
 	target_name_input = LineEdit.new()
 	target_name_input.text = "Nearby Creature"
 	target_name_input.custom_minimum_size = Vector2(180, 34)
 	target_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	target_name_input.text_changed.connect(_on_target_name_changed)
 	target_row.add_child(target_name_input)
 
 	var scan_button := Button.new()
@@ -148,10 +155,12 @@ func _run_loot_probe() -> void:
 	var bridge := ProtocolClientBridge.new()
 	var target_entry := LOOT_OPEN_TARGET_ENTRY
 	var target_name := "Nearby Creature"
+	var target_selector := str(target_entry)
 	if OS.get_environment("ACORE_LOOT_OPEN_SELF_TEST") != "1":
 		target_entry = _target_entry()
 		target_name = _target_name()
-	var result := bridge.loot_open_probe(TEST_CHARACTER_NAME, target_entry, target_name)
+		target_selector = _target_selector()
+	var result := bridge.loot_open_probe_selector(TEST_CHARACTER_NAME, target_selector, target_name)
 	var ok := bool(result.get("ok", false))
 	if not ok:
 		status_label.text = "Failed"
@@ -183,8 +192,10 @@ func _run_corpse_loot_probe() -> void:
 	loot_label.text = "Loot: fighting"
 	item_list.clear()
 	inventory_list.clear()
+	if selected_target_selector.is_empty():
+		_scan_visible_targets(false)
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.corpse_loot_probe(TEST_CHARACTER_NAME, _target_entry(), _target_name())
+	var result := bridge.corpse_loot_probe_selector(TEST_CHARACTER_NAME, _target_selector(), _target_name())
 	var ok := bool(result.get("ok", false))
 	if not ok:
 		status_label.text = "Failed"
@@ -219,8 +230,10 @@ func _run_loot_inventory_handoff_probe() -> void:
 	loot_label.text = "Loot: bag check"
 	item_list.clear()
 	inventory_list.clear()
+	if selected_target_selector.is_empty():
+		_scan_visible_targets(false)
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.loot_inventory_handoff_probe(TEST_CHARACTER_NAME, _target_entry(), _target_name())
+	var result := bridge.loot_inventory_handoff_probe_selector(TEST_CHARACTER_NAME, _target_selector(), _target_name())
 	var ok := bool(result.get("ok", false))
 	if not ok:
 		status_label.text = "Failed"
@@ -331,6 +344,22 @@ func _target_name() -> String:
 	return "Nearby Creature" if value.is_empty() else value
 
 
+func _target_selector() -> String:
+	if not selected_target_selector.is_empty():
+		return selected_target_selector
+	return str(_target_entry())
+
+
+func _on_target_manual_changed(_value: float) -> void:
+	if not applying_scanned_target:
+		selected_target_selector = ""
+
+
+func _on_target_name_changed(_value: String) -> void:
+	if not applying_scanned_target:
+		selected_target_selector = ""
+
+
 func _on_target_selected(index: int) -> void:
 	if target_picker == null or index < 0 or index >= target_picker.item_count:
 		return
@@ -343,8 +372,11 @@ func _on_target_selected(index: int) -> void:
 
 
 func _apply_target(target: Dictionary) -> void:
+	applying_scanned_target = true
+	selected_target_selector = str(target.get("guid", "")).strip_edges()
 	target_entry_input.value = int(target.get("entry", CORPSE_LOOT_TARGET_ENTRY))
 	target_name_input.text = _target_name_from_visible(target)
+	applying_scanned_target = false
 
 
 func _extract_visible_targets(result: Dictionary) -> Array:
@@ -379,11 +411,60 @@ func _extract_visible_targets(result: Dictionary) -> Array:
 
 
 func _default_target_index(targets: Array) -> int:
+	var best_preferred_index := -1
+	var best_preferred_score := INF
+	var best_live_index := -1
+	var best_live_score := INF
 	for index in range(targets.size()):
 		var target: Dictionary = targets[index]
-		if int(target.get("entry", 0)) == CORPSE_LOOT_TARGET_ENTRY:
-			return index
+		var score := _automation_target_score(target)
+		if _is_live_target(target) and score < best_live_score:
+			best_live_index = index
+			best_live_score = score
+		if _is_preferred_loot_target(target) and score < best_preferred_score:
+			best_preferred_index = index
+			best_preferred_score = score
+	if best_preferred_index >= 0:
+		return best_preferred_index
+	if best_live_index >= 0:
+		return best_live_index
 	return 0
+
+
+func _is_preferred_loot_target(target: Dictionary) -> bool:
+	if not _is_live_target(target):
+		return false
+	return LOOTABLE_TEST_TARGET_ENTRIES.has(int(target.get("entry", 0)))
+
+
+func _is_live_target(target: Dictionary) -> bool:
+	if bool(target.get("health_seen", false)) and int(target.get("health", 0)) <= 0:
+		return false
+	if bool(target.get("dynamic_flags_seen", false)):
+		var dynamic_flags := int(target.get("dynamic_flags", 0))
+		if (dynamic_flags & UNIT_DYNFLAG_DEAD) != 0:
+			return false
+	return true
+
+
+func _automation_target_score(target: Dictionary) -> float:
+	var score := float(target.get("distance", 999999.0))
+	if not bool(target.get("health_seen", false)):
+		score += 5000.0
+	else:
+		score += float(target.get("health", 0)) * 0.02
+		if int(target.get("health", 0)) <= 1:
+			score += 250.0
+	if bool(target.get("max_health_seen", false)):
+		score += float(target.get("max_health", 0)) * 0.03
+	var unit_flags := int(target.get("unit_flags", 0))
+	if unit_flags != 0:
+		score += 1000.0
+	if bool(target.get("dynamic_flags_seen", false)):
+		var dynamic_flags := int(target.get("dynamic_flags", 0))
+		if (dynamic_flags & UNIT_DYNFLAG_LOOTABLE) != 0:
+			score += 500.0
+	return score
 
 
 func _distance_from_login(login: Dictionary, object: Dictionary) -> float:
@@ -514,10 +595,16 @@ func _opcode_hex(value: int) -> String:
 func _failure_summary(prefix: String, result: Dictionary) -> String:
 	var details: Array[String] = [
 		"target_entry=" + str(result.get("target_entry", "?")),
+		"target_guid=" + str(result.get("target_guid", "0x0")),
 		"live_target=" + str(result.get("live_target_found", false)),
+		"selected=" + str(result.get("selection_sent", false)),
+		"attack=" + str(result.get("attack_sent", false)),
+		"loot_open=" + str(result.get("loot_open_sent", false)),
 		"dead=" + str(result.get("target_dead_seen", false)),
 		"lootable=" + str(result.get("target_lootable_seen", false)),
 		"loot_response=" + str(result.get("loot_response_seen", false)),
+		"pickup_sent=" + str(result.get("loot_item_pickup_sent_count", 0)),
+		"item_removed=" + str(result.get("loot_item_removed_count", 0)),
 		"release_response=" + str(result.get("loot_release_response_seen", false)),
 		"handoff=" + str(result.get("handoff_confirmed", false)),
 		"changed_slots=" + str(result.get("changed_slot_count", 0)),

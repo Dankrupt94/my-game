@@ -6,6 +6,10 @@ Status: In progress
 
 Verify that the Godot client is a fully functional WotLK port for AzerothCore, not a companion tool, not a reimagined game, and not a partial prototype.
 
+## Engine Spec
+
+Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md) as the detailed checklist for full playability. The gate cannot be treated as complete while that spec still has normal player-facing client behavior missing without an explicit compatibility note.
+
 ## Acceptance Requirements
 
 - Godot can authenticate, list realms, list characters, enter world, and maintain a live world session through the AzerothCore protocol.
@@ -141,3 +145,18 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Validation: `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `dead=true`, `lootable=true`, `loot_response=true`, `item_removed=1`, `release_response=true`, and opcode `0x160`.
 - Caveat: `ACORE_LOOT_INVENTORY_SELF_TEST=1` was rerun three times in this checkpoint and failed to confirm a new inventory handoff (`changed_slots=0`). The narrower corpse-loot proof still passed, so the next handoff task should stabilize target choice/session timing and then restore this regression to green.
 - Remaining work: exact GUID selection from the visible target list, real in-world click picking, persistent session reuse across target/combat/loot/inventory, and a stabilized loot-to-bag proof.
+
+### 2026-07-01 - Exact Target Selector And Handoff Stabilization
+
+- Added [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md) as the explicit Stage 17 reference for full Godot-native client playability.
+- Added selector-based loot methods through the Godot extension and script bridge so `stage17_loot_view.tscn` can pass either an entry id or an exact runtime object GUID.
+- Updated the loot scene so `Fight + Loot` and `Loot + Bag` scan visible targets first, choose a live known-lootable local test target, and send the selected exact GUID into the native protocol flow.
+- Added `tools/stage17_visible_targets_report.gd` to print visible target candidates with entry, GUID, distance, health, and flags for safe local diagnostics.
+- Validation: `./tools/build_godot_protocol_extension_compat.sh` passed.
+- Validation: `godot-4 --headless --path . --quit` passed.
+- Validation: `ACORE_LOOT_TARGET_PICKER_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `target_count=140`, selected entry `69`, and selected GUID `0xf130000045000daa`.
+- Validation: `ACORE_LOOT_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with selected entry `69`, `changed_slots=1`, `added_slots=1`, `handoff=true`, and response opcode `0x160`.
+- Validation: `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with selected entry `69`, `dead=true`, `lootable=true`, `item_removed=2`, `release_response=true`, and response opcode `0x160`.
+- Validation: `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` still passed with release response opcode `0x161`.
+- Local `qwen-agent` advisory review reported no blockers.
+- Remaining work: replace the list picker with real in-world click picking, keep one persistent world session across scan/combat/loot/inventory refresh, and turn the proof buttons into normal HUD gameplay.

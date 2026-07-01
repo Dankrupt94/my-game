@@ -67,6 +67,8 @@ It does not mean copying the old executable, using the original client as the pl
 
 The project should only be considered a completed WotLK Godot port when Godot can provide the normal player-facing client experience against AzerothCore without launching the original WotLK client.
 
+The detailed Stage 17 checklist lives in [WotLK Client Parity Engine Spec](wotlk_client_parity_engine_spec.md). That spec is the concrete reference for what "fully playable" means while the parity matrix tracks current status.
+
 Acceptance requires:
 
 - auth, realm, character selection, and enter-world flows through Godot,
