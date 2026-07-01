@@ -14,6 +14,7 @@ constexpr std::uint32_t CMSG_CHAR_ENUM = 0x037;
 constexpr std::uint32_t CMSG_PLAYER_LOGIN = 0x03D;
 constexpr std::uint32_t CMSG_LOGOUT_REQUEST = 0x04B;
 constexpr std::uint32_t CMSG_MESSAGECHAT = 0x095;
+constexpr std::uint32_t CMSG_CAST_SPELL = 0x12E;
 constexpr std::uint32_t CMSG_SET_SELECTION = 0x13D;
 constexpr std::uint32_t CMSG_ATTACKSWING = 0x141;
 constexpr std::uint32_t CMSG_ATTACKSTOP = 0x142;
@@ -31,6 +32,10 @@ constexpr std::uint16_t SMSG_MESSAGECHAT = 0x096;
 constexpr std::uint16_t SMSG_UPDATE_OBJECT = 0x0A9;
 constexpr std::uint16_t SMSG_ACTION_BUTTONS = 0x129;
 constexpr std::uint16_t SMSG_INITIAL_SPELLS = 0x12A;
+constexpr std::uint16_t SMSG_CAST_FAILED = 0x130;
+constexpr std::uint16_t SMSG_SPELL_START = 0x131;
+constexpr std::uint16_t SMSG_SPELL_GO = 0x132;
+constexpr std::uint16_t SMSG_SPELL_FAILURE = 0x133;
 constexpr std::uint16_t SMSG_ATTACKSTART = 0x143;
 constexpr std::uint16_t SMSG_ATTACKSTOP = 0x144;
 constexpr std::uint16_t SMSG_ATTACKSWING_NOTINRANGE = 0x145;
@@ -43,6 +48,7 @@ constexpr std::uint16_t SMSG_GOSSIP_MESSAGE = 0x17D;
 constexpr std::uint16_t SMSG_LOGIN_VERIFY_WORLD = 0x236;
 constexpr std::uint16_t SMSG_TIME_SYNC_REQ = 0x390;
 constexpr std::uint16_t SMSG_GM_MESSAGECHAT = 0x3B3;
+constexpr std::uint16_t SMSG_SPELL_FAILED_OTHER = 0x2A6;
 constexpr std::uint8_t CHAT_MSG_SAY = 0x01;
 constexpr std::uint8_t CHAT_MSG_WHISPER = 0x07;
 constexpr std::uint8_t CHAT_MSG_WHISPER_INFORM = 0x09;
@@ -164,6 +170,22 @@ struct ActionButtonsSummary
     std::vector<ActionButtonSummary> buttons;
 };
 
+struct SpellCastResponseSummary
+{
+    bool parsed = false;
+    std::uint16_t opcode = 0;
+    std::uint64_t source_guid = 0;
+    std::uint64_t caster_guid = 0;
+    std::uint8_t cast_count = 0;
+    std::uint32_t spell_id = 0;
+    std::uint32_t cast_flags = 0;
+    std::uint8_t fail_reason = 0;
+    bool cast_failed = false;
+    bool spell_start = false;
+    bool spell_go = false;
+    bool spell_failure = false;
+};
+
 std::vector<std::uint8_t> build_empty_addon_info();
 std::vector<std::uint8_t> build_auth_session_payload(
     std::string const& account,
@@ -181,12 +203,18 @@ std::vector<std::uint8_t> build_chat_whisper_payload(
     std::uint32_t language,
     std::string const& target_name,
     std::string const& message);
+std::vector<std::uint8_t> build_cast_spell_payload(
+    std::uint8_t cast_count,
+    std::uint32_t spell_id,
+    std::uint8_t cast_flags,
+    std::uint32_t target_mask);
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload);
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);
 ChatMessageSummary parse_chat_message_summary(std::span<const std::uint8_t> payload, bool gm_message);
 InitialSpellsSummary parse_initial_spells_summary(std::span<const std::uint8_t> payload);
 ActionButtonsSummary parse_action_buttons_summary(std::span<const std::uint8_t> payload);
+SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::span<const std::uint8_t> payload);
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,

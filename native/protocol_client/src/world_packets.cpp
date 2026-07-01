@@ -634,6 +634,20 @@ std::vector<std::uint8_t> build_chat_whisper_payload(
     return payload;
 }
 
+std::vector<std::uint8_t> build_cast_spell_payload(
+    std::uint8_t cast_count,
+    std::uint32_t spell_id,
+    std::uint8_t cast_flags,
+    std::uint32_t target_mask)
+{
+    std::vector<std::uint8_t> payload;
+    append_u8(payload, cast_count);
+    append_u32_le(payload, spell_id);
+    append_u8(payload, cast_flags);
+    append_u32_le(payload, target_mask);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload)
 {
     std::vector<std::uint8_t> packet = build_client_header(opcode, payload.size());
@@ -745,10 +759,16 @@ InitialSpellsSummary parse_initial_spells_summary(std::span<const std::uint8_t> 
         summary.spells.push_back(spell);
     }
 
-    summary.cooldown_count = read_u16_le(payload, offset);
-    for (std::uint16_t i = 0; i < summary.cooldown_count; ++i)
+    std::uint16_t const advertised_cooldown_count = read_u16_le(payload, offset);
+    summary.cooldown_count = 0;
+    for (std::uint16_t i = 0; i < advertised_cooldown_count && offset < payload.size(); ++i)
     {
+        if (offset + 16 > payload.size())
+        {
+            break;
+        }
         skip_bytes(payload, offset, 4 + 2 + 2 + 4 + 4);
+        ++summary.cooldown_count;
     }
     if (offset != payload.size())
     {
@@ -791,6 +811,49 @@ ActionButtonsSummary parse_action_buttons_summary(std::span<const std::uint8_t> 
         summary.buttons.push_back(action_button);
     }
     return summary;
+}
+
+SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    SpellCastResponseSummary summary;
+    summary.opcode = opcode;
+
+    if (opcode == SMSG_CAST_FAILED)
+    {
+        summary.cast_count = read_u8(payload, offset);
+        summary.spell_id = read_u32_le(payload, offset);
+        summary.fail_reason = read_u8(payload, offset);
+        summary.cast_failed = true;
+        summary.parsed = true;
+        return summary;
+    }
+
+    if (opcode == SMSG_SPELL_FAILURE || opcode == SMSG_SPELL_FAILED_OTHER)
+    {
+        summary.caster_guid = read_packed_guid(payload, offset);
+        summary.cast_count = read_u8(payload, offset);
+        summary.spell_id = read_u32_le(payload, offset);
+        summary.fail_reason = read_u8(payload, offset);
+        summary.spell_failure = true;
+        summary.parsed = true;
+        return summary;
+    }
+
+    if (opcode == SMSG_SPELL_START || opcode == SMSG_SPELL_GO)
+    {
+        summary.source_guid = read_packed_guid(payload, offset);
+        summary.caster_guid = read_packed_guid(payload, offset);
+        summary.cast_count = read_u8(payload, offset);
+        summary.spell_id = read_u32_le(payload, offset);
+        summary.cast_flags = read_u32_le(payload, offset);
+        summary.spell_start = opcode == SMSG_SPELL_START;
+        summary.spell_go = opcode == SMSG_SPELL_GO;
+        summary.parsed = true;
+        return summary;
+    }
+
+    throw std::runtime_error("unsupported spell cast response opcode");
 }
 
 UpdateObjectSummary parse_update_object_summary(
@@ -933,6 +996,13 @@ bool world_packet_self_test()
         return false;
     }
 
+    auto cast_payload = build_cast_spell_payload(1, 2457, 0, 0);
+    auto cast_packet = build_client_packet(CMSG_CAST_SPELL, cast_payload);
+    if (cast_packet.size() != 6 + 1 + 4 + 1 + 4 || cast_packet[2] != 0x2E || cast_packet[3] != 0x01)
+    {
+        return false;
+    }
+
     auto create_payload = build_character_create_payload("Codextest");
     if (create_payload.empty() || create_payload.back() != 0)
     {
@@ -1036,6 +1106,20 @@ bool world_packet_self_test()
     }
     ActionButtonsSummary action_buttons = parse_action_buttons_summary(action_buttons_payload);
 
+    std::vector<std::uint8_t> spell_go_payload;
+    append_packed_guid(spell_go_payload, 0x1234);
+    append_packed_guid(spell_go_payload, 0x1234);
+    append_u8(spell_go_payload, 1);
+    append_u32_le(spell_go_payload, 2457);
+    append_u32_le(spell_go_payload, 0x200);
+    SpellCastResponseSummary spell_go = parse_spell_cast_response(SMSG_SPELL_GO, spell_go_payload);
+
+    std::vector<std::uint8_t> cast_failed_payload;
+    append_u8(cast_failed_payload, 1);
+    append_u32_le(cast_failed_payload, 78);
+    append_u8(cast_failed_payload, 2);
+    SpellCastResponseSummary cast_failed = parse_spell_cast_response(SMSG_CAST_FAILED, cast_failed_payload);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -1072,5 +1156,14 @@ bool world_packet_self_test()
         && action_buttons.buttons[0].action == 78
         && action_buttons.buttons[0].type == 0
         && action_buttons.buttons[1].action == 6948
-        && action_buttons.buttons[1].type == 0x80;
+        && action_buttons.buttons[1].type == 0x80
+        && spell_go.parsed
+        && spell_go.spell_go
+        && spell_go.spell_id == 2457
+        && spell_go.cast_count == 1
+        && spell_go.caster_guid == 0x1234
+        && cast_failed.parsed
+        && cast_failed.cast_failed
+        && cast_failed.spell_id == 78
+        && cast_failed.fail_reason == 2;
 }

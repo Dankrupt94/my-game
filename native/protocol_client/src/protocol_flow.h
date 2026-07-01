@@ -155,6 +155,19 @@ struct ActionButtonsResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct SpellCastProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint32_t spell_id = 0;
+    bool cast_sent = false;
+    bool logged_in_world = false;
+    bool response_seen = false;
+    bool accepted = false;
+    SpellCastResponseSummary response;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -264,5 +277,14 @@ ActionButtonsResult read_action_buttons(
     std::string const& account,
     std::string const& password,
     std::string const& character_name,
+    FlowOptions options = {});
+
+SpellCastProbeResult cast_spell_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint32_t spell_id,
     FlowOptions options = {});
 }

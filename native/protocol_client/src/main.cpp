@@ -547,6 +547,54 @@ int action_buttons(
     return result.action_buttons_seen && result.action_buttons.buttons.size() == MaxActionButtons ? 0 : 1;
 }
 
+int cast_spell(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& spell_id_text)
+{
+    std::size_t parsed = 0;
+    std::uint32_t const spell_id = static_cast<std::uint32_t>(std::stoul(spell_id_text, &parsed, 10));
+    if (parsed != spell_id_text.size())
+    {
+        throw std::runtime_error("spell id contains trailing characters");
+    }
+
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::SpellCastProbeResult result = acore_protocol::cast_spell_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        spell_id,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "SPELL_CAST_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " spell_id=" << result.spell_id
+              << " cast_sent=" << (result.cast_sent ? 1 : 0)
+              << " logged_in_world=" << (result.logged_in_world ? 1 : 0)
+              << " response_seen=" << (result.response_seen ? 1 : 0)
+              << " accepted=" << (result.accepted ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.response.opcode << std::dec
+              << " response_spell_id=" << result.response.spell_id
+              << " cast_count=" << static_cast<int>(result.response.cast_count)
+              << " cast_flags=0x" << std::hex << result.response.cast_flags << std::dec
+              << " fail_reason=" << static_cast<int>(result.response.fail_reason)
+              << " spell_start=" << (result.response.spell_start ? 1 : 0)
+              << " spell_go=" << (result.response.spell_go ? 1 : 0)
+              << " cast_failed=" << (result.response.cast_failed ? 1 : 0)
+              << " spell_failure=" << (result.response.spell_failure ? 1 : 0)
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    return result.cast_sent && result.accepted ? 0 : 1;
+}
+
 int world_challenge(std::string const& host, std::string const& port)
 {
     acore_protocol::WorldChallengeSummary summary = acore_protocol::probe_world_challenge(host, port);
@@ -574,6 +622,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-whisper-self <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --spellbook <host> <port> <account> <character-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --action-buttons <host> <port> <account> <character-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --cast-spell <host> <port> <account> <character-name> <spell-id>\n"
               << "  acore_protocol_client --world-challenge <host> <port>\n";
 }
 }
@@ -650,6 +699,11 @@ int main(int argc, char** argv)
         if (argc == 6 && std::strcmp(argv[1], "--action-buttons") == 0)
         {
             return action_buttons(argv[2], argv[3], argv[4], argv[5]);
+        }
+
+        if (argc == 7 && std::strcmp(argv[1], "--cast-spell") == 0)
+        {
+            return cast_spell(argv[2], argv[3], argv[4], argv[5], argv[6]);
         }
 
         usage();

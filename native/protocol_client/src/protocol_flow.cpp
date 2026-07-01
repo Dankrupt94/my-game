@@ -718,6 +718,15 @@ bool is_chat_response_opcode(std::uint16_t opcode)
     return opcode == SMSG_MESSAGECHAT || opcode == SMSG_GM_MESSAGECHAT;
 }
 
+bool is_spell_cast_response_opcode(std::uint16_t opcode)
+{
+    return opcode == SMSG_SPELL_START
+        || opcode == SMSG_SPELL_GO
+        || opcode == SMSG_CAST_FAILED
+        || opcode == SMSG_SPELL_FAILURE
+        || opcode == SMSG_SPELL_FAILED_OTHER;
+}
+
 void validate_chat_message(std::string const& message)
 {
     if (message.empty())
@@ -1644,6 +1653,87 @@ ActionButtonsResult read_action_buttons(
                 break;
             }
             continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+SpellCastProbeResult cast_spell_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint32_t spell_id,
+    FlowOptions options)
+{
+    if (spell_id == 0)
+    {
+        throw std::runtime_error("spell id must be positive");
+    }
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    (void)login_selected_character(*session, selected, options);
+
+    SpellCastProbeResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.spell_id = spell_id;
+
+    result.logged_in_world = wait_for_logged_in_world(*session, options, 650);
+    if (!result.logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before spell cast");
+    }
+
+    write_world_packet(
+        session->socket.get(),
+        CMSG_CAST_SPELL,
+        build_cast_spell_payload(1, spell_id, 0, 0),
+        &session->crypt);
+    result.cast_sent = true;
+
+    for (int i = 0; i < 100; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (is_spell_cast_response_opcode(packet->opcode))
+        {
+            try
+            {
+                SpellCastResponseSummary response = parse_spell_cast_response(packet->opcode, packet->payload);
+                if (response.spell_id == spell_id)
+                {
+                    result.response = response;
+                    result.response_seen = true;
+                    result.accepted = response.spell_start || response.spell_go;
+                    if (response.spell_go || response.cast_failed || response.spell_failure)
+                    {
+                        break;
+                    }
+                    continue;
+                }
+            }
+            catch (std::exception const&)
+            {
+                // Keep scanning; packet opcode evidence is retained below.
+            }
         }
         if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
         {

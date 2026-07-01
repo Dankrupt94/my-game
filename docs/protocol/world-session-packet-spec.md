@@ -374,11 +374,13 @@ Payload from `Player::SendInitialSpells`:
 | cooldown count | 2 | `uint16` |
 | cooldown rows | 16 per cooldown | `uint32 spell`, `uint16 item`, `uint16 category`, `uint32 cooldown`, `uint32 category cooldown` |
 
+Parser note: AzerothCore currently writes `m_spellCooldowns.size()` as the cooldown count, then skips cooldown rows where `needSendToClient` is false or the spell is invalid. The Stage 16 parser therefore treats the count as an upper bound and reports the cooldown rows actually present in the payload.
+
 Observed Stage 16 result:
 
 - Native helper command `--spellbook` observed `SMSG_INITIAL_SPELLS` for `Codexstage`.
-- The live packet contained `48` initial spells and `0` cooldown rows.
-- Godot scene `scenes/stage16_spellbook_view.tscn` passed with `SPELLBOOK_SELF_TEST_OK spells=48 cooldowns=0`.
+- The live packet contained `48` initial spells and either `0` or `1` serialized cooldown row depending on whether the test character had just cast spell `2457`.
+- Godot scene `scenes/stage16_spellbook_view.tscn` passed with `SPELLBOOK_SELF_TEST_OK spells=48`; clean-login runs showed `cooldowns=0`, and immediate post-cast regression showed `cooldowns=1`.
 
 Remaining spell packet work:
 
@@ -386,6 +388,47 @@ Remaining spell packet work:
 - Parse cooldown update packets after casts.
 - Build and validate `CMSG_CAST_SPELL` with target flags.
 - Parse cast success/failure, interrupt, aura, and combat-result packets.
+
+## Spell Cast Slice
+
+Stage 16 now sends a minimal client cast and parses the first accepted server response.
+
+Client cast request:
+
+| Opcode | Value | Payload |
+| --- | ---: | --- |
+| `CMSG_CAST_SPELL` | `0x12E` | `uint8 cast_count`, `uint32 spell_id`, `uint8 cast_flags`, `SpellCastTargets` |
+
+First-slice request values:
+
+| Field | Value | Notes |
+| --- | ---: | --- |
+| `cast_count` | `1` | Simple client cast counter for the probe |
+| `spell_id` | `2457` | Local test warrior stance spell, selected because it is active and does not require an enemy target |
+| `cast_flags` | `0` | No client movement/item extras in this slice |
+| `target mask` | `0` | Empty `SpellCastTargets`; target defaults to caster context where the spell allows it |
+
+Server responses parsed by the Stage 16 summary parser:
+
+| Opcode | Value | Stage 16 support |
+| --- | ---: | --- |
+| `SMSG_CAST_FAILED` | `0x130` | Parses cast count, spell id, and fail reason |
+| `SMSG_SPELL_START` | `0x131` | Parses source/caster packed GUIDs, cast count, spell id, and cast flags |
+| `SMSG_SPELL_GO` | `0x132` | Parses source/caster packed GUIDs, cast count, spell id, and cast flags |
+| `SMSG_SPELL_FAILURE` | `0x133` | Parses caster packed GUID, cast count, spell id, and fail reason |
+| `SMSG_SPELL_FAILED_OTHER` | `0x2A6` | Parses caster packed GUID, cast count, spell id, and fail reason |
+
+Observed Stage 16 result:
+
+- Native helper command `--cast-spell` sent spell `2457` as `Codexstage`.
+- AzerothCore accepted the cast and returned `SMSG_SPELL_GO` (`0x132`) with `response_spell_id=2457` and `cast_count=1`.
+- Godot scene `scenes/stage16_spell_cast_view.tscn` passed with `SPELL_CAST_SELF_TEST_OK spell_id=2457 opcode=0x132 accepted=true`.
+
+Remaining spell-cast work:
+
+- Drive casts from action-bar slot clicks instead of a raw spell-id input.
+- Add target masks for selected enemy, friendly target, item target, source location, destination location, and string targets.
+- Parse and surface cast failures, global cooldown/cooldown updates, interrupt messages, aura application, damage/healing results, and combat log consequences.
 
 ## Initial Action Buttons Slice
 

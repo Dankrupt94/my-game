@@ -53,6 +53,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 - 2026-07-01: Chat slice expanded to self-whisper. Godot now sends a whisper packet addressed to the local test character and receives both whisper and whisper-inform responses.
 - 2026-07-01: First spellbook slice is working. Godot parses `SMSG_INITIAL_SPELLS` and displays the server-provided initial spell IDs.
 - 2026-07-01: First action-bar slice is working. Godot parses `SMSG_ACTION_BUTTONS`, unpacks the 144 server-provided action slots, and displays populated slots in a read-only action-bar scene.
+- 2026-07-01: First spell-cast slice is working. Godot sends `CMSG_CAST_SPELL` for the local warrior stance spell `2457` and receives `SMSG_SPELL_GO` opcode `0x132`.
 
 ## Active Slice: Chat
 
@@ -79,12 +80,14 @@ Completed first target:
 - [x] Parse `SMSG_INITIAL_SPELLS`.
 - [x] Expose initial spell IDs and cooldown count through the native helper and Godot extension.
 - [x] Add a Godot spellbook scene with a headless self-test.
+- [x] Tolerate AzerothCore initial-spell packets where the advertised cooldown-map count is larger than the cooldown rows actually serialized.
+- [x] Send a safe no-target `CMSG_CAST_SPELL` and parse the accepted `SMSG_SPELL_GO` response.
+- [x] Add a Godot spell-cast scene with a headless self-test.
 
 Remaining spell parity work:
 
 - Resolve spell names, ranks, icons, and descriptions from local-only data sources.
-- Add action bars and keybind-driven spell placement.
-- Build `CMSG_CAST_SPELL` support with target flags and cast-count handling.
+- Expand `CMSG_CAST_SPELL` support with target flags, item targets, destination targets, and cast-count edge cases.
 - Parse cooldown, cast-fail, interrupt, aura, and combat-result packets.
 
 ## Active Slice: Action Bars

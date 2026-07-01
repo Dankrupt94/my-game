@@ -19,6 +19,7 @@ const INTERACTION_COMBAT_SCENE := "res://scenes/interaction_combat_view.tscn"
 const CHAT_SCENE := "res://scenes/stage16_chat_view.tscn"
 const SPELLBOOK_SCENE := "res://scenes/stage16_spellbook_view.tscn"
 const ACTION_BAR_SCENE := "res://scenes/stage16_action_bar_view.tscn"
+const SPELL_CAST_SCENE := "res://scenes/stage16_spell_cast_view.tscn"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
 const DATA_VIEWS := ["summary", "accounts", "characters", "online", "creatures", "items", "quests", "spells"]
@@ -105,6 +106,10 @@ func _register_command_actions() -> void:
 			"label": "Action Bar",
 			"handler": Callable(self, "_action_open_action_bar"),
 		},
+		"open_spell_cast": {
+			"label": "Cast Spell",
+			"handler": Callable(self, "_action_open_spell_cast"),
+		},
 		"protocol_character_flow": {
 			"label": "Check Protocol",
 			"handler": Callable(self, "_action_protocol_character_flow"),
@@ -183,6 +188,7 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("open_chat"))
 	actions.add_child(_action_button("open_spellbook"))
 	actions.add_child(_action_button("open_action_bar"))
+	actions.add_child(_action_button("open_spell_cast"))
 	actions.add_child(_action_button("protocol_character_flow"))
 	actions.add_child(_action_button("open_logs"))
 	actions.add_child(_action_button("open_reports"))
@@ -445,6 +451,12 @@ func _action_open_action_bar() -> void:
 	var error := get_tree().change_scene_to_file(ACTION_BAR_SCENE)
 	if error != OK:
 		_append_log("Could not open action-bar scene. Error code: " + str(error))
+
+
+func _action_open_spell_cast() -> void:
+	var error := get_tree().change_scene_to_file(SPELL_CAST_SCENE)
+	if error != OK:
+		_append_log("Could not open spell-cast scene. Error code: " + str(error))
 
 
 func _action_launch_client() -> void:

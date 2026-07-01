@@ -402,6 +402,48 @@ func action_buttons(
 	return parsed
 
 
+func cast_spell(
+	character_name: String = "Codexstage",
+	spell_id: int = 2457,
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_cast_spell(character_name, spell_id, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--cast-spell",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			str(spell_id),
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_cast_spell_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("accepted", false))
+	return parsed
+
+
 func run_self_test() -> Dictionary:
 	var helper := _helper_path()
 	if not FileAccess.file_exists(helper):
@@ -718,6 +760,37 @@ func _run_native_action_buttons(
 		character_name)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected action-button result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
+func _run_native_cast_spell(
+	character_name: String,
+	spell_id: int,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("cast_spell"):
+		return {}
+
+	var result = client.call(
+		"cast_spell",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		spell_id)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected cast-spell result")
 
 	var parsed: Dictionary = result
 	parsed["source"] = "Godot native extension"
@@ -1115,6 +1188,48 @@ func _parse_action_buttons_output(output: String) -> Dictionary:
 				"packed": _extract_hex_field(line, "packed=0x"),
 				"populated": true,
 			})
+	return result
+
+
+func _parse_cast_spell_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"cast_sent": false,
+		"logged_in_world": false,
+		"response_seen": false,
+		"accepted": false,
+		"spell_id": 0,
+		"response_opcode": 0,
+		"response_spell_id": 0,
+		"cast_count": 0,
+		"cast_flags": 0,
+		"fail_reason": 0,
+		"spell_start": false,
+		"spell_go": false,
+		"cast_failed": false,
+		"spell_failure": false,
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("SPELL_CAST_PROBE"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["spell_id"] = _extract_int_field(line, "spell_id=")
+			result["cast_sent"] = _extract_int_field(line, "cast_sent=") == 1
+			result["logged_in_world"] = _extract_int_field(line, "logged_in_world=") == 1
+			result["response_seen"] = _extract_int_field(line, "response_seen=") == 1
+			result["accepted"] = _extract_int_field(line, "accepted=") == 1
+			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
+			result["response_spell_id"] = _extract_int_field(line, "response_spell_id=")
+			result["cast_count"] = _extract_int_field(line, "cast_count=")
+			result["cast_flags"] = _extract_hex_field(line, "cast_flags=0x")
+			result["fail_reason"] = _extract_int_field(line, "fail_reason=")
+			result["spell_start"] = _extract_int_field(line, "spell_start=") == 1
+			result["spell_go"] = _extract_int_field(line, "spell_go=") == 1
+			result["cast_failed"] = _extract_int_field(line, "cast_failed=") == 1
+			result["spell_failure"] = _extract_int_field(line, "spell_failure=") == 1
 	return result
 
 

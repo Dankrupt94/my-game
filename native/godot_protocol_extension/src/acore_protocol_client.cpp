@@ -166,6 +166,24 @@ Array action_button_array(std::vector<ActionButtonSummary> const& buttons)
     return values;
 }
 
+Dictionary spell_cast_response_dictionary(SpellCastResponseSummary const& response)
+{
+    Dictionary value;
+    value["parsed"] = response.parsed;
+    value["opcode"] = static_cast<int>(response.opcode);
+    value["source_guid"] = guid_to_hex(response.source_guid);
+    value["caster_guid"] = guid_to_hex(response.caster_guid);
+    value["cast_count"] = static_cast<int>(response.cast_count);
+    value["spell_id"] = static_cast<int>(response.spell_id);
+    value["cast_flags"] = static_cast<int64_t>(response.cast_flags);
+    value["fail_reason"] = static_cast<int>(response.fail_reason);
+    value["cast_failed"] = response.cast_failed;
+    value["spell_start"] = response.spell_start;
+    value["spell_go"] = response.spell_go;
+    value["spell_failure"] = response.spell_failure;
+    return value;
+}
+
 Dictionary update_dictionary(UpdateObjectSummary const& update)
 {
     Dictionary value;
@@ -243,6 +261,9 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("action_buttons", "host", "port", "account", "password", "character_name"),
         &AcoreProtocolClient::action_buttons);
+    ClassDB::bind_method(
+        D_METHOD("cast_spell", "host", "port", "account", "password", "character_name", "spell_id"),
+        &AcoreProtocolClient::cast_spell);
 }
 
 Dictionary AcoreProtocolClient::self_test()
@@ -564,6 +585,59 @@ Dictionary AcoreProtocolClient::action_buttons(
         result["slot_count"] = static_cast<int>(flow.action_buttons.buttons.size());
         result["populated_count"] = static_cast<int>(flow.action_buttons.populated_count);
         result["buttons"] = action_button_array(flow.action_buttons.buttons);
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::cast_spell(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t spell_id)
+{
+    try
+    {
+        if (spell_id <= 0)
+        {
+            return failure("spell id must be positive");
+        }
+
+        acore_protocol::SpellCastProbeResult flow = acore_protocol::cast_spell_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<std::uint32_t>(spell_id));
+
+        Dictionary result;
+        result["ok"] = flow.cast_sent && flow.accepted;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["spell_id"] = static_cast<int>(flow.spell_id);
+        result["cast_sent"] = flow.cast_sent;
+        result["logged_in_world"] = flow.logged_in_world;
+        result["response_seen"] = flow.response_seen;
+        result["accepted"] = flow.accepted;
+        result["response"] = spell_cast_response_dictionary(flow.response);
+        result["response_opcode"] = static_cast<int>(flow.response.opcode);
+        result["response_spell_id"] = static_cast<int>(flow.response.spell_id);
+        result["cast_count"] = static_cast<int>(flow.response.cast_count);
+        result["cast_flags"] = static_cast<int64_t>(flow.response.cast_flags);
+        result["fail_reason"] = static_cast<int>(flow.response.fail_reason);
+        result["spell_start"] = flow.response.spell_start;
+        result["spell_go"] = flow.response.spell_go;
+        result["cast_failed"] = flow.response.cast_failed;
+        result["spell_failure"] = flow.response.spell_failure;
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

@@ -940,3 +940,40 @@ Validation:
 - `ACORE_SPELLBOOK_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spellbook_view.tscn` still passed with `spells=48`.
 - `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` still passed with say and self-whisper responses.
 - Local `qwen-agent` advisory review found no concrete blockers for the bounded action-bar slice.
+
+## 2026-07-01 - Add Stage 16 Spell-Cast Slice
+
+Goal: prove Godot can send a real client spell-cast opcode to AzerothCore and parse the accepted server response.
+
+Plan:
+
+- Add a minimal `CMSG_CAST_SPELL` payload builder.
+- Parse the first cast response opcodes: `SMSG_CAST_FAILED`, `SMSG_SPELL_START`, `SMSG_SPELL_GO`, `SMSG_SPELL_FAILURE`, and `SMSG_SPELL_FAILED_OTHER`.
+- Add a native spell-cast probe.
+- Expose spell casting through the Godot extension and script bridge.
+- Add a Godot spell-cast scene with a headless self-test.
+- Use a safe no-target local spell first; do not implement targeted combat casting yet.
+
+Result:
+
+- Added `build_cast_spell_payload` and `parse_spell_cast_response`.
+- Added `acore_protocol::cast_spell_probe` and the `--cast-spell` helper command.
+- Added `AcoreProtocolClient.cast_spell(...)`.
+- Added `ProtocolClientBridge.cast_spell(...)`.
+- Added `scenes/stage16_spell_cast_view.tscn` and `scripts/stage16_spell_cast_view.gd`.
+- Added the dashboard `Cast Spell` action.
+- Fixed the initial spellbook parser to tolerate AzerothCore cooldown counts that are larger than the serialized cooldown rows.
+- Updated the Stage 16 matrix and packet spec.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--cast-spell` passed for spell `2457` with `accepted=1`, `response_opcode=0x132`, and `response_spell_id=2457`.
+- Native cast-then-spellbook regression passed; the spellbook reported `cooldown_count=1` immediately after casting.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_SPELL_CAST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spell_cast_view.tscn` passed with `spell_id=2457`, `opcode=0x132`, and `accepted=true`.
+- `ACORE_ACTION_BAR_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` still passed with `slots=144` and `populated=3`.
+- `ACORE_SPELLBOOK_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spellbook_view.tscn` still passed with `spells=48` and `cooldowns=1` immediately after casting.
+- `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` still passed with say and self-whisper responses.
+- Local `qwen-agent` advisory review found no concrete blockers for the bounded spell-cast slice.
