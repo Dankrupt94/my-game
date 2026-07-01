@@ -210,3 +210,11 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` still passed after routing the trainer list through the selector-aware bridge path.
 - Local `qwen-agent` advisory review reported no blockers for the trainer selector changes.
 - Remaining work: replace the scan list with true in-world click selection, keep trainer interaction in a persistent session, and add spell names/icons/ranks.
+
+### 2026-07-01 - Trainer Row State And Requirement Text
+
+- Improved the trainer spell rows to show server state, cost, level/skill/prerequisite requirements, and disabled visual state for non-available rows.
+- Kept the rows ID-based for now so no proprietary spell-name data is committed.
+- Validation: `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed after the row rendering update.
+- Local `qwen-agent` advisory review reported no blockers for the row rendering update.
+- Remaining work: wire real spell names/icons/ranks from the local-only data/asset pipeline and expand disabled-state explanations.

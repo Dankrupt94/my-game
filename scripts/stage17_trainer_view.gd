@@ -498,17 +498,8 @@ func _render_trainer(result: Dictionary) -> void:
 	for spell in spells:
 		if typeof(spell) != TYPE_DICTIONARY:
 			continue
-		var row := "Spell %s  cost %s  level %s  usable %s" % [
-			str(spell.get("spell_id", 0)),
-			_money_text(int(spell.get("money_cost", 0))),
-			str(spell.get("req_level", 0)),
-			str(spell.get("usable", 0)),
-		]
-		var skill_line := int(spell.get("req_skill_line", 0))
-		var skill_rank := int(spell.get("req_skill_rank", 0))
-		if skill_line > 0 or skill_rank > 0:
-			row += "  skill %s/%s" % [str(skill_line), str(skill_rank)]
-		spell_list.add_item(row)
+		var item_index := spell_list.add_item(_trainer_spell_row(spell))
+		spell_list.set_item_disabled(item_index, int(spell.get("usable", 0)) != 0)
 
 
 func _render_trainer_buy(result: Dictionary) -> void:
@@ -643,6 +634,45 @@ func _trainer_failure_reason(reason: int) -> String:
 			return "not enough skill"
 		_:
 			return "failure " + str(reason)
+
+
+func _trainer_spell_row(spell: Dictionary) -> String:
+	return "Spell %s | %s | %s | %s" % [
+		str(spell.get("spell_id", 0)),
+		_trainer_spell_status(int(spell.get("usable", 0))),
+		_money_text(int(spell.get("money_cost", 0))),
+		_trainer_spell_requirements(spell),
+	]
+
+
+func _trainer_spell_status(state: int) -> String:
+	match state:
+		0:
+			return "available"
+		1:
+			return "unavailable"
+		2:
+			return "known"
+		_:
+			return "state " + str(state)
+
+
+func _trainer_spell_requirements(spell: Dictionary) -> String:
+	var parts: Array[String] = []
+	var req_level := int(spell.get("req_level", 0))
+	if req_level > 0:
+		parts.append("level " + str(req_level))
+	var skill_line := int(spell.get("req_skill_line", 0))
+	var skill_rank := int(spell.get("req_skill_rank", 0))
+	if skill_line > 0 or skill_rank > 0:
+		parts.append("skill %s/%s" % [str(skill_line), str(skill_rank)])
+	for ability_key in ["req_ability_1", "req_ability_2", "req_ability_3"]:
+		var ability := int(spell.get(ability_key, 0))
+		if ability > 0:
+			parts.append("spell " + str(ability))
+	if parts.is_empty():
+		return "no extra requirements"
+	return ", ".join(parts)
 
 
 func _money_text(copper: int) -> String:

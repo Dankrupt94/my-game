@@ -1636,3 +1636,23 @@ Remaining work:
 - Replace the scan list with true in-world click selection.
 - Keep trainer interaction in a persistent world session instead of one-shot probes.
 - Add trainer spell names, ranks, icons, and richer disabled-state reasons.
+
+## 2026-07-01 - Improve Stage 17 Trainer Row Text
+
+Goal: make trainer spell rows clearer using only server-returned fields already available in the packet.
+
+Result:
+
+- Updated `scenes/stage17_trainer_view.tscn` rendering to show spell id, server state, cost, and level/skill/prerequisite requirements.
+- Disabled non-available trainer rows visually in the `ItemList`.
+- Kept spell names out of committed data for now; that belongs in the local-only data/asset pipeline.
+
+Validation:
+
+- `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed after the row rendering update.
+- Local `qwen-agent` advisory review reported no blockers for the row rendering update.
+
+Remaining work:
+
+- Add real spell names/icons/ranks through local-only metadata and asset lookup.
+- Expand disabled-state explanations once more server-state cases are observed.
