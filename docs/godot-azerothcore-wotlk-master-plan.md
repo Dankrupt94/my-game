@@ -165,9 +165,9 @@ These optimizations and visual enhancements can be introduced in later stages or
 
 ## Current Status
 
-Current stage: Stage 11 is in progress.
+Current stage: Stage 16 is in progress.
 
-Reason: Stage 10 documented the WotLK/AzerothCore auth, realm, world-session, opcode, and first character-flow requirements needed for a Godot-native client to connect directly to AzerothCore. Stage 11 is building the first minimal local protocol client helper.
+Reason: Stages 11 through 15 established the direct auth/world protocol helper, character listing, enter-world flow, movement probe, object visibility, live-GUID targeting, NPC interaction, and first combat probe. Stage 16 is now the client feature parity march, starting with chat.
 
 ## Non-Negotiable Safety Rules
 

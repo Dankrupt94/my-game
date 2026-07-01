@@ -800,3 +800,21 @@ Validation:
 - `ACORE_MOVEMENT_SELF_TEST=1 godot-4 --headless --path . res://scenes/movement_reconciliation_view.tscn` passed.
 - `ACORE_OBJECT_VISIBILITY_SELF_TEST=1 godot-4 --headless --path . res://scenes/object_visibility_view.tscn` passed.
 - `ACORE_INTERACTION_COMBAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/interaction_combat_view.tscn` passed with `gossip_opcode=0x17d` and `combat_opcode=0x143`.
+
+## 2026-07-01 - Start Stage 16 Client Feature March
+
+Goal: make the full client feature parity target explicit before expanding the Godot client beyond movement, visibility, interaction, and combat probes.
+
+Plan:
+
+- Open Stage 16 as the active project stage.
+- Add a dedicated parity matrix for the full client feature surface.
+- Pick the first narrow feature slice.
+- Keep the Stage 17 standard tied to a full Godot-native client, not a companion or partial runtime.
+
+Result:
+
+- Added `docs/client-feature-parity-matrix.md`.
+- Marked Stage 16 as in progress.
+- Updated the master plan's current status from the stale Stage 11 checkpoint to Stage 16.
+- Selected chat as the first Stage 16 feature slice.
