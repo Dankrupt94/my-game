@@ -729,6 +729,34 @@ ChatMessageSummary parse_chat_message_summary(std::span<const std::uint8_t> payl
     return summary;
 }
 
+InitialSpellsSummary parse_initial_spells_summary(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    InitialSpellsSummary summary;
+    summary.seen = true;
+    summary.spellbook_flags = read_u8(payload, offset);
+    std::uint16_t const spell_count = read_u16_le(payload, offset);
+    summary.spells.reserve(spell_count);
+    for (std::uint16_t i = 0; i < spell_count; ++i)
+    {
+        InitialSpellSummary spell;
+        spell.spell_id = read_u32_le(payload, offset);
+        spell.slot = read_u16_le(payload, offset);
+        summary.spells.push_back(spell);
+    }
+
+    summary.cooldown_count = read_u16_le(payload, offset);
+    for (std::uint16_t i = 0; i < summary.cooldown_count; ++i)
+    {
+        skip_bytes(payload, offset, 4 + 2 + 2 + 4 + 4);
+    }
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("initial spells parser left trailing bytes");
+    }
+    return summary;
+}
+
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,
@@ -945,6 +973,16 @@ bool world_packet_self_test()
     append_u8(whisper_response, 0);
     ChatMessageSummary whisper = parse_chat_message_summary(whisper_response, false);
 
+    std::vector<std::uint8_t> initial_spells_payload;
+    append_u8(initial_spells_payload, 0);
+    append_u16_le(initial_spells_payload, 2);
+    append_u32_le(initial_spells_payload, 78);
+    append_u16_le(initial_spells_payload, 0);
+    append_u32_le(initial_spells_payload, 6603);
+    append_u16_le(initial_spells_payload, 0);
+    append_u16_le(initial_spells_payload, 0);
+    InitialSpellsSummary spellbook = parse_initial_spells_summary(initial_spells_payload);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -968,5 +1006,10 @@ bool world_packet_self_test()
         && whisper.parsed
         && whisper.chat_type == CHAT_MSG_WHISPER
         && whisper.language == LANG_UNIVERSAL
-        && whisper.message == "secret";
+        && whisper.message == "secret"
+        && spellbook.seen
+        && spellbook.spells.size() == 2
+        && spellbook.spells[0].spell_id == 78
+        && spellbook.spells[1].spell_id == 6603
+        && spellbook.cooldown_count == 0;
 }

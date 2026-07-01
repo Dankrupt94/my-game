@@ -29,6 +29,7 @@ constexpr std::uint16_t SMSG_LOGOUT_RESPONSE = 0x04C;
 constexpr std::uint16_t SMSG_LOGOUT_COMPLETE = 0x04D;
 constexpr std::uint16_t SMSG_MESSAGECHAT = 0x096;
 constexpr std::uint16_t SMSG_UPDATE_OBJECT = 0x0A9;
+constexpr std::uint16_t SMSG_INITIAL_SPELLS = 0x12A;
 constexpr std::uint16_t SMSG_ATTACKSTART = 0x143;
 constexpr std::uint16_t SMSG_ATTACKSTOP = 0x144;
 constexpr std::uint16_t SMSG_ATTACKSWING_NOTINRANGE = 0x145;
@@ -130,6 +131,20 @@ struct ChatMessageSummary
     std::uint8_t chat_tag = 0;
 };
 
+struct InitialSpellSummary
+{
+    std::uint32_t spell_id = 0;
+    std::uint16_t slot = 0;
+};
+
+struct InitialSpellsSummary
+{
+    bool seen = false;
+    std::uint8_t spellbook_flags = 0;
+    std::uint16_t cooldown_count = 0;
+    std::vector<InitialSpellSummary> spells;
+};
+
 std::vector<std::uint8_t> build_empty_addon_info();
 std::vector<std::uint8_t> build_auth_session_payload(
     std::string const& account,
@@ -151,6 +166,7 @@ std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<co
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);
 ChatMessageSummary parse_chat_message_summary(std::span<const std::uint8_t> payload, bool gm_message);
+InitialSpellsSummary parse_initial_spells_summary(std::span<const std::uint8_t> payload);
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,

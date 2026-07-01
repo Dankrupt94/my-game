@@ -135,6 +135,16 @@ struct ChatSayResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct SpellbookResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    InitialSpellsSummary spellbook;
+    bool initial_spells_seen = false;
+    bool logged_in_world = false;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -228,5 +238,13 @@ ChatSayResult chat_whisper_self(
     std::string const& password,
     std::string const& character_name,
     std::string const& message,
+    FlowOptions options = {});
+
+SpellbookResult read_initial_spellbook(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
     FlowOptions options = {});
 }

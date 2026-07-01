@@ -877,3 +877,33 @@ Validation:
 - Native `--chat-whisper-self` passed with `whisper_seen=1`, `whisper_inform_seen=1`, `chat_type=9`, and `language=0`.
 - `./tools/build_godot_protocol_extension_compat.sh` passed.
 - `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` passed with `say_opcode=0x096`, `whisper_opcode=0x096`, `whisper_seen=true`, and `whisper_inform_seen=true`.
+
+## 2026-07-01 - Add Stage 16 Initial Spellbook Slice
+
+Goal: prove Godot can receive the server-provided initial spellbook from AzerothCore during login.
+
+Plan:
+
+- Parse `SMSG_INITIAL_SPELLS`.
+- Add a native spellbook probe.
+- Expose spellbook data through the Godot extension and script bridge.
+- Add a Godot spellbook scene with a headless self-test.
+- Keep the slice read-only; do not cast spells yet.
+
+Result:
+
+- Added `InitialSpellsSummary` and `parse_initial_spells_summary`.
+- Added `acore_protocol::read_initial_spellbook` and the `--spellbook` helper command.
+- Added `AcoreProtocolClient.spellbook(...)`.
+- Added `ProtocolClientBridge.spellbook(...)`.
+- Added `scenes/stage16_spellbook_view.tscn` and `scripts/stage16_spellbook_view.gd`.
+- Added the dashboard `Spellbook` action.
+- Updated the Stage 16 matrix and packet spec.
+
+Validation:
+
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--spellbook` passed with `initial_spells_seen=1`, `logged_in_world=1`, `spell_count=48`, and `cooldown_count=0`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_SPELLBOOK_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spellbook_view.tscn` passed with `spells=48`.
+- `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` still passed.

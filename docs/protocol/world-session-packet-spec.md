@@ -352,7 +352,40 @@ Remaining chat packet work:
 - Add true receiver-side whisper tests using a second local account/session.
 - Parse and build channel/party/guild/raid/emote/AFK/DND variants.
 - Surface system messages and server notifications in the chat UI.
-- Add receiver-side tests with a second local character/session.
+
+## Initial Spellbook Slice
+
+Stage 16 also parses the first server-provided spellbook packet.
+
+Relevant opcode:
+
+| Opcode | Value | Stage 16 support |
+| --- | ---: | --- |
+| `SMSG_INITIAL_SPELLS` | `0x12A` | Parses the active spell list and cooldown count |
+
+Payload from `Player::SendInitialSpells`:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| spellbook flags | 1 | Currently sent as `0` by AzerothCore |
+| spell count | 2 | `uint16` |
+| spell id | 4 per spell | Repeated for each active spell/talent/glyph spell sent by the server |
+| spell slot | 2 per spell | AzerothCore comments that this is not a slot id; current values are `0` in the local test |
+| cooldown count | 2 | `uint16` |
+| cooldown rows | 16 per cooldown | `uint32 spell`, `uint16 item`, `uint16 category`, `uint32 cooldown`, `uint32 category cooldown` |
+
+Observed Stage 16 result:
+
+- Native helper command `--spellbook` observed `SMSG_INITIAL_SPELLS` for `Codexstage`.
+- The live packet contained `48` initial spells and `0` cooldown rows.
+- Godot scene `scenes/stage16_spellbook_view.tscn` passed with `SPELLBOOK_SELF_TEST_OK spells=48 cooldowns=0`.
+
+Remaining spell packet work:
+
+- Resolve spell IDs to names, ranks, descriptions, and icons through local-only data.
+- Parse cooldown update packets after casts.
+- Build and validate `CMSG_CAST_SPELL` with target flags.
+- Parse cast success/failure, interrupt, aura, and combat-result packets.
 
 ## Stage 11 First World Target
 

@@ -1531,4 +1531,66 @@ ChatSayResult chat_whisper_self(
     (void)request_graceful_logout(*session, options);
     return result;
 }
+
+SpellbookResult read_initial_spellbook(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    FlowOptions options)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    (void)login_selected_character(*session, selected, options);
+
+    SpellbookResult result;
+    result.realm = session->realm;
+    result.character = selected;
+
+    for (int i = 0; i < 180; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (result.initial_spells_seen && result.logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_INITIAL_SPELLS)
+        {
+            result.spellbook = parse_initial_spells_summary(packet->payload);
+            result.initial_spells_seen = result.spellbook.seen;
+            if (result.logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            result.logged_in_world = true;
+            if (result.initial_spells_seen)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
 }

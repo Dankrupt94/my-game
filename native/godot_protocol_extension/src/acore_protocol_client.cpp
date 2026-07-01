@@ -137,6 +137,19 @@ Array visible_object_array(std::vector<VisibleObjectSummary> const& objects)
     return values;
 }
 
+Array spell_array(std::vector<InitialSpellSummary> const& spells)
+{
+    Array values;
+    for (InitialSpellSummary const& spell : spells)
+    {
+        Dictionary value;
+        value["id"] = static_cast<int>(spell.spell_id);
+        value["slot"] = static_cast<int>(spell.slot);
+        values.append(value);
+    }
+    return values;
+}
+
 Dictionary update_dictionary(UpdateObjectSummary const& update)
 {
     Dictionary value;
@@ -208,6 +221,9 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("chat_whisper_self", "host", "port", "account", "password", "character_name", "message"),
         &AcoreProtocolClient::chat_whisper_self);
+    ClassDB::bind_method(
+        D_METHOD("spellbook", "host", "port", "account", "password", "character_name"),
+        &AcoreProtocolClient::spellbook);
 }
 
 Dictionary AcoreProtocolClient::self_test()
@@ -455,6 +471,43 @@ Dictionary AcoreProtocolClient::chat_whisper_self(
         result["language"] = static_cast<int>(flow.language);
         result["sender_guid"] = guid_to_hex(flow.sender_guid);
         result["receiver_guid"] = guid_to_hex(flow.receiver_guid);
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::spellbook(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name)
+{
+    try
+    {
+        acore_protocol::SpellbookResult flow = acore_protocol::read_initial_spellbook(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name));
+
+        Dictionary result;
+        result["ok"] = flow.initial_spells_seen && !flow.spellbook.spells.empty();
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["initial_spells_seen"] = flow.initial_spells_seen;
+        result["logged_in_world"] = flow.logged_in_world;
+        result["spellbook_flags"] = static_cast<int>(flow.spellbook.spellbook_flags);
+        result["spell_count"] = static_cast<int>(flow.spellbook.spells.size());
+        result["cooldown_count"] = static_cast<int>(flow.spellbook.cooldown_count);
+        result["spells"] = spell_array(flow.spellbook.spells);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

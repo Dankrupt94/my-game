@@ -69,4 +69,10 @@ public:
         godot::String const& password,
         godot::String const& character_name,
         godot::String const& message);
+    godot::Dictionary spellbook(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name);
 };

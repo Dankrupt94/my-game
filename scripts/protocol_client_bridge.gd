@@ -320,6 +320,47 @@ func chat_whisper_self(
 	return parsed
 
 
+func spellbook(
+	character_name: String = "Codexstage",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_spellbook(character_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--spellbook",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_spellbook_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("initial_spells_seen", false)) \
+		and int(parsed.get("spell_count", 0)) > 0
+	return parsed
+
+
 func run_self_test() -> Dictionary:
 	var helper := _helper_path()
 	if not FileAccess.file_exists(helper):
@@ -578,6 +619,35 @@ func _run_native_chat_whisper_self(
 		message)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected whisper result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
+func _run_native_spellbook(
+	character_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("spellbook"):
+		return {}
+
+	var result = client.call(
+		"spellbook",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected spellbook result")
 
 	var parsed: Dictionary = result
 	parsed["source"] = "Godot native extension"
@@ -912,6 +982,36 @@ func _parse_chat_whisper_self_output(output: String) -> Dictionary:
 			result["language"] = _extract_int_field(line, "language=")
 			result["sender_guid"] = _extract_token_after(line, "sender_guid=")
 			result["receiver_guid"] = _extract_token_after(line, "receiver_guid=")
+	return result
+
+
+func _parse_spellbook_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"initial_spells_seen": false,
+		"logged_in_world": false,
+		"spell_count": 0,
+		"cooldown_count": 0,
+		"spellbook_flags": 0,
+		"spells": [],
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("SPELLBOOK_SEEN"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["initial_spells_seen"] = _extract_int_field(line, "initial_spells_seen=") == 1
+			result["logged_in_world"] = _extract_int_field(line, "logged_in_world=") == 1
+			result["spellbook_flags"] = _extract_int_field(line, "flags=")
+			result["spell_count"] = _extract_int_field(line, "spell_count=")
+			result["cooldown_count"] = _extract_int_field(line, "cooldown_count=")
+		elif line.begins_with("SPELL "):
+			result["spells"].append({
+				"id": _extract_int_field(line, "id="),
+				"slot": _extract_int_field(line, "slot="),
+			})
 	return result
 
 

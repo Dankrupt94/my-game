@@ -453,6 +453,50 @@ int chat_whisper_self(
     return result.message_sent && result.echoed_message_seen ? 0 : 1;
 }
 
+int spellbook(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::SpellbookResult result = acore_protocol::read_initial_spellbook(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "SPELLBOOK_SEEN"
+              << " character=\"" << result.character.name << "\""
+              << " initial_spells_seen=" << (result.initial_spells_seen ? 1 : 0)
+              << " logged_in_world=" << (result.logged_in_world ? 1 : 0)
+              << " flags=" << static_cast<int>(result.spellbook.spellbook_flags)
+              << " spell_count=" << result.spellbook.spells.size()
+              << " cooldown_count=" << result.spellbook.cooldown_count
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+
+    std::size_t printed = 0;
+    for (InitialSpellSummary const& spell : result.spellbook.spells)
+    {
+        if (printed >= 24)
+        {
+            break;
+        }
+        std::cout << "SPELL"
+                  << " id=" << spell.spell_id
+                  << " slot=" << spell.slot
+                  << "\n";
+        ++printed;
+    }
+    return result.initial_spells_seen && !result.spellbook.spells.empty() ? 0 : 1;
+}
+
 int world_challenge(std::string const& host, std::string const& port)
 {
     acore_protocol::WorldChallengeSummary summary = acore_protocol::probe_world_challenge(host, port);
@@ -478,6 +522,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-say <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-whisper-self <host> <port> <account> <character-name> <message>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --spellbook <host> <port> <account> <character-name>\n"
               << "  acore_protocol_client --world-challenge <host> <port>\n";
 }
 }
@@ -544,6 +589,11 @@ int main(int argc, char** argv)
         if (argc == 7 && std::strcmp(argv[1], "--chat-whisper-self") == 0)
         {
             return chat_whisper_self(argv[2], argv[3], argv[4], argv[5], argv[6]);
+        }
+
+        if (argc == 6 && std::strcmp(argv[1], "--spellbook") == 0)
+        {
+            return spellbook(argv[2], argv[3], argv[4], argv[5]);
         }
 
         usage();
