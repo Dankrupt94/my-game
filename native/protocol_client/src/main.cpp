@@ -339,6 +339,71 @@ int npc_interaction(
     return result.selection_sent && result.gossip_sent && result.gossip_response_seen ? 0 : 1;
 }
 
+int trainer_list_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_guid,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::TrainerListProbeResult result = acore_protocol::trainer_list_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_guid),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "TRAINER_LIST_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " target_name=\"" << result.target_name << "\""
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " target_has_position=" << (result.target_has_position ? 1 : 0)
+              << " visible_objects=" << result.visible_objects.size()
+              << " approach_movement_sent=" << (result.approach_movement_sent ? 1 : 0)
+              << " return_movement_sent=" << (result.return_movement_sent ? 1 : 0)
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " trainer_list_sent=" << (result.trainer_list_sent ? 1 : 0)
+              << " trainer_list_response_seen=" << (result.trainer_list_response_seen ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " trainer_type=" << result.trainer_list.trainer_type
+              << " spell_count=" << result.trainer_list.spell_count
+              << " greeting=\"" << result.trainer_list.greeting << "\""
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    std::size_t printed = 0;
+    for (TrainerSpellSummary const& spell : result.trainer_list.spells)
+    {
+        if (printed >= 40)
+        {
+            break;
+        }
+        std::cout << "TRAINER_SPELL"
+                  << " spell_id=" << spell.spell_id
+                  << " usable=" << static_cast<int>(spell.usable)
+                  << " money_cost=" << spell.money_cost
+                  << " req_level=" << static_cast<int>(spell.req_level)
+                  << " req_skill_line=" << spell.req_skill_line
+                  << " req_skill_rank=" << spell.req_skill_rank
+                  << " req_ability_1=" << spell.req_ability[0]
+                  << " req_ability_2=" << spell.req_ability[1]
+                  << " req_ability_3=" << spell.req_ability[2]
+                  << "\n";
+        ++printed;
+    }
+    return result.live_target_found && result.selection_sent && result.trainer_list_sent
+        && result.trainer_list_response_seen && result.trainer_list.spell_count > 0 ? 0 : 1;
+}
+
 int combat_probe(
     std::string const& host,
     std::string const& port,
@@ -1186,6 +1251,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --enter-world <host> <port> <account> [character-name]\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --move-heartbeat <host> <port> <account> <character-name> <delta-x> <delta-y> <delta-orientation>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --npc-interaction <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --trainer-list <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --loot-open-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --corpse-loot-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
@@ -1251,6 +1317,11 @@ int main(int argc, char** argv)
         if (argc == 8 && std::strcmp(argv[1], "--npc-interaction") == 0)
         {
             return npc_interaction(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+        }
+
+        if (argc == 8 && std::strcmp(argv[1], "--trainer-list") == 0)
+        {
+            return trainer_list_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
         }
 
         if (argc == 8 && std::strcmp(argv[1], "--combat-probe") == 0)

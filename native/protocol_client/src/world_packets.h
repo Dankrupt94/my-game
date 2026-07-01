@@ -27,6 +27,7 @@ constexpr std::uint32_t CMSG_LOOT = 0x15D;
 constexpr std::uint32_t CMSG_LOOT_MONEY = 0x15E;
 constexpr std::uint32_t CMSG_LOOT_RELEASE = 0x15F;
 constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
+constexpr std::uint32_t CMSG_TRAINER_LIST = 0x1B0;
 constexpr std::uint32_t CMSG_TIME_SYNC_RESP = 0x391;
 constexpr std::uint32_t MSG_MOVE_START_FORWARD = 0x0B5;
 constexpr std::uint32_t MSG_MOVE_STOP = 0x0B7;
@@ -62,6 +63,7 @@ constexpr std::uint16_t SMSG_LOOT_ITEM_NOTIFY = 0x164;
 constexpr std::uint16_t SMSG_LOOT_CLEAR_MONEY = 0x165;
 constexpr std::uint16_t SMSG_COMPRESSED_UPDATE_OBJECT = 0x1F6;
 constexpr std::uint16_t SMSG_GOSSIP_MESSAGE = 0x17D;
+constexpr std::uint16_t SMSG_TRAINER_LIST = 0x1B1;
 constexpr std::uint16_t SMSG_LOGIN_VERIFY_WORLD = 0x236;
 constexpr std::uint16_t SMSG_TIME_SYNC_REQ = 0x390;
 constexpr std::uint16_t SMSG_GM_MESSAGECHAT = 0x3B3;
@@ -313,6 +315,29 @@ struct LootItemSummary
     std::uint8_t slot_type = 0;
 };
 
+struct TrainerSpellSummary
+{
+    std::int32_t spell_id = 0;
+    std::uint8_t usable = 0;
+    std::int32_t money_cost = 0;
+    std::array<std::int32_t, 2> point_cost = {};
+    std::uint8_t req_level = 0;
+    std::int32_t req_skill_line = 0;
+    std::int32_t req_skill_rank = 0;
+    std::array<std::int32_t, 3> req_ability = {};
+};
+
+struct TrainerListSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t trainer_guid = 0;
+    std::int32_t trainer_type = 0;
+    std::int32_t spell_count = 0;
+    std::string greeting;
+    std::vector<TrainerSpellSummary> spells;
+};
+
 struct LootResponseSummary
 {
     bool parsed = false;
@@ -382,6 +407,7 @@ ItemTemplateSummary parse_item_query_single_response(std::span<const std::uint8_
 AttackerStateUpdateSummary parse_attacker_state_update(std::span<const std::uint8_t> payload);
 SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::span<const std::uint8_t> payload);
 LootResponseSummary parse_loot_response(std::span<const std::uint8_t> payload);
+TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> payload);
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,

@@ -451,6 +451,53 @@ Remaining loot packet work:
 - Parse and surface loot errors, bind prompts, quest item rules, group loot settings, rolls, master loot, and permission edge cases.
 - Add long-session persistence checks for looted money/items.
 
+## Trainer List Slice
+
+Stage 17 now has the first read-only trainer-list path required by [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md).
+
+Relevant opcodes:
+
+| Opcode | Value | Stage 17 support |
+| --- | ---: | --- |
+| `CMSG_TRAINER_LIST` | `0x1B0` | Sends selected trainer GUID after moving within NPC interaction range |
+| `SMSG_TRAINER_LIST` | `0x1B1` | Parses trainer GUID, trainer type, spell rows, requirements, and greeting |
+
+Client request payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| trainer GUID | 8 | Raw little-endian object GUID, using AzerothCore's shared NPC hello packet reader |
+
+Server response payload from `WorldPackets::NPC::TrainerList::Write`:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| trainer GUID | 8 | Server object GUID |
+| trainer type | 4 | Integer trainer category |
+| spell count | 4 | Number of trainer rows |
+| spell id | 4 per row | Spell learned by this row |
+| usable | 1 per row | Server-side usability flag |
+| money cost | 4 per row | Copper cost |
+| point cost | 8 per row | Two integer point-cost fields |
+| required level | 1 per row | Character level requirement |
+| required skill line | 4 per row | Skill line requirement, or 0 |
+| required skill rank | 4 per row | Skill rank requirement, or 0 |
+| required abilities | 12 per row | Three prerequisite spell ids |
+| greeting | C string | Null-terminated trainer greeting |
+
+Observed Stage 17 result:
+
+- Native helper command `--trainer-list` selected a visible local trainer entry, moved within AzerothCore's NPC interaction distance, sent `CMSG_TRAINER_LIST`, parsed `SMSG_TRAINER_LIST`, and returned to the login position.
+- The live response had opcode `0x1B1` and 6 trainer spell rows for `Codexstage`.
+- Godot scene `scenes/stage17_trainer_view.tscn` passed `ACORE_TRAINER_LIST_SELF_TEST=1` with `moved_close=true`, `returned=true`, `spell_count=6`, and response opcode `0x1B1`.
+
+Remaining trainer packet work:
+
+- Add `CMSG_TRAINER_BUY_SPELL`, `SMSG_TRAINER_BUY_SUCCEEDED`, and `SMSG_TRAINER_BUY_FAILED`.
+- Verify money updates and learned-spell updates after a safe local learn action.
+- Surface disabled-state explanations, spell ranks/names/icons, and failure reasons in the Godot trainer UI.
+- Replace fixed local target entry controls with normal visible-object click targeting and persistent-session flow.
+
 ## Chat Say Slice
 
 Stage 16 starts the long client feature parity march with a minimal chat path.

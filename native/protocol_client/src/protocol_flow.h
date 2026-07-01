@@ -111,6 +111,29 @@ struct InteractionResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct TrainerListProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    bool live_target_found = false;
+    bool target_has_position = false;
+    float target_x = 0;
+    float target_y = 0;
+    float target_z = 0;
+    bool approach_movement_sent = false;
+    bool return_movement_sent = false;
+    bool selection_sent = false;
+    bool trainer_list_sent = false;
+    bool trainer_list_response_seen = false;
+    std::uint16_t response_opcode = 0;
+    TrainerListSummary trainer_list;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct CombatProbeResult
 {
     RealmInfo realm;
@@ -433,6 +456,16 @@ MovementHeartbeatResult move_heartbeat(
     FlowOptions options = {});
 
 InteractionResult interact_with_npc(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options = {});
+
+TrainerListProbeResult trainer_list_probe(
     std::string const& host,
     std::string const& port,
     std::string const& account,

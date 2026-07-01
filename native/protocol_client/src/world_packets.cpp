@@ -1293,6 +1293,49 @@ LootResponseSummary parse_loot_response(std::span<const std::uint8_t> payload)
     return summary;
 }
 
+TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    TrainerListSummary summary;
+    summary.payload_size = payload.size();
+    summary.trainer_guid = read_u64_le(payload, offset);
+    summary.trainer_type = static_cast<std::int32_t>(read_u32_le(payload, offset));
+    summary.spell_count = static_cast<std::int32_t>(read_u32_le(payload, offset));
+    if (summary.spell_count < 0)
+    {
+        throw std::runtime_error("trainer list contains a negative spell count");
+    }
+    summary.spells.reserve(static_cast<std::size_t>(summary.spell_count));
+
+    for (std::int32_t i = 0; i < summary.spell_count; ++i)
+    {
+        TrainerSpellSummary spell;
+        spell.spell_id = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        spell.usable = read_u8(payload, offset);
+        spell.money_cost = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        spell.point_cost[0] = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        spell.point_cost[1] = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        spell.req_level = read_u8(payload, offset);
+        spell.req_skill_line = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        spell.req_skill_rank = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        spell.req_ability[0] = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        spell.req_ability[1] = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        spell.req_ability[2] = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        summary.spells.push_back(spell);
+    }
+
+    if (offset < payload.size())
+    {
+        summary.greeting = read_c_string(payload, offset);
+    }
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("trainer list parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,
@@ -1746,6 +1789,24 @@ bool world_packet_self_test()
     append_u8(loot_response_payload, 0);
     LootResponseSummary loot_response = parse_loot_response(loot_response_payload);
 
+    std::vector<std::uint8_t> trainer_list_payload;
+    append_u64_le(trainer_list_payload, 0xF13000038F000001ULL);
+    append_u32_le(trainer_list_payload, 0);
+    append_u32_le(trainer_list_payload, 1);
+    append_u32_le(trainer_list_payload, 78);
+    append_u8(trainer_list_payload, 0);
+    append_u32_le(trainer_list_payload, 100);
+    append_u32_le(trainer_list_payload, 0);
+    append_u32_le(trainer_list_payload, 0);
+    append_u8(trainer_list_payload, 1);
+    append_u32_le(trainer_list_payload, 0);
+    append_u32_le(trainer_list_payload, 0);
+    append_u32_le(trainer_list_payload, 0);
+    append_u32_le(trainer_list_payload, 0);
+    append_u32_le(trainer_list_payload, 0);
+    trainer_list_payload.insert(trainer_list_payload.end(), {'T', 'r', 'a', 'i', 'n', ' ', 'w', 'e', 'l', 'l', '.', 0});
+    TrainerListSummary trainer_list = parse_trainer_list_response(trainer_list_payload);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -1833,6 +1894,14 @@ bool world_packet_self_test()
         && loot_response.items[0].slot == 0
         && loot_response.items[0].item_id == 25
         && loot_response.items[0].count == 2
+        && trainer_list.parsed
+        && trainer_list.trainer_guid == 0xF13000038F000001ULL
+        && trainer_list.spell_count == 1
+        && trainer_list.spells.size() == 1
+        && trainer_list.spells[0].spell_id == 78
+        && trainer_list.spells[0].money_cost == 100
+        && trainer_list.spells[0].req_level == 1
+        && trainer_list.greeting == "Train well."
         && loot_response.items[0].display_id == 777
         && loot_response.items[0].slot_type == 0;
 }

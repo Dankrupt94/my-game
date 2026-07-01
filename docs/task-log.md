@@ -1500,3 +1500,39 @@ Remaining work:
 - Reuse one persistent world session across target scan, combat, loot, and inventory refresh instead of reconnecting for each proof.
 - Turn the proof buttons into normal gameplay HUD flows.
 - Add full-bag, bind prompt, item-lock, nonzero-money, group loot, roll, and long-session checks.
+
+## 2026-07-01 - Add Stage 17 Trainer List Probe
+
+Goal: continue Stage 17 toward the full-playability target in `wotlk_client_parity_engine_spec.md` by adding the first trainer-window protocol slice.
+
+Plan:
+
+- Read AzerothCore's trainer packet handler and packet writer to match the local server's request/response shape.
+- Add native parsing for `SMSG_TRAINER_LIST` and a live `--trainer-list` helper path.
+- Expose the trainer list through the Godot extension and `ProtocolClientBridge`.
+- Add a Godot trainer scene with a headless self-test.
+- Document the slice in the parity matrix, Stage 17 gate, protocol packet spec, and task log.
+
+Result:
+
+- Added `CMSG_TRAINER_LIST` / `SMSG_TRAINER_LIST` support to the native protocol helper.
+- Added trainer-list dictionaries and callable methods to the Godot native extension.
+- Added `ProtocolClientBridge.trainer_list_probe(...)` and helper-output parsing.
+- Added `scenes/stage17_trainer_view.tscn` and `scripts/stage17_trainer_view.gd`.
+- Diagnosed the first failed live request as an AzerothCore NPC interaction-distance miss. The probe now moves within interaction range before sending `CMSG_TRAINER_LIST`, then returns the character to the login position.
+- Kept the scene and bridge using a generic local trainer label rather than committing a proprietary NPC name.
+
+Validation:
+
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--trainer-list` passed for `Codexstage` with `live_target_found=1`, `approach_movement_sent=1`, `return_movement_sent=1`, `trainer_list_response_seen=1`, response opcode `0x1B1`, and 6 trainer spell rows.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `godot-4 --headless --path . --quit` passed.
+- `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `moved_close=true`, `returned=true`, `spell_count=6`, and response opcode `0x1B1`.
+
+Remaining work:
+
+- Add the learn-spell mutation path and server success/failure handling.
+- Show spell names, ranks, icons, requirements, and disabled-state reasons.
+- Replace fixed local target entry controls with normal player click targeting.
+- Fold trainer interactions into a persistent world session and normal gameplay HUD.

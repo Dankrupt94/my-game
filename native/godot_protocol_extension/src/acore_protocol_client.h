@@ -53,6 +53,22 @@ public:
         godot::String const& character_name,
         int64_t target_entry,
         godot::String const& target_name);
+    godot::Dictionary trainer_list_probe(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        int64_t target_entry,
+        godot::String const& target_name);
+    godot::Dictionary trainer_list_probe_selector(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        godot::String const& target_selector,
+        godot::String const& target_name);
     godot::Dictionary combat_probe(
         godot::String const& host,
         godot::String const& port,

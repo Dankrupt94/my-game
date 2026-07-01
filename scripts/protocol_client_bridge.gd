@@ -197,6 +197,60 @@ func interact_with_npc(
 	return parsed
 
 
+func trainer_list_probe(
+	character_name: String = "Codexstage",
+	target_entry: int = 911,
+	target_name: String = "Nearby Trainer",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	return trainer_list_probe_selector(character_name, str(target_entry), target_name, host, port)
+
+
+func trainer_list_probe_selector(
+	character_name: String = "Codexstage",
+	target_selector: String = "911",
+	target_name: String = "Nearby Trainer",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_trainer_list_probe_selector(character_name, target_selector, target_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--trainer-list",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			target_selector,
+			target_name,
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_trainer_list_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("trainer_list_response_seen", false)) \
+		and int(parsed.get("spell_count", 0)) > 0
+	return parsed
+
+
 func combat_probe(
 	character_name: String = "Codexstage",
 	target_entry: int = 721,
@@ -1038,6 +1092,48 @@ func _run_native_interact_with_npc(
 	return parsed
 
 
+func _run_native_trainer_list_probe(
+	character_name: String,
+	target_entry: int,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	return _run_native_trainer_list_probe_selector(character_name, str(target_entry), target_name, host, port)
+
+
+func _run_native_trainer_list_probe_selector(
+	character_name: String,
+	target_selector: String,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("trainer_list_probe_selector"):
+		return {}
+
+	var result = client.call(
+		"trainer_list_probe_selector",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		target_selector,
+		target_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected trainer result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
 func _run_native_combat_probe(
 	character_name: String,
 	target_entry: int,
@@ -1794,6 +1890,71 @@ func _parse_npc_interaction_output(output: String) -> Dictionary:
 			result["gossip_sent"] = _extract_int_field(line, "gossip_sent=") == 1
 			result["gossip_response_seen"] = _extract_int_field(line, "gossip_response_seen=") == 1
 			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
+	return result
+
+
+func _parse_trainer_list_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"live_target_found": false,
+		"selection_sent": false,
+		"trainer_list_sent": false,
+		"trainer_list_response_seen": false,
+		"target_guid": "0x0",
+		"target_entry": 0,
+		"target_name": "",
+		"target_has_position": false,
+		"approach_movement_sent": false,
+		"return_movement_sent": false,
+		"visible_object_count": 0,
+		"response_opcode": 0,
+		"trainer_type": 0,
+		"spell_count": 0,
+		"greeting": "",
+		"spells": [],
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("TRAINER_LIST_PROBE"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["target_guid"] = _extract_token_after(line, "target_guid=")
+			result["target_entry"] = _extract_int_field(line, "target_entry=")
+			result["target_name"] = _extract_quoted_field(line, "target_name=\"")
+			result["live_target_found"] = _extract_int_field(line, "live_target_found=") == 1
+			result["target_has_position"] = _extract_int_field(line, "target_has_position=") == 1
+			result["visible_object_count"] = _extract_int_field(line, "visible_objects=")
+			result["approach_movement_sent"] = _extract_int_field(line, "approach_movement_sent=") == 1
+			result["return_movement_sent"] = _extract_int_field(line, "return_movement_sent=") == 1
+			result["selection_sent"] = _extract_int_field(line, "selection_sent=") == 1
+			result["trainer_list_sent"] = _extract_int_field(line, "trainer_list_sent=") == 1
+			result["trainer_list_response_seen"] = _extract_int_field(line, "trainer_list_response_seen=") == 1
+			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
+			result["trainer_type"] = _extract_int_field(line, "trainer_type=")
+			result["spell_count"] = _extract_int_field(line, "spell_count=")
+			result["greeting"] = _extract_quoted_field(line, "greeting=\"")
+		elif line.begins_with("TRAINER_SPELL"):
+			result["spells"].append({
+				"spell_id": _extract_int_field(line, "spell_id="),
+				"usable": _extract_int_field(line, "usable="),
+				"money_cost": _extract_int_field(line, "money_cost="),
+				"req_level": _extract_int_field(line, "req_level="),
+				"req_skill_line": _extract_int_field(line, "req_skill_line="),
+				"req_skill_rank": _extract_int_field(line, "req_skill_rank="),
+				"req_ability_1": _extract_int_field(line, "req_ability_1="),
+				"req_ability_2": _extract_int_field(line, "req_ability_2="),
+				"req_ability_3": _extract_int_field(line, "req_ability_3="),
+			})
+	result["trainer_list"] = {
+		"parsed": result["trainer_list_response_seen"],
+		"trainer_guid": result["target_guid"],
+		"trainer_type": result["trainer_type"],
+		"spell_count": result["spell_count"],
+		"greeting": result["greeting"],
+		"spells": result["spells"],
+	}
 	return result
 
 

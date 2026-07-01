@@ -131,6 +131,7 @@ The immediate Stage 17 work is still a narrow slice inside this larger spec:
 - Stabilize exact visible target GUID selection in `scenes/stage17_loot_view.tscn`.
 - Restore the loot-to-inventory handoff self-test to green using the selected target GUID instead of relying on entry-only selection.
 - Keep the player-facing loot scene moving from test buttons toward normal target, combat, loot, and inventory UI.
+- Add common NPC service slices, starting with trainer-list parity through `scenes/stage17_trainer_view.tscn`, while keeping learn-spell, vendor, quest, and other service mutations explicitly tracked.
 - Document every proof as a step toward this full spec, not as final parity by itself.
 
 ## Full-Port Exit Rule

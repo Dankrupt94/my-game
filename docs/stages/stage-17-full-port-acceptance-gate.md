@@ -160,3 +160,17 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` still passed with release response opcode `0x161`.
 - Local `qwen-agent` advisory review reported no blockers.
 - Remaining work: replace the list picker with real in-world click picking, keep one persistent world session across scan/combat/loot/inventory refresh, and turn the proof buttons into normal HUD gameplay.
+
+### 2026-07-01 - Trainer List Protocol Probe
+
+- Continued Stage 17 against [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md), specifically the trainer window/list portion of the full-playability checklist.
+- Added `CMSG_TRAINER_LIST` / `SMSG_TRAINER_LIST` support to the native protocol helper and Godot extension.
+- Matched AzerothCore's trainer interaction gate by moving the test character within NPC interaction range before sending the trainer-list request, then returning to the login position.
+- Added `ProtocolClientBridge.trainer_list_probe(...)`.
+- Added `scenes/stage17_trainer_view.tscn` as the first Godot trainer surface, with target controls, live greeting display, and spell rows showing server-returned cost and requirement fields.
+- Validation: native `--trainer-list` passed for `Codexstage` with `live_target_found=1`, `approach_movement_sent=1`, `return_movement_sent=1`, `trainer_list_response_seen=1`, response opcode `0x1B1`, and 6 spell rows.
+- Validation: `./tools/build_godot_protocol_extension_compat.sh` passed.
+- Validation: `godot-4 --headless --path . --quit` passed.
+- Validation: `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `moved_close=true`, `returned=true`, `spell_count=6`, and response opcode `0x1B1`.
+- Local `qwen-agent` advisory review reported no blockers.
+- Remaining work: learn-spell packets, server money updates, failure-code UI, spell names/icons/ranks, normal player click-to-trainer selection, and persistent-session integration.
