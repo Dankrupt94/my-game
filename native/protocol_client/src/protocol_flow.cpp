@@ -982,6 +982,16 @@ bool inventory_slot_matches(InventorySlotSummary const& actual, InventorySlotSum
         && (!expected.populated || actual.item_entry == expected.item_entry);
 }
 
+bool inventory_slot_changed(InventorySlotSummary const& before, InventorySlotSummary const& after)
+{
+    return before.populated != after.populated
+        || before.item_guid != after.item_guid
+        || before.item_entry != after.item_entry
+        || before.stack_count != after.stack_count
+        || before.durability != after.durability
+        || before.max_durability != after.max_durability;
+}
+
 void ensure_inventory_slot(PlayerInventorySummary& inventory, InventorySlotSummary const& source)
 {
     if (find_inventory_slot(inventory, source.slot) == nullptr)
@@ -3628,6 +3638,119 @@ CorpseLootProbeResult corpse_loot_probe(
 
     stop_and_return();
     (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+LootInventoryHandoffResult loot_inventory_handoff_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options)
+{
+    if (target_guid == 0)
+    {
+        throw std::runtime_error("loot inventory target guid or entry must be non-zero");
+    }
+
+    LootInventoryHandoffResult result;
+
+    InventorySnapshotResult before = read_inventory_snapshot(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        options);
+    result.realm = before.realm;
+    result.character = before.character;
+    result.inventory_before = before.inventory;
+    result.inventory_before_seen = before.inventory_seen;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), before.skipped_opcodes.begin(), before.skipped_opcodes.end());
+    if (!before.inventory_seen || before.inventory.slots.size() != PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error("did not observe inventory before loot handoff probe");
+    }
+
+    result.corpse_loot = corpse_loot_probe(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        target_guid,
+        target_name,
+        options);
+    result.realm = result.corpse_loot.realm;
+    result.character = result.corpse_loot.character;
+    result.skipped_opcodes.insert(
+        result.skipped_opcodes.end(),
+        result.corpse_loot.skipped_opcodes.begin(),
+        result.corpse_loot.skipped_opcodes.end());
+
+    InventorySnapshotResult after = read_inventory_snapshot(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        options);
+    result.inventory_after = after.inventory;
+    result.inventory_after_seen = after.inventory_seen;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), after.skipped_opcodes.begin(), after.skipped_opcodes.end());
+    if (!after.inventory_seen || after.inventory.slots.size() != PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error("did not observe inventory after loot handoff probe");
+    }
+
+    for (std::uint8_t slot = 0; slot < PlayerInventorySnapshotSlots; ++slot)
+    {
+        InventorySlotSummary before_slot = inventory_slot_at(before.inventory, slot);
+        InventorySlotSummary after_slot = inventory_slot_at(after.inventory, slot);
+        if (!inventory_slot_changed(before_slot, after_slot))
+        {
+            continue;
+        }
+
+        result.changed_slots.push_back(after_slot);
+        ++result.changed_slot_count;
+        if (!before_slot.populated && after_slot.populated)
+        {
+            ++result.added_slot_count;
+        }
+        else if (before_slot.populated && !after_slot.populated)
+        {
+            ++result.removed_slot_count;
+        }
+        else if (before_slot.populated
+            && after_slot.populated
+            && before_slot.item_guid == after_slot.item_guid
+            && before_slot.stack_count != after_slot.stack_count)
+        {
+            ++result.stack_changed_slot_count;
+        }
+    }
+
+    if (before.inventory.coinage_seen && after.inventory.coinage_seen)
+    {
+        result.coinage_delta = static_cast<std::int64_t>(after.inventory.coinage)
+            - static_cast<std::int64_t>(before.inventory.coinage);
+        result.coinage_changed = result.coinage_delta != 0;
+    }
+
+    bool const loot_window_ok = result.corpse_loot.loot_response_seen && !result.corpse_loot.loot.error;
+    bool const item_expected = !result.corpse_loot.loot.items.empty();
+    bool const money_expected = result.corpse_loot.loot.gold > 0;
+    bool const inventory_changed = result.changed_slot_count > 0 || result.coinage_delta > 0;
+    result.handoff_confirmed = result.inventory_before_seen
+        && result.inventory_after_seen
+        && loot_window_ok
+        && (item_expected || money_expected)
+        && inventory_changed;
+
     return result;
 }
 }

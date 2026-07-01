@@ -388,6 +388,9 @@ void AcoreProtocolClient::_bind_methods()
         D_METHOD("corpse_loot_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
         &AcoreProtocolClient::corpse_loot_probe);
     ClassDB::bind_method(
+        D_METHOD("loot_inventory_handoff_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
+        &AcoreProtocolClient::loot_inventory_handoff_probe);
+    ClassDB::bind_method(
         D_METHOD("chat_say", "host", "port", "account", "password", "character_name", "message"),
         &AcoreProtocolClient::chat_say);
     ClassDB::bind_method(
@@ -748,6 +751,79 @@ Dictionary AcoreProtocolClient::corpse_loot_probe(
         result["items"] = loot_item_array(flow.loot.items);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::loot_inventory_handoff_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    String const& target_name)
+{
+    try
+    {
+        if (target_entry <= 0)
+        {
+            return failure("loot inventory target entry must be positive");
+        }
+
+        acore_protocol::LootInventoryHandoffResult flow = acore_protocol::loot_inventory_handoff_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<std::uint64_t>(target_entry),
+            to_std_string(target_name));
+
+        acore_protocol::CorpseLootProbeResult const& loot = flow.corpse_loot;
+
+        Dictionary result;
+        result["ok"] = flow.handoff_confirmed;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(loot.target_guid);
+        result["target_entry"] = static_cast<int>(loot.target_entry);
+        result["target_name"] = String(loot.target_name.c_str());
+        result["target_dead_seen"] = loot.target_dead_seen;
+        result["target_lootable_seen"] = loot.target_lootable_seen;
+        result["loot_response_seen"] = loot.loot_response_seen;
+        result["loot_error"] = loot.loot.error;
+        result["loot_error_code"] = static_cast<int>(loot.loot.error_code);
+        result["loot_item_removed_count"] = static_cast<int>(loot.loot_item_removed_count);
+        result["loot_release_response_seen"] = loot.loot_release_response_seen;
+        result["response_opcode"] = static_cast<int>(loot.response_opcode);
+        result["loot"] = loot_response_dictionary(loot.loot);
+        result["gold"] = static_cast<int64_t>(loot.loot.gold);
+        result["item_count"] = static_cast<int>(loot.loot.item_count);
+        result["items"] = loot_item_array(loot.loot.items);
+        result["inventory_before_seen"] = flow.inventory_before_seen;
+        result["inventory_after_seen"] = flow.inventory_after_seen;
+        result["inventory_before"] = inventory_dictionary(flow.inventory_before);
+        result["inventory_after"] = inventory_dictionary(flow.inventory_after);
+        result["before_populated"] = static_cast<int>(flow.inventory_before.populated_count);
+        result["after_populated"] = static_cast<int>(flow.inventory_after.populated_count);
+        result["before_coinage"] = static_cast<int64_t>(flow.inventory_before.coinage);
+        result["after_coinage"] = static_cast<int64_t>(flow.inventory_after.coinage);
+        result["coinage_delta"] = static_cast<int64_t>(flow.coinage_delta);
+        result["coinage_changed"] = flow.coinage_changed;
+        result["changed_slots"] = inventory_slot_array(flow.changed_slots);
+        result["changed_slot_count"] = static_cast<int>(flow.changed_slot_count);
+        result["added_slot_count"] = static_cast<int>(flow.added_slot_count);
+        result["removed_slot_count"] = static_cast<int>(flow.removed_slot_count);
+        result["stack_changed_slot_count"] = static_cast<int>(flow.stack_changed_slot_count);
+        result["handoff_confirmed"] = flow.handoff_confirmed;
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

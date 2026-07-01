@@ -396,8 +396,10 @@ Stage 17 adds the first loot gameplay path. The initial quick probe attempts to 
 | `CMSG_LOOT_RELEASE` | `0x15F` | Closes an accepted loot window; payload is the raw 8-byte GUID |
 | `SMSG_LOOT_RESPONSE` | `0x160` | Parsed as either a loot error or a loot window |
 | `SMSG_LOOT_RELEASE_RESPONSE` | `0x161` | Parsed as raw GUID plus success byte |
-| `SMSG_LOOT_REMOVED` | `0x165` | Confirms a loot slot was removed after pickup |
-| `SMSG_LOOT_MONEY_NOTIFY` | `0x164` | Confirms money pickup; current live corpse tests had `gold=0`, so this path is implemented but not yet observed with nonzero copper |
+| `SMSG_LOOT_REMOVED` | `0x162` | Confirms a loot slot was removed after pickup |
+| `SMSG_LOOT_MONEY_NOTIFY` | `0x163` | Confirms money pickup; current live corpse tests had `gold=0`, so this path is implemented but not yet observed with nonzero copper |
+| `SMSG_LOOT_ITEM_NOTIFY` | `0x164` | Item-loot notification path; not yet parsed in the Stage 17 probe |
+| `SMSG_LOOT_CLEAR_MONEY` | `0x165` | Clears money from the open loot window; not yet observed in the latest zero-copper runs |
 
 `SMSG_LOOT_RESPONSE` error payload:
 
@@ -432,13 +434,20 @@ Observed Stage 17 quick loot-open result:
 Observed Stage 17 corpse-loot result:
 
 - Native and Godot corpse-loot probes use nearby creature entry `299`, move into range with stepped movement packets, select the live target GUID, attack until update fields report death/lootable state, and then send `CMSG_LOOT`.
-- Godot `ACORE_CORPSE_LOOT_SELF_TEST=1` passed through `scenes/stage17_loot_view.tscn` with `dead=true`, `lootable=true`, `loot_response_seen=true`, `item_removed=2`, `release_response=true`, and response opcode `0x160`.
+- Godot `ACORE_CORPSE_LOOT_SELF_TEST=1` passed through `scenes/stage17_loot_view.tscn` with `dead=true`, `lootable=true`, `loot_response_seen=true`, item removal confirmation, `release_response=true`, and response opcode `0x160`.
 - The latest Godot corpse-loot run observed `gold=0`, so `CMSG_LOOT_MONEY` / `SMSG_LOOT_MONEY_NOTIFY` remain implemented but still need a nonzero-money loot case for live evidence.
+
+Observed Stage 17 loot-to-inventory handoff result:
+
+- Native `--loot-inventory-handoff` snapshots inventory, runs the corpse-loot probe, snapshots inventory again, and compares all 39 tracked slots plus coinage.
+- A latest native run against entry `299` observed `item_count=1`, `loot_item_removed_count=1`, `inventory_before_seen=1`, `inventory_after_seen=1`, `changed_slots=1`, `stack_changed_slots=1`, and `handoff_confirmed=1`. The changed slot was backpack slot `30`, where `Ruined Pelt` stacked to count `3`.
+- Godot `ACORE_LOOT_INVENTORY_SELF_TEST=1` passed through `scenes/stage17_loot_view.tscn` with `changed_slots=1`, `stack_changed=1`, `coinage_delta=0`, `handoff=true`, and response opcode `0x160`.
+- This confirms item pickup reaches live inventory state for at least a stack-increase case. New empty-slot placement and full-bag failure handling remain future work.
 
 Remaining loot packet work:
 
 - Replace the bounded `Fight + Loot` probe with normal player-controlled interaction, target frames, corpse-click behavior, and loot-window UX.
-- Confirm inventory placement and full-bag failure handling after pickup.
+- Confirm new empty-slot placement and full-bag failure handling after pickup.
 - Parse and surface loot errors, bind prompts, quest item rules, group loot settings, rolls, master loot, and permission edge cases.
 - Add long-session persistence checks for looted money/items.
 

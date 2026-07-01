@@ -15,7 +15,9 @@ var self_test_finished := false
 
 func _ready() -> void:
 	_build_view()
-	if OS.get_environment("ACORE_CORPSE_LOOT_SELF_TEST") == "1":
+	if OS.get_environment("ACORE_LOOT_INVENTORY_SELF_TEST") == "1":
+		call_deferred("_run_loot_inventory_handoff_probe")
+	elif OS.get_environment("ACORE_CORPSE_LOOT_SELF_TEST") == "1":
 		call_deferred("_run_corpse_loot_probe")
 	else:
 		call_deferred("_run_loot_probe")
@@ -75,6 +77,11 @@ func _build_view() -> void:
 	corpse_button.text = "Fight + Loot"
 	corpse_button.pressed.connect(_run_corpse_loot_probe)
 	action_row.add_child(corpse_button)
+
+	var handoff_button := Button.new()
+	handoff_button.text = "Loot + Bag"
+	handoff_button.pressed.connect(_run_loot_inventory_handoff_probe)
+	action_row.add_child(handoff_button)
 
 	loot_label = Label.new()
 	loot_label.text = "Loot: idle"
@@ -153,6 +160,44 @@ func _run_corpse_loot_probe() -> void:
 	_finish_corpse_self_test(true, result)
 
 
+func _run_loot_inventory_handoff_probe() -> void:
+	status_label.text = "Running"
+	loot_label.text = "Loot: bag check"
+	item_list.clear()
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.loot_inventory_handoff_probe(TEST_CHARACTER_NAME, CORPSE_LOOT_TARGET_ENTRY, "Nearby Creature")
+	var ok := bool(result.get("ok", false))
+	if not ok:
+		status_label.text = "Failed"
+		target_label.text = _failure_summary("Loot inventory probe failed", result)
+		_finish_loot_inventory_self_test(false, result)
+		return
+
+	status_label.text = "Ready"
+	target_label.text = "Loot changed %s inventory slot(s); populated %s -> %s." % [
+		str(result.get("changed_slot_count", 0)),
+		str(result.get("before_populated", 0)),
+		str(result.get("after_populated", 0)),
+	]
+	_render_loot(result)
+	_render_inventory_changes(result)
+	print("LOOT_INVENTORY_SELF_TEST_READY target_entry=%s dead=%s loot_response_seen=%s item_removed=%s inventory_before=%s inventory_after=%s changed_slots=%s added_slots=%s stack_changed=%s coinage_delta=%s handoff=%s opcode=0x%s" % [
+		str(result.get("target_entry", CORPSE_LOOT_TARGET_ENTRY)),
+		str(result.get("target_dead_seen", false)),
+		str(result.get("loot_response_seen", false)),
+		str(result.get("loot_item_removed_count", 0)),
+		str(result.get("inventory_before_seen", false)),
+		str(result.get("inventory_after_seen", false)),
+		str(result.get("changed_slot_count", 0)),
+		str(result.get("added_slot_count", 0)),
+		str(result.get("stack_changed_slot_count", 0)),
+		str(result.get("coinage_delta", 0)),
+		str(result.get("handoff_confirmed", false)),
+		_opcode_hex(int(result.get("response_opcode", 0))),
+	])
+	_finish_loot_inventory_self_test(true, result)
+
+
 func _render_loot(result: Dictionary) -> void:
 	if bool(result.get("loot_response_seen", false)):
 		if bool(result.get("loot_error", false)):
@@ -183,6 +228,25 @@ func _render_loot(result: Dictionary) -> void:
 	item_list.add_item("No loot response was received.")
 
 
+func _render_inventory_changes(result: Dictionary) -> void:
+	var changed: Array = result.get("changed_slots", [])
+	if changed.is_empty():
+		item_list.add_item("Inventory did not change.")
+		return
+	item_list.add_item("Inventory changes:")
+	for slot in changed:
+		if typeof(slot) != TYPE_DICTIONARY:
+			continue
+		var item_name := str(slot.get("item_name", ""))
+		if item_name.is_empty():
+			item_name = "item " + str(slot.get("item_entry", 0))
+		item_list.add_item("Bag slot %s: %s x%s" % [
+			str(slot.get("slot", 0)),
+			item_name,
+			str(slot.get("stack_count", 0)),
+		])
+
+
 func _money_text(copper: int) -> String:
 	var gold := copper / 10000
 	var silver := (copper / 100) % 100
@@ -202,6 +266,8 @@ func _failure_summary(prefix: String, result: Dictionary) -> String:
 		"lootable=" + str(result.get("target_lootable_seen", false)),
 		"loot_response=" + str(result.get("loot_response_seen", false)),
 		"release_response=" + str(result.get("loot_release_response_seen", false)),
+		"handoff=" + str(result.get("handoff_confirmed", false)),
+		"changed_slots=" + str(result.get("changed_slot_count", 0)),
 		"opcode=0x" + _opcode_hex(int(result.get("response_opcode", 0))),
 	]
 	var error_text := str(result.get("error", ""))
@@ -250,4 +316,24 @@ func _finish_corpse_self_test(ok: bool, result: Dictionary) -> void:
 		get_tree().quit(0)
 	else:
 		push_error("CORPSE_LOOT_SELF_TEST_FAILED: " + _failure_summary("Corpse loot probe failed", result))
+		get_tree().quit(1)
+
+
+func _finish_loot_inventory_self_test(ok: bool, result: Dictionary) -> void:
+	if OS.get_environment("ACORE_LOOT_INVENTORY_SELF_TEST") != "1":
+		return
+	if self_test_finished:
+		return
+	self_test_finished = true
+
+	if ok:
+		print("LOOT_INVENTORY_SELF_TEST_OK response_opcode=0x%s changed_slots=%s added_slots=%s handoff=%s" % [
+			_opcode_hex(int(result.get("response_opcode", 0))),
+			str(result.get("changed_slot_count", 0)),
+			str(result.get("added_slot_count", 0)),
+			str(result.get("handoff_confirmed", false)),
+		])
+		get_tree().quit(0)
+	else:
+		push_error("LOOT_INVENTORY_SELF_TEST_FAILED: " + _failure_summary("Loot inventory probe failed", result))
 		get_tree().quit(1)

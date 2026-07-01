@@ -336,6 +336,26 @@ struct CorpseLootProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct LootInventoryHandoffResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    CorpseLootProbeResult corpse_loot;
+    PlayerInventorySummary inventory_before;
+    PlayerInventorySummary inventory_after;
+    bool inventory_before_seen = false;
+    bool inventory_after_seen = false;
+    std::size_t changed_slot_count = 0;
+    std::size_t added_slot_count = 0;
+    std::size_t removed_slot_count = 0;
+    std::size_t stack_changed_slot_count = 0;
+    bool coinage_changed = false;
+    std::int64_t coinage_delta = 0;
+    bool handoff_confirmed = false;
+    std::vector<InventorySlotSummary> changed_slots;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -518,6 +538,16 @@ LootOpenProbeResult loot_open_probe(
     FlowOptions options = {});
 
 CorpseLootProbeResult corpse_loot_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options = {});
+
+LootInventoryHandoffResult loot_inventory_handoff_probe(
     std::string const& host,
     std::string const& port,
     std::string const& account,

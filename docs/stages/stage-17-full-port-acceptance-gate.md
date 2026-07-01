@@ -107,3 +107,13 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Validation: `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `dead=true`, `lootable=true`, `loot_response=true`, `item_removed=2`, `release_response=true`, and response opcode `0x160`.
 - Validation: `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` still passed with release response opcode `0x161` after the corpse-loot movement work.
 - Remaining work: turn this from a test button into normal player-controlled combat-to-loot UX, integrate actual inventory slot updates after pickup, collect nonzero-money evidence, handle full bags/loot errors, support group loot and rolls, and add long-session persistence checks.
+
+### 2026-07-01 - Loot-To-Inventory Handoff Probe
+
+- Added a before/after inventory proof around the corpse-loot path so item pickup is not accepted as complete until the player's inventory state changes.
+- The native `--loot-inventory-handoff` flow snapshots inventory, runs the corpse-loot pickup, snapshots inventory again, and compares all 39 tracked equipment/bag/backpack slots plus coinage.
+- `scenes/stage17_loot_view.tscn` now exposes a `Loot + Bag` control and `ACORE_LOOT_INVENTORY_SELF_TEST=1`.
+- The latest native run looted entry `299`, observed `item_count=1`, then confirmed slot `30` changed by increasing the `Ruined Pelt` stack to `3`.
+- Validation: `ACORE_LOOT_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `changed_slots=1`, `stack_changed=1`, `handoff=true`, and response opcode `0x160`.
+- Validation: `ACORE_LOOT_OPEN_SELF_TEST=1` and `ACORE_CORPSE_LOOT_SELF_TEST=1` still passed when rerun sequentially after the handoff change.
+- Remaining work: replace this proof button with normal corpse-click loot UX, refresh the visible inventory panel automatically after pickup, handle full bags and item locks, collect nonzero-money evidence, and add long-session persistence checks.

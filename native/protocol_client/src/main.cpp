@@ -794,6 +794,75 @@ void print_swap_slot(std::string const& prefix, InventorySlotSummary const& slot
               << " " << prefix << "_name=\"" << slot.item_name << "\"";
 }
 
+int loot_inventory_handoff_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_guid,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::LootInventoryHandoffResult result = acore_protocol::loot_inventory_handoff_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_guid),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "LOOT_INVENTORY_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.corpse_loot.target_guid << std::dec
+              << " target_entry=" << result.corpse_loot.target_entry
+              << " target_name=\"" << result.corpse_loot.target_name << "\""
+              << " target_dead_seen=" << (result.corpse_loot.target_dead_seen ? 1 : 0)
+              << " target_lootable_seen=" << (result.corpse_loot.target_lootable_seen ? 1 : 0)
+              << " loot_response_seen=" << (result.corpse_loot.loot_response_seen ? 1 : 0)
+              << " loot_error=" << (result.corpse_loot.loot.error ? 1 : 0)
+              << " loot_item_removed_count=" << result.corpse_loot.loot_item_removed_count
+              << " loot_release_response_seen=" << (result.corpse_loot.loot_release_response_seen ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.corpse_loot.response_opcode << std::dec
+              << " item_count=" << static_cast<int>(result.corpse_loot.loot.item_count)
+              << " gold=" << result.corpse_loot.loot.gold
+              << " inventory_before_seen=" << (result.inventory_before_seen ? 1 : 0)
+              << " inventory_after_seen=" << (result.inventory_after_seen ? 1 : 0)
+              << " before_populated=" << result.inventory_before.populated_count
+              << " after_populated=" << result.inventory_after.populated_count
+              << " before_coinage=" << result.inventory_before.coinage
+              << " after_coinage=" << result.inventory_after.coinage
+              << " coinage_delta=" << result.coinage_delta
+              << " changed_slots=" << result.changed_slot_count
+              << " added_slots=" << result.added_slot_count
+              << " removed_slots=" << result.removed_slot_count
+              << " stack_changed_slots=" << result.stack_changed_slot_count
+              << " handoff_confirmed=" << (result.handoff_confirmed ? 1 : 0)
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+
+    for (InventorySlotSummary const& slot : result.changed_slots)
+    {
+        std::cout << "LOOT_INVENTORY_CHANGED_SLOT"
+                  << " slot=" << static_cast<int>(slot.slot)
+                  << " section=" << inventory_section_name(slot.section)
+                  << " populated=" << (slot.populated ? 1 : 0)
+                  << " item_guid=0x" << std::hex << slot.item_guid << std::dec
+                  << " item_entry=" << slot.item_entry
+                  << " stack_count=" << slot.stack_count
+                  << " item_detail_seen=" << (slot.item_detail_seen ? 1 : 0)
+                  << " item_template_seen=" << (slot.item_template_seen ? 1 : 0)
+                  << " item_name=\"" << slot.item_name << "\""
+                  << "\n";
+    }
+
+    return result.handoff_confirmed ? 0 : 1;
+}
+
 std::uint32_t parse_split_count_arg(std::string const& value)
 {
     std::size_t parsed = 0;
@@ -1103,6 +1172,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --loot-open-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --corpse-loot-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --loot-inventory-handoff <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-say <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-whisper-self <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --spellbook <host> <port> <account> <character-name>\n"
@@ -1179,6 +1249,11 @@ int main(int argc, char** argv)
         if (argc == 8 && std::strcmp(argv[1], "--corpse-loot-probe") == 0)
         {
             return corpse_loot_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+        }
+
+        if (argc == 8 && std::strcmp(argv[1], "--loot-inventory-handoff") == 0)
+        {
+            return loot_inventory_handoff_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
         }
 
         if (argc == 7 && std::strcmp(argv[1], "--chat-say") == 0)

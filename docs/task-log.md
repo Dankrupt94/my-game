@@ -1340,3 +1340,51 @@ Remaining work:
 - Confirm inventory placement after item pickup and handle full bags, locked items, bind prompts, and loot failures.
 - Collect nonzero-money loot evidence for `CMSG_LOOT_MONEY` / `SMSG_LOOT_MONEY_NOTIFY`.
 - Add group loot, roll, master-loot, quest-loot, and long-session persistence checks.
+
+## 2026-07-01 - Add Stage 17 Loot-To-Inventory Handoff Slice
+
+Goal: prove that the Godot corpse-loot pickup path changes the character's inventory state after item pickup, instead of only proving that loot packets were accepted.
+
+Plan:
+
+- Reuse the stable inventory snapshot flow before and after corpse looting.
+- Add a native wrapper that runs inventory-before, corpse-loot pickup, inventory-after, then compares tracked slots and coinage.
+- Treat stack increases as valid handoff evidence, not only newly occupied empty slots.
+- Expose the handoff probe through the Godot extension and script bridge.
+- Add a `Loot + Bag` control and headless self-test to the Stage 17 loot scene.
+- Document the latest evidence and correct the loot notification opcode labels in the packet spec.
+
+Result:
+
+- Added `LootInventoryHandoffResult` and `loot_inventory_handoff_probe(...)`.
+- Added native `--loot-inventory-handoff`.
+- Added `AcoreProtocolClient.loot_inventory_handoff_probe(...)` and `ProtocolClientBridge.loot_inventory_handoff_probe(...)`.
+- Added helper-output parsing for `LOOT_INVENTORY_PROBE` and `LOOT_INVENTORY_CHANGED_SLOT`.
+- Added a `Loot + Bag` control and `ACORE_LOOT_INVENTORY_SELF_TEST=1` path to `scenes/stage17_loot_view.tscn`.
+- Trimmed full before/after inventory snapshots out of redacted failure summaries while keeping changed slots visible.
+- Corrected the documented Stage 17 loot notification opcode labels to match the current code constants: removed `0x162`, money notify `0x163`, item notify `0x164`, clear money `0x165`.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `cmake --build native/godot_protocol_extension/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- `git diff --check` passed before validation.
+- Native `--loot-inventory-handoff` passed for `Codexstage` against entry `299` with `loot_response_seen=1`, `loot_item_removed_count=1`, `inventory_before_seen=1`, `inventory_after_seen=1`, `changed_slots=1`, `stack_changed_slots=1`, and `handoff_confirmed=1`. The changed slot was backpack slot `30`, where `Ruined Pelt` stacked to count `3`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- The compatibility `.so` and helper had no `GLIBC_2.43` / `GLIBC_2.4x` references.
+- `native/protocol_client/build-compat/acore_protocol_client --self-test` passed.
+- `godot-4 --headless --path . --quit` passed.
+- `ACORE_LOOT_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `changed_slots=1`, `stack_changed=1`, `coinage_delta=0`, `handoff=true`, and response opcode `0x160`.
+- `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed when rerun by itself with release response opcode `0x161`.
+- `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed when rerun by itself with `dead=true`, `lootable=true`, `loot_response=true`, item removal confirmation, release response, and opcode `0x160`.
+- A simultaneous quick-loot/corpse-loot run against the same account caused a transient socket-close/login collision; sequential runs are the valid regression mode for this single-account local test setup.
+- Local `qwen-agent` advisory review returned `no blocker`.
+
+Remaining work:
+
+- Replace the handoff proof button with normal player-controlled corpse-click loot UX.
+- Refresh the visible inventory panel automatically after pickup.
+- Prove new empty-slot placement, full-bag failure handling, locked-item behavior, and bind prompts.
+- Collect nonzero-money loot evidence for `CMSG_LOOT_MONEY` / `SMSG_LOOT_MONEY_NOTIFY`.
+- Add group loot, roll, master-loot, quest-loot, and long-session persistence checks.

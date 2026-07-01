@@ -327,6 +327,50 @@ func corpse_loot_probe(
 	return parsed
 
 
+func loot_inventory_handoff_probe(
+	character_name: String = "Codexstage",
+	target_entry: int = 299,
+	target_name: String = "Nearby Creature",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_loot_inventory_handoff_probe(character_name, target_entry, target_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--loot-inventory-handoff",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			str(target_entry),
+			target_name,
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_loot_inventory_handoff_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("handoff_confirmed", false))
+	return parsed
+
+
 func chat_say(
 	character_name: String = "Codexstage",
 	message: String = "Codex Stage16 chat probe",
@@ -1033,6 +1077,39 @@ func _run_native_corpse_loot_probe(
 	return parsed
 
 
+func _run_native_loot_inventory_handoff_probe(
+	character_name: String,
+	target_entry: int,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("loot_inventory_handoff_probe"):
+		return {}
+
+	var result = client.call(
+		"loot_inventory_handoff_probe",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		target_entry,
+		target_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected loot inventory result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
 func _run_native_chat_say(
 	character_name: String,
 	message: String,
@@ -1458,6 +1535,8 @@ func _redacted_result(result: Dictionary) -> Dictionary:
 	redacted.erase("output")
 	redacted.erase("visible_objects")
 	redacted.erase("skipped_opcodes")
+	redacted.erase("inventory_before")
+	redacted.erase("inventory_after")
 	if typeof(redacted.get("items", null)) == TYPE_ARRAY:
 		var items: Array = redacted["items"]
 		if items.size() > 8:
@@ -1849,6 +1928,78 @@ func _parse_corpse_loot_probe_output(output: String) -> Dictionary:
 		"item_count": result["item_count"],
 		"items": result["items"],
 	}
+	return result
+
+
+func _parse_loot_inventory_handoff_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"target_dead_seen": false,
+		"target_lootable_seen": false,
+		"loot_response_seen": false,
+		"loot_error": false,
+		"loot_item_removed_count": 0,
+		"loot_release_response_seen": false,
+		"response_opcode": 0,
+		"item_count": 0,
+		"gold": 0,
+		"inventory_before_seen": false,
+		"inventory_after_seen": false,
+		"before_populated": 0,
+		"after_populated": 0,
+		"before_coinage": 0,
+		"after_coinage": 0,
+		"coinage_delta": 0,
+		"changed_slot_count": 0,
+		"added_slot_count": 0,
+		"removed_slot_count": 0,
+		"stack_changed_slot_count": 0,
+		"handoff_confirmed": false,
+		"changed_slots": [],
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("LOOT_INVENTORY_PROBE"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["target_guid"] = _extract_token_after(line, "target_guid=")
+			result["target_entry"] = _extract_int_field(line, "target_entry=")
+			result["target_name"] = _extract_quoted_field(line, "target_name=\"")
+			result["target_dead_seen"] = _extract_int_field(line, "target_dead_seen=") == 1
+			result["target_lootable_seen"] = _extract_int_field(line, "target_lootable_seen=") == 1
+			result["loot_response_seen"] = _extract_int_field(line, "loot_response_seen=") == 1
+			result["loot_error"] = _extract_int_field(line, "loot_error=") == 1
+			result["loot_item_removed_count"] = _extract_int_field(line, "loot_item_removed_count=")
+			result["loot_release_response_seen"] = _extract_int_field(line, "loot_release_response_seen=") == 1
+			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
+			result["item_count"] = _extract_int_field(line, "item_count=")
+			result["gold"] = _extract_int_field(line, "gold=")
+			result["inventory_before_seen"] = _extract_int_field(line, "inventory_before_seen=") == 1
+			result["inventory_after_seen"] = _extract_int_field(line, "inventory_after_seen=") == 1
+			result["before_populated"] = _extract_int_field(line, "before_populated=")
+			result["after_populated"] = _extract_int_field(line, "after_populated=")
+			result["before_coinage"] = _extract_int_field(line, "before_coinage=")
+			result["after_coinage"] = _extract_int_field(line, "after_coinage=")
+			result["coinage_delta"] = _extract_int_field(line, "coinage_delta=")
+			result["changed_slot_count"] = _extract_int_field(line, "changed_slots=")
+			result["added_slot_count"] = _extract_int_field(line, "added_slots=")
+			result["removed_slot_count"] = _extract_int_field(line, "removed_slots=")
+			result["stack_changed_slot_count"] = _extract_int_field(line, "stack_changed_slots=")
+			result["handoff_confirmed"] = _extract_int_field(line, "handoff_confirmed=") == 1
+		elif line.begins_with("LOOT_INVENTORY_CHANGED_SLOT"):
+			result["changed_slots"].append({
+				"slot": _extract_int_field(line, "slot="),
+				"section": _extract_token_after(line, "section="),
+				"populated": _extract_int_field(line, "populated=") == 1,
+				"item_guid": _extract_token_after(line, "item_guid="),
+				"item_entry": _extract_int_field(line, "item_entry="),
+				"stack_count": _extract_int_field(line, "stack_count="),
+				"item_detail_seen": _extract_int_field(line, "item_detail_seen=") == 1,
+				"item_template_seen": _extract_int_field(line, "item_template_seen=") == 1,
+				"item_name": _extract_quoted_field(line, "item_name=\""),
+			})
 	return result
 
 
