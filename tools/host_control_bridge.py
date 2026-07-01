@@ -26,6 +26,7 @@ STATUS_TOOL = ROOT / "tools" / "audit_server_stack.py"
 STATUS_REPORT = LOCAL_REPORTS / "server-stack-audit.json"
 DATA_TOOL = ROOT / "tools" / "read_only_data_browser.py"
 DATA_REPORT = LOCAL_REPORTS / "read-only-data-browser.json"
+NEARBY_TOOL = ROOT / "tools" / "nearby_world_objects.py"
 START_SCRIPT = Path("/run/media/doodbro/New 1tb/AzerothCore/scripts/start.sh")
 STOP_SCRIPT = Path("/run/media/doodbro/New 1tb/AzerothCore/scripts/stop.sh")
 CLIENT_EXE = Path("/run/media/doodbro/New 1tb/AzerothCore/client/Wow.exe")
@@ -259,6 +260,62 @@ class BridgeHandler(BaseHTTPRequestHandler):
                     "ok": result["ok"],
                     "generated_at": utc_now(),
                     "command": "read_only_data_browser",
+                    "result": result,
+                    "report": report,
+                },
+            )
+            return
+
+        if path == "/nearby":
+            params = parse_qs(parsed_url.query)
+            map_text = params.get("map", ["0"])[0]
+            x_text = params.get("x", ["0"])[0]
+            y_text = params.get("y", ["0"])[0]
+            radius_text = params.get("radius", ["80"])[0]
+            limit_text = params.get("limit", ["60"])[0]
+
+            try:
+                map_id = int(map_text)
+                x = float(x_text)
+                y = float(y_text)
+                radius = max(1.0, min(float(radius_text), 500.0))
+                limit = max(1, min(int(limit_text), 100))
+            except ValueError:
+                self._send_json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"ok": False, "error": "nearby parameters must be numeric", "generated_at": utc_now()},
+                )
+                return
+
+            command = [
+                sys.executable,
+                str(NEARBY_TOOL),
+                "--map",
+                str(map_id),
+                "--x",
+                str(x),
+                "--y",
+                str(y),
+                "--radius",
+                str(radius),
+                "--limit",
+                str(limit),
+            ]
+            result = run_command(command, timeout=30)
+            report: dict[str, Any] = {}
+            if result["output"]:
+                try:
+                    parsed_report = json.loads(result["output"])
+                    if isinstance(parsed_report, dict):
+                        report = parsed_report
+                except json.JSONDecodeError:
+                    report = {}
+            self._send_json(
+                HTTPStatus.OK if result["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR,
+                {
+                    "ok": result["ok"],
+                    "generated_at": utc_now(),
+                    "command": "nearby_world_objects",
                     "result": result,
                     "report": report,
                 },

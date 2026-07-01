@@ -1,5 +1,31 @@
 # Task Log
 
+## 2026-07-01 - Stage 14 Object Visibility Started
+
+Goal: build the first object visibility slice after Stage 13 live movement.
+
+Plan:
+
+- Add a Godot client object manager keyed by GUID.
+- Populate visible placeholders from real local AzerothCore data without copying proprietary client assets.
+- Keep the full `SMSG_UPDATE_OBJECT` parser boundary explicit.
+- Validate the query tool, bridge endpoint, object manager smoke, and Godot scene self-test.
+
+Result:
+
+- Added `tools/nearby_world_objects.py` for read-only nearby world spawn queries.
+- Added `GET /nearby` to the localhost host bridge and a `nearby` bridge-client action.
+- Restarted only the host bridge process so the new read-only endpoint was available.
+- Added `scripts/client_object_manager.gd`.
+- Added `scenes/object_visibility_view.tscn` and `scripts/object_visibility_view.gd`.
+- Added a dashboard `Objects` action.
+- Added `docs/object-visibility.md`.
+- Verified the nearby bridge endpoint returns real local creatures and gameobjects around `Codexstage`.
+- Verified `tools/object_visibility_smoke.gd`.
+- Verified `ACORE_OBJECT_VISIBILITY_SELF_TEST=1 godot-4 --headless --path . res://scenes/object_visibility_view.tscn`, which spawned 15 creature placeholders and 15 gameobject placeholders.
+- Used local `qwen-agent` as a narrow advisory reviewer; it raised no concrete blocker beyond preserving validation, localhost-only expectations, and the known packet-driven spawn/despawn gap.
+- Left full packet-driven update-object create/update/out-of-range parsing as the next Stage 14 hardening task.
+
 ## 2026-07-01 - Stage 13 Movement And Reconciliation Started
 
 Goal: continue from the Stage 12 live enter-world proof into a safe movement/reconciliation vertical slice without causing avoidable worldserver disconnect loops.

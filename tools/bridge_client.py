@@ -21,6 +21,7 @@ ACTION_PATHS = {
     "start": "/start",
     "stop": "/stop",
     "data": "/data",
+    "nearby": "/nearby",
     "launch_client": "/client/launch",
 }
 
@@ -32,7 +33,17 @@ def read_token() -> str | None:
     return token or None
 
 
-def request_json(base_url: str, action: str, timeout: int, view: str, search: str, limit: int) -> tuple[int, dict[str, object]]:
+def request_json(
+    base_url: str,
+    action: str,
+    timeout: int,
+    view: str,
+    search: str,
+    limit: int,
+    map_id: int,
+    x: float,
+    y: float,
+    radius: float) -> tuple[int, dict[str, object]]:
     method = "GET" if action in ["health", "status"] else "POST"
     path = ACTION_PATHS[action]
     headers = {}
@@ -40,6 +51,16 @@ def request_json(base_url: str, action: str, timeout: int, view: str, search: st
     if action == "data":
         method = "GET"
         query = urllib.parse.urlencode({"view": view, "search": search, "limit": str(limit)})
+        path += "?" + query
+    elif action == "nearby":
+        method = "GET"
+        query = urllib.parse.urlencode({
+            "map": str(map_id),
+            "x": str(x),
+            "y": str(y),
+            "radius": str(radius),
+            "limit": str(limit),
+        })
         path += "?" + query
 
     if method == "POST":
@@ -79,6 +100,13 @@ def compact_summary(action: str, status: int, payload: dict[str, object]) -> dic
                 "summary": report.get("views", {}).get("summary", {}) if isinstance(report.get("views"), dict) else {},
                 "errors": report.get("errors", {}),
             }
+        elif action == "nearby":
+            summary["nearby"] = {
+                "map": report.get("map"),
+                "radius": report.get("radius"),
+                "counts": report.get("counts", {}),
+                "sample": report.get("objects", [])[:3] if isinstance(report.get("objects"), list) else [],
+            }
         else:
             summary["ports"] = report.get("ports", {})
             summary["docker_mysql"] = report.get("docker_mysql", {})
@@ -97,16 +125,30 @@ def compact_summary(action: str, status: int, payload: dict[str, object]) -> dic
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["health", "status", "start", "stop", "data", "launch_client"])
+    parser.add_argument("action", choices=["health", "status", "start", "stop", "data", "nearby", "launch_client"])
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--compact", action="store_true")
     parser.add_argument("--view", default="summary")
     parser.add_argument("--search", default="")
     parser.add_argument("--limit", type=int, default=25)
+    parser.add_argument("--map", type=int, default=0)
+    parser.add_argument("--x", type=float, default=0.0)
+    parser.add_argument("--y", type=float, default=0.0)
+    parser.add_argument("--radius", type=float, default=80.0)
     args = parser.parse_args()
 
-    status, payload = request_json(args.base_url, args.action, args.timeout, args.view, args.search, args.limit)
+    status, payload = request_json(
+        args.base_url,
+        args.action,
+        args.timeout,
+        args.view,
+        args.search,
+        args.limit,
+        args.map,
+        args.x,
+        args.y,
+        args.radius)
     output = compact_summary(args.action, status, payload) if args.compact else payload
     print(json.dumps(output, indent=2, sort_keys=True))
 
