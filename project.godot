@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="AzerothCore Godot Companion"
-run/main_scene="res://main.tscn"
+run/main_scene="res://scenes/game_login_view.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [display]

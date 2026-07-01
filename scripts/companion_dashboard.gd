@@ -21,6 +21,19 @@ const SPELLBOOK_SCENE := "res://scenes/stage16_spellbook_view.tscn"
 const ACTION_BAR_SCENE := "res://scenes/stage16_action_bar_view.tscn"
 const SPELL_CAST_SCENE := "res://scenes/stage16_spell_cast_view.tscn"
 const SETTINGS_SCENE := "res://scenes/settings_view.tscn"
+const MINIMAP_SCENE := "res://scenes/minimap_view.tscn"
+const UI_CUSTOMIZER_SCENE := "res://scenes/ui_customizer_view.tscn"
+const MAILBOX_SCENE := "res://scenes/mailbox_view.tscn"
+const GUILD_SCENE := "res://scenes/guild_view.tscn"
+const AUCTION_HOUSE_SCENE := "res://scenes/auction_house_view.tscn"
+const QUEST_SCENE := "res://scenes/quest_view.tscn"
+const GROUP_SCENE := "res://scenes/group_view.tscn"
+const AURA_SCENE := "res://scenes/aura_view.tscn"
+const CHARACTER_SELECT_SCENE := "res://scenes/character_select_view.tscn"
+const GAME_LOGIN_SCENE := "res://scenes/game_login_view.tscn"
+const TOOLTIP_SCENE := "res://scenes/tooltip_view.tscn"
+const DEATH_RESPAWN_SCENE := "res://scenes/death_respawn_view.tscn"
+const TRADE_SCENE := "res://scenes/trade_view.tscn"
 const VENDOR_SCENE := "res://scenes/stage17_vendor_view.tscn"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
@@ -132,9 +145,61 @@ func _register_command_actions() -> void:
 			"label": "Settings",
 			"handler": Callable(self, "_action_open_settings"),
 		},
+		"open_minimap": {
+			"label": "Minimap",
+			"handler": Callable(self, "_action_open_minimap"),
+		},
+		"open_ui_customizer": {
+			"label": "UI Customizer",
+			"handler": Callable(self, "_action_open_ui_customizer"),
+		},
+		"open_mailbox": {
+			"label": "Mailbox",
+			"handler": Callable(self, "_action_open_mailbox"),
+		},
+		"open_guild": {
+			"label": "Guild",
+			"handler": Callable(self, "_action_open_guild"),
+		},
 		"open_vendor": {
 			"label": "Vendor",
 			"handler": Callable(self, "_action_open_vendor"),
+		},
+		"open_auction_house": {
+			"label": "Auction House",
+			"handler": Callable(self, "_action_open_auction_house"),
+		},
+		"open_quest": {
+			"label": "Quest Log",
+			"handler": Callable(self, "_action_open_quest"),
+		},
+		"open_group": {
+			"label": "Party/Group",
+			"handler": Callable(self, "_action_open_group"),
+		},
+		"open_auras": {
+			"label": "Auras",
+			"handler": Callable(self, "_action_open_auras"),
+		},
+		"open_character_select": {
+			"label": "Char Selection",
+			"handler": Callable(self, "_action_open_character_select"),
+		},
+		"open_game_login": {
+			"label": "Play Game",
+			"handler": Callable(self, "_action_open_game_login"),
+		},
+		"open_tooltips": {
+			"label": "Item Tooltips",
+			"handler": Callable(self, "_action_open_tooltips"),
+		},
+		"open_death_respawn": {
+			"label": "Death/Respawn",
+			"handler": Callable(self, "_action_open_death_respawn"),
+		},
+		"open_trade": {
+			"label": "Trade Window",
+			"handler": Callable(self, "_action_open_trade"),
 		},
 	}
 
@@ -200,7 +265,20 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("open_action_bar"))
 	actions.add_child(_action_button("open_spell_cast"))
 	actions.add_child(_action_button("open_settings"))
+	actions.add_child(_action_button("open_minimap"))
+	actions.add_child(_action_button("open_ui_customizer"))
+	actions.add_child(_action_button("open_mailbox"))
+	actions.add_child(_action_button("open_guild"))
 	actions.add_child(_action_button("open_vendor"))
+	actions.add_child(_action_button("open_auction_house"))
+	actions.add_child(_action_button("open_quest"))
+	actions.add_child(_action_button("open_group"))
+	actions.add_child(_action_button("open_auras"))
+	actions.add_child(_action_button("open_character_select"))
+	actions.add_child(_action_button("open_game_login"))
+	actions.add_child(_action_button("open_tooltips"))
+	actions.add_child(_action_button("open_death_respawn"))
+	actions.add_child(_action_button("open_trade"))
 	actions.add_child(_action_button("protocol_character_flow"))
 	actions.add_child(_action_button("open_logs"))
 	actions.add_child(_action_button("open_reports"))
@@ -477,10 +555,88 @@ func _action_open_settings() -> void:
 		_append_log("Could not open settings scene. Error code: " + str(error))
 
 
+func _action_open_minimap() -> void:
+	var error := get_tree().change_scene_to_file(MINIMAP_SCENE)
+	if error != OK:
+		_append_log("Could not open minimap scene. Error code: " + str(error))
+
+
+func _action_open_ui_customizer() -> void:
+	var error := get_tree().change_scene_to_file(UI_CUSTOMIZER_SCENE)
+	if error != OK:
+		_append_log("Could not open UI Customizer scene. Error code: " + str(error))
+
+
+func _action_open_mailbox() -> void:
+	var error := get_tree().change_scene_to_file(MAILBOX_SCENE)
+	if error != OK:
+		_append_log("Could not open mailbox scene. Error code: " + str(error))
+
+
+func _action_open_guild() -> void:
+	var error := get_tree().change_scene_to_file(GUILD_SCENE)
+	if error != OK:
+		_append_log("Could not open guild scene. Error code: " + str(error))
+
+
 func _action_open_vendor() -> void:
 	var error := get_tree().change_scene_to_file(VENDOR_SCENE)
 	if error != OK:
 		_append_log("Could not open vendor scene. Error code: " + str(error))
+
+
+func _action_open_auction_house() -> void:
+	var error := get_tree().change_scene_to_file(AUCTION_HOUSE_SCENE)
+	if error != OK:
+		_append_log("Could not open auction house scene. Error code: " + str(error))
+
+
+func _action_open_quest() -> void:
+	var error := get_tree().change_scene_to_file(QUEST_SCENE)
+	if error != OK:
+		_append_log("Could not open quest log scene. Error code: " + str(error))
+
+
+func _action_open_group() -> void:
+	var error := get_tree().change_scene_to_file(GROUP_SCENE)
+	if error != OK:
+		_append_log("Could not open party/group scene. Error code: " + str(error))
+
+
+func _action_open_auras() -> void:
+	var error := get_tree().change_scene_to_file(AURA_SCENE)
+	if error != OK:
+		_append_log("Could not open auras scene. Error code: " + str(error))
+
+
+func _action_open_character_select() -> void:
+	var error := get_tree().change_scene_to_file(CHARACTER_SELECT_SCENE)
+	if error != OK:
+		_append_log("Could not open character select scene. Error code: " + str(error))
+
+
+func _action_open_game_login() -> void:
+	var error := get_tree().change_scene_to_file(GAME_LOGIN_SCENE)
+	if error != OK:
+		_append_log("Could not open game login scene. Error code: " + str(error))
+
+
+func _action_open_tooltips() -> void:
+	var error := get_tree().change_scene_to_file(TOOLTIP_SCENE)
+	if error != OK:
+		_append_log("Could not open tooltip scene. Error code: " + str(error))
+
+
+func _action_open_death_respawn() -> void:
+	var error := get_tree().change_scene_to_file(DEATH_RESPAWN_SCENE)
+	if error != OK:
+		_append_log("Could not open death/respawn scene. Error code: " + str(error))
+
+
+func _action_open_trade() -> void:
+	var error := get_tree().change_scene_to_file(TRADE_SCENE)
+	if error != OK:
+		_append_log("Could not open trade scene. Error code: " + str(error))
 
 
 func _action_launch_client() -> void:
