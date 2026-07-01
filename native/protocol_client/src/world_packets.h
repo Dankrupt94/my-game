@@ -20,6 +20,7 @@ constexpr std::uint32_t CMSG_SET_SELECTION = 0x13D;
 constexpr std::uint32_t CMSG_ATTACKSWING = 0x141;
 constexpr std::uint32_t CMSG_ATTACKSTOP = 0x142;
 constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
+constexpr std::uint32_t CMSG_TIME_SYNC_RESP = 0x391;
 constexpr std::uint32_t MSG_MOVE_START_FORWARD = 0x0B5;
 constexpr std::uint32_t MSG_MOVE_STOP = 0x0B7;
 constexpr std::uint32_t MSG_MOVE_JUMP = 0x0BB;
@@ -171,6 +172,37 @@ struct ActionButtonsSummary
     std::vector<ActionButtonSummary> buttons;
 };
 
+struct AttackSubDamageSummary
+{
+    std::uint32_t school_mask = 0;
+    float float_damage = 0;
+    std::uint32_t damage = 0;
+    std::uint32_t absorb = 0;
+    std::uint32_t resist = 0;
+};
+
+struct AttackerStateUpdateSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint32_t hit_info = 0;
+    std::uint64_t attacker_guid = 0;
+    std::uint64_t target_guid = 0;
+    std::uint32_t total_damage = 0;
+    std::uint32_t overkill = 0;
+    std::uint8_t sub_damage_count = 0;
+    std::uint8_t target_state = 0;
+    std::uint32_t attacker_state = 0;
+    std::uint32_t melee_spell_id = 0;
+    std::uint32_t blocked_amount = 0;
+    bool has_absorb = false;
+    bool has_resist = false;
+    bool has_blocked_amount = false;
+    bool has_rage_gain = false;
+    bool has_debug_fields = false;
+    std::vector<AttackSubDamageSummary> sub_damages;
+};
+
 struct SpellCastResponseSummary
 {
     bool parsed = false;
@@ -198,6 +230,7 @@ std::vector<std::uint8_t> build_auth_session_payload(
 std::vector<std::uint8_t> build_character_create_payload(std::string const& name);
 std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_guid);
 std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid);
+std::vector<std::uint8_t> build_time_sync_response_payload(std::uint32_t counter, std::uint32_t client_time);
 std::vector<std::uint8_t> build_movement_payload(std::uint64_t character_guid, MovementSample const& movement);
 std::vector<std::uint8_t> build_chat_say_payload(std::uint32_t language, std::string const& message);
 std::vector<std::uint8_t> build_chat_whisper_payload(
@@ -221,9 +254,11 @@ std::vector<std::uint8_t> build_set_action_button_payload(
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload);
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);
+std::uint32_t parse_time_sync_counter(std::span<const std::uint8_t> payload);
 ChatMessageSummary parse_chat_message_summary(std::span<const std::uint8_t> payload, bool gm_message);
 InitialSpellsSummary parse_initial_spells_summary(std::span<const std::uint8_t> payload);
 ActionButtonsSummary parse_action_buttons_summary(std::span<const std::uint8_t> payload);
+AttackerStateUpdateSummary parse_attacker_state_update(std::span<const std::uint8_t> payload);
 SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::span<const std::uint8_t> payload);
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,

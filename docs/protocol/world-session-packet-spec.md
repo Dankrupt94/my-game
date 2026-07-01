@@ -251,6 +251,7 @@ Stage 13 uses the shared movement opcodes handled by `WorldSession::HandleMoveme
 | `MSG_MOVE_STOP` | `0x0B7` | Sent at the target coordinate with no movement flags |
 | `MSG_MOVE_HEARTBEAT` | `0x0EE` | Packet builder support exists, but bare heartbeat did not reliably persist a changed coordinate in the Stage 13 test |
 | `SMSG_TIME_SYNC_REQ` | `0x390` | Used as the post-map-add signal before movement packets are sent |
+| `CMSG_TIME_SYNC_RESP` | `0x391` | Stage 16 client helper now answers with the server counter and local client movement clock |
 | `CMSG_LOGOUT_REQUEST` | `0x04B` | Sent after movement so AzerothCore follows the normal save/logout path |
 
 Client movement body, after the packed mover GUID:
@@ -290,14 +291,41 @@ Stage 15 uses live object GUIDs recovered from the update stream.
 | `SMSG_ATTACKSWING_BADFACING` | `0x146` | Combat validation feedback |
 | `SMSG_ATTACKSWING_DEADTARGET` | `0x148` | Combat validation feedback |
 | `SMSG_ATTACKSWING_CANT_ATTACK` | `0x149` | Combat validation feedback |
-| `SMSG_ATTACKERSTATEUPDATE` | `0x14A` | Damage/combat-state update, to be parsed more fully during Stage 16 |
+| `SMSG_ATTACKERSTATEUPDATE` | `0x14A` | Stage 16 parser reads melee damage/combat-state fields |
 
 Stage 15 native evidence:
 
 - NPC interaction against entry `823` resolved live GUID `0xf130000337000cea` and received `SMSG_GOSSIP_MESSAGE` (`0x17D`).
 - Combat probe against entry `721` resolved live GUID `0xf1300002d1000cef` and received `SMSG_ATTACKSTART` (`0x143`).
 
-Stage 16 should parse gossip menu payloads, attack-state update fields, health updates, spell casts, threat/death state, and target frame deltas instead of treating response opcodes as the final state surface.
+Stage 16 should parse gossip menu payloads, health updates, spell casts, threat/death state, and target frame deltas instead of treating response opcodes as the final state surface.
+
+Stage 16 combat damage parser:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| hit info | 4 | Bitmask; current parser handles absorb, resist, block, rage-gain, and debug-field flags |
+| attacker GUID | packed | Parsed to a raw 64-bit GUID |
+| target GUID | packed | Parsed to a raw 64-bit GUID |
+| total damage | 4 | Full damage across sub-damage rows |
+| overkill | 4 | Server-reported overkill amount |
+| sub-damage count | 1 | Current parser accepts 1 or 2 rows |
+| per-sub-damage school mask | 4 each | Spell-school mask |
+| per-sub-damage float damage | 4 each | Float duplicate of sub-damage |
+| per-sub-damage damage | 4 each | Integer sub-damage |
+| per-sub-damage absorb | 4 each, conditional | Present when hit info has full or partial absorb |
+| per-sub-damage resist | 4 each, conditional | Present when hit info has full or partial resist |
+| target state | 1 | Victim state such as hit, dodge, parry, block, etc. |
+| attacker state | 4 | Server writes `0` in the observed AzerothCore melee path |
+| melee spell id | 4 | Server writes `0` in the observed AzerothCore melee path |
+| blocked amount | 4, conditional | Present when hit info has block |
+| rage gain | 4, conditional | Skipped when present |
+| debug fields | 48, conditional | Skipped when AzerothCore debug hit-info flag is present |
+
+Observed Stage 16 result:
+
+- Native `--combat-probe` against hostile entry `69` reached a live target, sent movement approach/facing, selected the target, sent `CMSG_ATTACKSWING`, and parsed `SMSG_ATTACKERSTATEUPDATE` opcode `0x14A`.
+- Godot scene `scenes/interaction_combat_view.tscn` uses hostile entry `38` for a stable stationary self-test and passed with `INTERACTION_COMBAT_SELF_TEST_OK gossip_opcode=0x17d combat_opcode=0x14a damage=2 attacker_state=true`.
 
 ## Chat Say Slice
 

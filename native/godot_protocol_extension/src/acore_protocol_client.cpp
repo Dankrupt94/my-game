@@ -189,6 +189,29 @@ Dictionary spell_cast_response_dictionary(SpellCastResponseSummary const& respon
     return value;
 }
 
+Dictionary attacker_state_update_dictionary(AttackerStateUpdateSummary const& update)
+{
+    Dictionary value;
+    value["parsed"] = update.parsed;
+    value["payload_size"] = static_cast<int>(update.payload_size);
+    value["hit_info"] = static_cast<int64_t>(update.hit_info);
+    value["attacker_guid"] = guid_to_hex(update.attacker_guid);
+    value["target_guid"] = guid_to_hex(update.target_guid);
+    value["total_damage"] = static_cast<int64_t>(update.total_damage);
+    value["overkill"] = static_cast<int64_t>(update.overkill);
+    value["sub_damage_count"] = static_cast<int>(update.sub_damage_count);
+    value["target_state"] = static_cast<int>(update.target_state);
+    value["attacker_state"] = static_cast<int64_t>(update.attacker_state);
+    value["melee_spell_id"] = static_cast<int64_t>(update.melee_spell_id);
+    value["blocked_amount"] = static_cast<int64_t>(update.blocked_amount);
+    value["has_absorb"] = update.has_absorb;
+    value["has_resist"] = update.has_resist;
+    value["has_blocked_amount"] = update.has_blocked_amount;
+    value["has_rage_gain"] = update.has_rage_gain;
+    value["has_debug_fields"] = update.has_debug_fields;
+    return value;
+}
+
 Dictionary update_dictionary(UpdateObjectSummary const& update)
 {
     Dictionary value;
@@ -420,7 +443,7 @@ Dictionary AcoreProtocolClient::combat_probe(
             to_std_string(target_name));
 
         Dictionary result;
-        result["ok"] = flow.live_target_found && flow.attack_sent && flow.combat_response_seen;
+        result["ok"] = flow.live_target_found && flow.attack_sent && flow.attacker_state_update_seen;
         result["auth_flow_ok"] = true;
         result["world_auth_ok"] = true;
         result["character"] = character_dictionary(flow.character);
@@ -428,10 +451,24 @@ Dictionary AcoreProtocolClient::combat_probe(
         result["target_entry"] = static_cast<int>(flow.target_entry);
         result["target_name"] = String(flow.target_name.c_str());
         result["live_target_found"] = flow.live_target_found;
+        result["target_has_position"] = flow.target_has_position;
+        result["target_x"] = flow.target_x;
+        result["target_y"] = flow.target_y;
+        result["target_z"] = flow.target_z;
+        result["approach_movement_sent"] = flow.approach_movement_sent;
+        result["return_movement_sent"] = flow.return_movement_sent;
         result["selection_sent"] = flow.selection_sent;
         result["attack_sent"] = flow.attack_sent;
         result["combat_response_seen"] = flow.combat_response_seen;
+        result["attacker_state_update_seen"] = flow.attacker_state_update_seen;
         result["response_opcode"] = static_cast<int>(flow.response_opcode);
+        result["attacker_state_update"] = attacker_state_update_dictionary(flow.attacker_state_update);
+        result["hit_info"] = static_cast<int64_t>(flow.attacker_state_update.hit_info);
+        result["total_damage"] = static_cast<int64_t>(flow.attacker_state_update.total_damage);
+        result["overkill"] = static_cast<int64_t>(flow.attacker_state_update.overkill);
+        result["sub_damage_count"] = static_cast<int>(flow.attacker_state_update.sub_damage_count);
+        result["target_state"] = static_cast<int>(flow.attacker_state_update.target_state);
+        result["blocked_amount"] = static_cast<int64_t>(flow.attacker_state_update.blocked_amount);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);

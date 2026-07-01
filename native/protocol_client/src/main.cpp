@@ -367,14 +367,25 @@ int combat_probe(
               << " target_entry=" << result.target_entry
               << " target_name=\"" << result.target_name << "\""
               << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " target_has_position=" << (result.target_has_position ? 1 : 0)
+              << " target_pos=(" << result.target_x << "," << result.target_y << "," << result.target_z << ")"
               << " visible_objects=" << result.visible_objects.size()
+              << " approach_movement_sent=" << (result.approach_movement_sent ? 1 : 0)
+              << " return_movement_sent=" << (result.return_movement_sent ? 1 : 0)
               << " selection_sent=" << (result.selection_sent ? 1 : 0)
               << " attack_sent=" << (result.attack_sent ? 1 : 0)
               << " combat_response_seen=" << (result.combat_response_seen ? 1 : 0)
+              << " attacker_state_update_seen=" << (result.attacker_state_update_seen ? 1 : 0)
               << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " hit_info=0x" << std::hex << result.attacker_state_update.hit_info << std::dec
+              << " total_damage=" << result.attacker_state_update.total_damage
+              << " overkill=" << result.attacker_state_update.overkill
+              << " sub_damage_count=" << static_cast<int>(result.attacker_state_update.sub_damage_count)
+              << " target_state=" << static_cast<int>(result.attacker_state_update.target_state)
+              << " blocked_amount=" << result.attacker_state_update.blocked_amount
               << " skipped=" << result.skipped_opcodes.size()
               << "\n";
-    return result.live_target_found && result.attack_sent && result.combat_response_seen ? 0 : 1;
+    return result.live_target_found && result.attack_sent && result.attacker_state_update_seen ? 0 : 1;
 }
 
 int chat_say(

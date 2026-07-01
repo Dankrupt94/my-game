@@ -1064,3 +1064,42 @@ Validation:
 - `ACORE_ACTION_BAR_SET_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed with `button=0`, `action=78`, `type=0`, `set_confirmed=true`, and `restore_confirmed=true`.
 - `ACORE_ACTION_BAR_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed afterward with `slots=144` and `populated=3`, confirming the test character was restored.
 - Local `qwen-agent` advisory review found no concrete blockers for the bounded set-action-button slice.
+
+## 2026-07-01 - Add Stage 16 Combat Damage Parser Slice
+
+Goal: move combat beyond attack-start acknowledgement by parsing live AzerothCore melee damage state in Godot.
+
+Plan:
+
+- Add `SMSG_ATTACKERSTATEUPDATE` parsing for hit info, attacker/target GUIDs, total damage, overkill, sub-damage rows, target state, attacker state, melee spell id, blocked amount, and conditional absorb/resist/rage/debug fields.
+- Answer `SMSG_TIME_SYNC_REQ` with `CMSG_TIME_SYNC_RESP` before movement-sensitive probes.
+- Improve the combat probe so it approaches and faces the target before attacking.
+- Keep listening through `SMSG_ATTACKSTART` and `SMSG_ATTACKSTOP` markers until a damage update arrives or the bounded combat wait expires.
+- Expose parsed combat damage through the Godot extension and script bridge.
+- Use a stable hostile target in the Godot interaction/combat scene self-test.
+
+Result:
+
+- Added `parse_attacker_state_update`.
+- Added time-sync response packet support.
+- Expanded `CombatProbeResult` with target position, approach/return movement flags, and parsed attacker-state data.
+- Updated the CLI `--combat-probe` output with parsed damage fields.
+- Updated `AcoreProtocolClient.combat_probe(...)` and `ProtocolClientBridge.combat_probe(...)`.
+- Updated `scripts/interaction_combat_view.gd` to show parsed damage and to use entry `38` for the combat self-test instead of the fragile one-hit rabbit entry.
+- Updated the Stage 16 matrix, Stage 16 stage notes, and world-session packet spec.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--combat-probe` against hostile entry `69` passed with `attacker_state_update_seen=1`, `response_opcode=0x14a`, `hit_info=0x10002`, `total_damage=3`, `overkill=0`, and `target_state=1`.
+- Native `--combat-probe` against stationary hostile entry `38` passed with `attacker_state_update_seen=1`, `response_opcode=0x14a`, and parsed block/damage fields.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_INTERACTION_COMBAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/interaction_combat_view.tscn` passed with `gossip_opcode=0x17d`, `combat_opcode=0x14a`, `damage=2`, and `attacker_state=true`.
+- Final rebuilt-extension pass for the same Godot scene passed with `damage=3` and `attacker_state=true`.
+- `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` passed.
+- `ACORE_SPELLBOOK_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spellbook_view.tscn` passed with `spells=48`.
+- `ACORE_ACTION_BAR_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed with `slots=144` and `populated=3`.
+- `ACORE_ACTION_BAR_SET_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed with set/restore confirmation.
+- `godot-4 --headless --path . --quit` passed.
+- Local `qwen-agent` advisory review was checked; no actionable blocker was confirmed for this bounded combat-damage slice.

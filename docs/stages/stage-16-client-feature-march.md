@@ -57,6 +57,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 - 2026-07-01: Targeted spell-cast slice is working. Godot selects a live creature, sends a unit-target `CMSG_CAST_SPELL` for spell `78`, and receives `SMSG_SPELL_START` opcode `0x131`.
 - 2026-07-01: Action-button spell-cast slice is working. Godot renders all 144 action slots, clicks server action button `73`, casts spell `78`, and receives `SMSG_SPELL_START` opcode `0x131`.
 - 2026-07-01: Action-button edit slice is working. Godot sends `CMSG_SET_ACTION_BUTTON`, confirms slot `0` can be set to spell `78`, restores the original empty slot, and confirms the restore.
+- 2026-07-01: Combat damage parser slice is working. Godot answers AzerothCore time-sync requests, approaches and faces a live hostile target, keeps listening through attack-start/attack-stop state markers, and parses `SMSG_ATTACKERSTATEUPDATE` opcode `0x14A` into hit-info, total damage, overkill, sub-hit count, target state, and blocked amount fields.
 
 ## Active Slice: Chat
 

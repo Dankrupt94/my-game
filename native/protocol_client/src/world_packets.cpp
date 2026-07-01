@@ -593,6 +593,14 @@ std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid)
     return payload;
 }
 
+std::vector<std::uint8_t> build_time_sync_response_payload(std::uint32_t counter, std::uint32_t client_time)
+{
+    std::vector<std::uint8_t> payload;
+    append_u32_le(payload, counter);
+    append_u32_le(payload, client_time);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_movement_payload(std::uint64_t character_guid, MovementSample const& movement)
 {
     std::vector<std::uint8_t> payload;
@@ -740,6 +748,12 @@ LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload)
     return position;
 }
 
+std::uint32_t parse_time_sync_counter(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    return read_u32_le(payload, offset);
+}
+
 ChatMessageSummary parse_chat_message_summary(std::span<const std::uint8_t> payload, bool gm_message)
 {
     std::size_t offset = 0;
@@ -833,6 +847,88 @@ ActionButtonsSummary parse_action_buttons_summary(std::span<const std::uint8_t> 
         }
         summary.buttons.push_back(action_button);
     }
+    return summary;
+}
+
+AttackerStateUpdateSummary parse_attacker_state_update(std::span<const std::uint8_t> payload)
+{
+    constexpr std::uint32_t HITINFO_UNK1 = 0x00000001;
+    constexpr std::uint32_t HITINFO_FULL_ABSORB = 0x00000020;
+    constexpr std::uint32_t HITINFO_PARTIAL_ABSORB = 0x00000040;
+    constexpr std::uint32_t HITINFO_FULL_RESIST = 0x00000080;
+    constexpr std::uint32_t HITINFO_PARTIAL_RESIST = 0x00000100;
+    constexpr std::uint32_t HITINFO_BLOCK = 0x00002000;
+    constexpr std::uint32_t HITINFO_RAGE_GAIN = 0x00800000;
+
+    std::size_t offset = 0;
+    AttackerStateUpdateSummary summary;
+    summary.payload_size = payload.size();
+    summary.hit_info = read_u32_le(payload, offset);
+    summary.attacker_guid = read_packed_guid(payload, offset);
+    summary.target_guid = read_packed_guid(payload, offset);
+    summary.total_damage = read_u32_le(payload, offset);
+    summary.overkill = read_u32_le(payload, offset);
+    summary.sub_damage_count = read_u8(payload, offset);
+    if (summary.sub_damage_count == 0 || summary.sub_damage_count > 2)
+    {
+        throw std::runtime_error("attacker state update has unsupported sub-damage count");
+    }
+
+    summary.sub_damages.reserve(summary.sub_damage_count);
+    for (std::uint8_t i = 0; i < summary.sub_damage_count; ++i)
+    {
+        AttackSubDamageSummary sub_damage;
+        sub_damage.school_mask = read_u32_le(payload, offset);
+        sub_damage.float_damage = read_float_le(payload, offset);
+        sub_damage.damage = read_u32_le(payload, offset);
+        summary.sub_damages.push_back(sub_damage);
+    }
+
+    summary.has_absorb = (summary.hit_info & (HITINFO_FULL_ABSORB | HITINFO_PARTIAL_ABSORB)) != 0;
+    if (summary.has_absorb)
+    {
+        for (AttackSubDamageSummary& sub_damage : summary.sub_damages)
+        {
+            sub_damage.absorb = read_u32_le(payload, offset);
+        }
+    }
+
+    summary.has_resist = (summary.hit_info & (HITINFO_FULL_RESIST | HITINFO_PARTIAL_RESIST)) != 0;
+    if (summary.has_resist)
+    {
+        for (AttackSubDamageSummary& sub_damage : summary.sub_damages)
+        {
+            sub_damage.resist = read_u32_le(payload, offset);
+        }
+    }
+
+    summary.target_state = read_u8(payload, offset);
+    summary.attacker_state = read_u32_le(payload, offset);
+    summary.melee_spell_id = read_u32_le(payload, offset);
+
+    summary.has_blocked_amount = (summary.hit_info & HITINFO_BLOCK) != 0;
+    if (summary.has_blocked_amount)
+    {
+        summary.blocked_amount = read_u32_le(payload, offset);
+    }
+
+    summary.has_rage_gain = (summary.hit_info & HITINFO_RAGE_GAIN) != 0;
+    if (summary.has_rage_gain)
+    {
+        skip_bytes(payload, offset, 4);
+    }
+
+    summary.has_debug_fields = (summary.hit_info & HITINFO_UNK1) != 0;
+    if (summary.has_debug_fields)
+    {
+        skip_bytes(payload, offset, 4 + 10 * 4 + 4);
+    }
+
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("attacker state update parser left trailing bytes");
+    }
+    summary.parsed = true;
     return summary;
 }
 
@@ -1005,6 +1101,17 @@ bool world_packet_self_test()
         return false;
     }
 
+    auto time_sync_payload = build_time_sync_response_payload(7, 123456);
+    auto time_sync_packet = build_client_packet(CMSG_TIME_SYNC_RESP, time_sync_payload);
+    if (parse_time_sync_counter(time_sync_payload) != 7
+        || time_sync_payload.size() != 8
+        || time_sync_packet.size() != 14
+        || time_sync_packet[2] != 0x91
+        || time_sync_packet[3] != 0x03)
+    {
+        return false;
+    }
+
     auto chat_payload = build_chat_say_payload(LANG_COMMON, "hello");
     auto chat_packet = build_client_packet(CMSG_MESSAGECHAT, chat_payload);
     if (chat_packet.size() != 6 + 4 + 4 + 6 || chat_packet[2] != 0x95)
@@ -1145,6 +1252,21 @@ bool world_packet_self_test()
     }
     ActionButtonsSummary action_buttons = parse_action_buttons_summary(action_buttons_payload);
 
+    std::vector<std::uint8_t> attacker_state_payload;
+    append_u32_le(attacker_state_payload, 0x00000002); // affects victim
+    append_packed_guid(attacker_state_payload, 0x1234);
+    append_packed_guid(attacker_state_payload, 0xF1300002D1000CEFULL);
+    append_u32_le(attacker_state_payload, 12);
+    append_u32_le(attacker_state_payload, 0);
+    append_u8(attacker_state_payload, 1);
+    append_u32_le(attacker_state_payload, 1);
+    append_float_le(attacker_state_payload, 12.0f);
+    append_u32_le(attacker_state_payload, 12);
+    append_u8(attacker_state_payload, 0);
+    append_u32_le(attacker_state_payload, 0);
+    append_u32_le(attacker_state_payload, 0);
+    AttackerStateUpdateSummary attacker_state = parse_attacker_state_update(attacker_state_payload);
+
     std::vector<std::uint8_t> spell_go_payload;
     append_packed_guid(spell_go_payload, 0x1234);
     append_packed_guid(spell_go_payload, 0x1234);
@@ -1196,6 +1318,14 @@ bool world_packet_self_test()
         && action_buttons.buttons[0].type == 0
         && action_buttons.buttons[1].action == 6948
         && action_buttons.buttons[1].type == 0x80
+        && attacker_state.parsed
+        && attacker_state.hit_info == 0x00000002
+        && attacker_state.attacker_guid == 0x1234
+        && attacker_state.target_guid == 0xF1300002D1000CEFULL
+        && attacker_state.total_damage == 12
+        && attacker_state.sub_damages.size() == 1
+        && attacker_state.sub_damages[0].school_mask == 1
+        && attacker_state.sub_damages[0].damage == 12
         && spell_go.parsed
         && spell_go.spell_go
         && spell_go.spell_id == 2457

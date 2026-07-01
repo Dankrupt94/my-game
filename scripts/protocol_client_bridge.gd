@@ -230,7 +230,7 @@ func combat_probe(
 	parsed["exit_code"] = exit_code
 	parsed["output"] = text.strip_edges()
 	parsed["source"] = "helper process"
-	parsed["ok"] = exit_code == 0 and bool(parsed.get("combat_response_seen", false))
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("attacker_state_update_seen", false))
 	return parsed
 
 
@@ -1212,11 +1212,21 @@ func _parse_combat_probe_output(output: String) -> Dictionary:
 		"selection_sent": false,
 		"attack_sent": false,
 		"combat_response_seen": false,
+		"attacker_state_update_seen": false,
 		"target_guid": "0x0",
 		"target_entry": 0,
 		"target_name": "",
+		"target_has_position": false,
+		"approach_movement_sent": false,
+		"return_movement_sent": false,
 		"visible_object_count": 0,
 		"response_opcode": 0,
+		"hit_info": 0,
+		"total_damage": 0,
+		"overkill": 0,
+		"sub_damage_count": 0,
+		"target_state": 0,
+		"blocked_amount": 0,
 	}
 	for raw_line in output.split("\n"):
 		var line := raw_line.strip_edges()
@@ -1229,11 +1239,30 @@ func _parse_combat_probe_output(output: String) -> Dictionary:
 			result["target_entry"] = _extract_int_field(line, "target_entry=")
 			result["target_name"] = _extract_quoted_field(line, "target_name=\"")
 			result["live_target_found"] = _extract_int_field(line, "live_target_found=") == 1
+			result["target_has_position"] = _extract_int_field(line, "target_has_position=") == 1
 			result["visible_object_count"] = _extract_int_field(line, "visible_objects=")
+			result["approach_movement_sent"] = _extract_int_field(line, "approach_movement_sent=") == 1
+			result["return_movement_sent"] = _extract_int_field(line, "return_movement_sent=") == 1
 			result["selection_sent"] = _extract_int_field(line, "selection_sent=") == 1
 			result["attack_sent"] = _extract_int_field(line, "attack_sent=") == 1
 			result["combat_response_seen"] = _extract_int_field(line, "combat_response_seen=") == 1
+			result["attacker_state_update_seen"] = _extract_int_field(line, "attacker_state_update_seen=") == 1
 			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
+			result["hit_info"] = _extract_hex_field(line, "hit_info=0x")
+			result["total_damage"] = _extract_int_field(line, "total_damage=")
+			result["overkill"] = _extract_int_field(line, "overkill=")
+			result["sub_damage_count"] = _extract_int_field(line, "sub_damage_count=")
+			result["target_state"] = _extract_int_field(line, "target_state=")
+			result["blocked_amount"] = _extract_int_field(line, "blocked_amount=")
+	result["attacker_state_update"] = {
+		"parsed": result["attacker_state_update_seen"],
+		"hit_info": result["hit_info"],
+		"total_damage": result["total_damage"],
+		"overkill": result["overkill"],
+		"sub_damage_count": result["sub_damage_count"],
+		"target_state": result["target_state"],
+		"blocked_amount": result["blocked_amount"],
+	}
 	return result
 
 

@@ -108,10 +108,18 @@ struct CombatProbeResult
     std::uint32_t target_entry = 0;
     std::string target_name;
     bool live_target_found = false;
+    bool target_has_position = false;
+    float target_x = 0;
+    float target_y = 0;
+    float target_z = 0;
+    bool approach_movement_sent = false;
+    bool return_movement_sent = false;
     bool selection_sent = false;
     bool attack_sent = false;
     bool combat_response_seen = false;
+    bool attacker_state_update_seen = false;
     std::uint16_t response_opcode = 0;
+    AttackerStateUpdateSummary attacker_state_update;
     std::vector<VisibleObjectSummary> visible_objects;
     std::vector<std::uint16_t> skipped_opcodes;
 };

@@ -4,7 +4,7 @@ const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
 
 const TEST_CHARACTER_NAME := "Codexstage"
 const INTERACTION_ENTRY := 823
-const COMBAT_ENTRY := 721
+const COMBAT_ENTRY := 38
 
 var status_label: Label
 var target_label: Label
@@ -125,7 +125,11 @@ func _run_stage_probe() -> void:
 	if not bool(combat.get("ok", false)):
 		_apply_failure("Combat probe failed", combat)
 		return
-	_log("Combat response received: opcode 0x%s" % _opcode_hex(int(combat.get("response_opcode", 0))))
+	_log("Combat damage received: opcode 0x%s, damage %s, target state %s" % [
+		_opcode_hex(int(combat.get("response_opcode", 0))),
+		str(combat.get("total_damage", 0)),
+		str(combat.get("target_state", 0)),
+	])
 
 	_apply_success(interaction, combat)
 
@@ -140,6 +144,12 @@ func _apply_success(interaction: Dictionary, combat: Dictionary) -> void:
 		combat_guid,
 		str(combat.get("target_entry", COMBAT_ENTRY)),
 	]
+	_log("Damage summary: hit_info=0x%s total=%s overkill=%s sub_hits=%s" % [
+		_opcode_hex(int(combat.get("hit_info", 0))),
+		str(combat.get("total_damage", 0)),
+		str(combat.get("overkill", 0)),
+		str(combat.get("sub_damage_count", 0)),
+	])
 	_finish_self_test(true, {
 		"interaction": interaction,
 		"combat": combat,
@@ -180,9 +190,11 @@ func _finish_self_test(ok: bool, result: Dictionary) -> void:
 	if ok:
 		var interaction: Dictionary = result.get("interaction", {})
 		var combat: Dictionary = result.get("combat", {})
-		print("INTERACTION_COMBAT_SELF_TEST_OK gossip_opcode=0x%s combat_opcode=0x%s" % [
+		print("INTERACTION_COMBAT_SELF_TEST_OK gossip_opcode=0x%s combat_opcode=0x%s damage=%s attacker_state=%s" % [
 			_opcode_hex(int(interaction.get("response_opcode", 0))),
 			_opcode_hex(int(combat.get("response_opcode", 0))),
+			str(combat.get("total_damage", 0)),
+			str(combat.get("attacker_state_update_seen", false)),
 		])
 		get_tree().quit(0)
 	else:

@@ -591,6 +591,17 @@ std::uint32_t movement_timestamp_ms()
     return static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now).count() & 0xFFFFFFFFu);
 }
 
+void answer_time_sync_request(AuthenticatedWorldSession& session, WorldPacketData const& packet)
+{
+    std::uint32_t const counter = parse_time_sync_counter(packet.payload);
+    std::uint32_t const client_time = movement_timestamp_ms();
+    write_world_packet(
+        session.socket.get(),
+        CMSG_TIME_SYNC_RESP,
+        build_time_sync_response_payload(counter, client_time),
+        &session.crypt);
+}
+
 float position_distance(CharacterSummary const& character, MovementSample const& movement)
 {
     float const dx = character.x - movement.x;
@@ -613,6 +624,17 @@ float position_distance(LoginVerifyWorld const& login, VisibleObjectSummary cons
     float const dy = login.y - object.y;
     float const dz = login.z - object.z;
     return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+float facing_angle(float from_x, float from_y, float to_x, float to_y)
+{
+    constexpr float TwoPi = 6.28318530717958647692f;
+    float angle = std::atan2(to_y - from_y, to_x - from_x);
+    if (angle < 0.0f)
+    {
+        angle += TwoPi;
+    }
+    return angle;
 }
 
 std::uint16_t selector_high_guid(std::uint64_t selector)
@@ -772,7 +794,8 @@ LoginVerifyWorld login_selected_character(
     FlowOptions options)
 {
     write_world_packet(session.socket.get(), CMSG_PLAYER_LOGIN, build_player_login_payload(selected.guid), &session.crypt);
-    for (int i = 0; i < 80; ++i)
+    auto const login_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    while (std::chrono::steady_clock::now() < login_deadline)
     {
         WorldPacketData packet = read_world_packet(session.socket.get(), &session.crypt, options.trace_world_packets);
         if (packet.opcode == SMSG_LOGIN_VERIFY_WORLD)
@@ -806,6 +829,7 @@ bool wait_for_logged_in_world(
         }
         if (packet->opcode == SMSG_TIME_SYNC_REQ)
         {
+            answer_time_sync_request(session, *packet);
             return true;
         }
         if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
@@ -1064,7 +1088,8 @@ EnterWorldResult enter_world(
     result.realm = session->realm;
     result.character = selected;
     bool verified_world = false;
-    for (int i = 0; i < 80; ++i)
+    auto const world_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    while (std::chrono::steady_clock::now() < world_deadline)
     {
         WorldPacketData packet = read_world_packet(session->socket.get(), &session->crypt, options.trace_world_packets);
         if (packet.opcode == SMSG_LOGIN_VERIFY_WORLD)
@@ -1254,6 +1279,7 @@ InteractionResult interact_with_npc(
 
         if (packet->opcode == SMSG_TIME_SYNC_REQ)
         {
+            answer_time_sync_request(*session, *packet);
             logged_in_world = true;
             if (result.live_target_found)
             {
@@ -1373,6 +1399,10 @@ CombatProbeResult combat_probe(
                 {
                     result.target_guid = target->guid;
                     result.target_entry = target->entry;
+                    result.target_has_position = target->has_position;
+                    result.target_x = target->x;
+                    result.target_y = target->y;
+                    result.target_z = target->z;
                     result.live_target_found = true;
                 }
             }
@@ -1381,6 +1411,7 @@ CombatProbeResult combat_probe(
 
         if (packet->opcode == SMSG_TIME_SYNC_REQ)
         {
+            answer_time_sync_request(*session, *packet);
             logged_in_world = true;
             if (result.live_target_found)
             {
@@ -1406,12 +1437,52 @@ CombatProbeResult combat_probe(
         return result;
     }
 
+    if (result.target_has_position)
+    {
+        float dx = login.x - result.target_x;
+        float dy = login.y - result.target_y;
+        float distance = std::sqrt(dx * dx + dy * dy);
+        if (distance < 0.01f)
+        {
+            dx = 1.0f;
+            dy = 0.0f;
+            distance = 1.0f;
+        }
+
+        MovementSample start;
+        start.flags = 0x00000001; // MOVEMENTFLAG_FORWARD
+        start.flags2 = 0;
+        start.time = movement_timestamp_ms();
+        start.x = login.x;
+        start.y = login.y;
+        start.z = login.z;
+        start.orientation = login.orientation;
+        start.fall_time = 0;
+
+        MovementSample approach = start;
+        approach.flags = 0;
+        approach.time = movement_timestamp_ms();
+        approach.x = result.target_x + (dx / distance) * 1.5f;
+        approach.y = result.target_y + (dy / distance) * 1.5f;
+        approach.z = result.target_z;
+        approach.orientation = facing_angle(approach.x, approach.y, result.target_x, result.target_y);
+        start.orientation = facing_angle(start.x, start.y, result.target_x, result.target_y);
+
+        write_world_packet(session->socket.get(), MSG_MOVE_START_FORWARD, build_movement_payload(selected.guid, start), &session->crypt);
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        approach.time = movement_timestamp_ms();
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, approach), &session->crypt);
+        result.approach_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+
     write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.target_guid), &session->crypt);
     result.selection_sent = true;
     write_world_packet(session->socket.get(), CMSG_ATTACKSWING, build_raw_guid_payload(result.target_guid), &session->crypt);
     result.attack_sent = true;
 
-    for (int i = 0; i < 80; ++i)
+    auto const combat_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    while (std::chrono::steady_clock::now() < combat_deadline)
     {
         auto packet = read_world_packet_optional(
             session->socket.get(),
@@ -1422,11 +1493,26 @@ CombatProbeResult combat_probe(
         {
             continue;
         }
-        if (is_combat_response_opcode(packet->opcode))
+        if (packet->opcode == SMSG_ATTACKERSTATEUPDATE)
         {
+            result.attacker_state_update = parse_attacker_state_update(packet->payload);
+            result.attacker_state_update_seen = result.attacker_state_update.parsed;
             result.combat_response_seen = true;
             result.response_opcode = packet->opcode;
             break;
+        }
+        if (is_combat_response_opcode(packet->opcode))
+        {
+            result.combat_response_seen = true;
+            if (result.response_opcode == 0)
+            {
+                result.response_opcode = packet->opcode;
+            }
+            if (packet->opcode != SMSG_ATTACKSTART && packet->opcode != SMSG_ATTACKSTOP)
+            {
+                break;
+            }
+            continue;
         }
         if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
         {
@@ -1436,6 +1522,21 @@ CombatProbeResult combat_probe(
     }
 
     write_world_packet(session->socket.get(), CMSG_ATTACKSTOP, {}, &session->crypt);
+    if (result.approach_movement_sent)
+    {
+        MovementSample back;
+        back.flags = 0;
+        back.flags2 = 0;
+        back.time = movement_timestamp_ms();
+        back.x = login.x;
+        back.y = login.y;
+        back.z = login.z;
+        back.orientation = login.orientation;
+        back.fall_time = 0;
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, back), &session->crypt);
+        result.return_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
     (void)request_graceful_logout(*session, options);
     return result;
 }
@@ -1640,6 +1741,7 @@ SpellbookResult read_initial_spellbook(
         }
         if (packet->opcode == SMSG_TIME_SYNC_REQ)
         {
+            answer_time_sync_request(*session, *packet);
             result.logged_in_world = true;
             if (result.initial_spells_seen)
             {
@@ -1702,6 +1804,7 @@ ActionButtonsResult read_action_buttons(
         }
         if (packet->opcode == SMSG_TIME_SYNC_REQ)
         {
+            answer_time_sync_request(*session, *packet);
             result.logged_in_world = true;
             if (result.action_buttons_seen)
             {
@@ -1971,6 +2074,7 @@ TargetedSpellCastProbeResult cast_spell_at_target_probe(
 
         if (packet->opcode == SMSG_TIME_SYNC_REQ)
         {
+            answer_time_sync_request(*session, *packet);
             result.logged_in_world = true;
             if (result.live_target_found)
             {
