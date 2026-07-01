@@ -42,6 +42,9 @@ constexpr std::uint16_t SMSG_LOGIN_VERIFY_WORLD = 0x236;
 constexpr std::uint16_t SMSG_TIME_SYNC_REQ = 0x390;
 constexpr std::uint16_t SMSG_GM_MESSAGECHAT = 0x3B3;
 constexpr std::uint8_t CHAT_MSG_SAY = 0x01;
+constexpr std::uint8_t CHAT_MSG_WHISPER = 0x07;
+constexpr std::uint8_t CHAT_MSG_WHISPER_INFORM = 0x09;
+constexpr std::uint32_t LANG_UNIVERSAL = 0;
 constexpr std::uint32_t LANG_ORCISH = 1;
 constexpr std::uint32_t LANG_COMMON = 7;
 constexpr std::size_t CharEnumEquipmentSlots = 23;
@@ -140,6 +143,10 @@ std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_gui
 std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid);
 std::vector<std::uint8_t> build_movement_payload(std::uint64_t character_guid, MovementSample const& movement);
 std::vector<std::uint8_t> build_chat_say_payload(std::uint32_t language, std::string const& message);
+std::vector<std::uint8_t> build_chat_whisper_payload(
+    std::uint32_t language,
+    std::string const& target_name,
+    std::string const& message);
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload);
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);

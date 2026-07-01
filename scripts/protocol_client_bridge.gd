@@ -277,6 +277,49 @@ func chat_say(
 	return parsed
 
 
+func chat_whisper_self(
+	character_name: String = "Codexstage",
+	message: String = "Codex Stage16 whisper probe",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_chat_whisper_self(character_name, message, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--chat-whisper-self",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			message,
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_chat_whisper_self_output(text)
+	parsed["message"] = message
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("echoed_message_seen", false))
+	return parsed
+
+
 func run_self_test() -> Dictionary:
 	var helper := _helper_path()
 	if not FileAccess.file_exists(helper):
@@ -504,6 +547,37 @@ func _run_native_chat_say(
 		message)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected chat result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
+func _run_native_chat_whisper_self(
+	character_name: String,
+	message: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("chat_whisper_self"):
+		return {}
+
+	var result = client.call(
+		"chat_whisper_self",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		message)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected whisper result")
 
 	var parsed: Dictionary = result
 	parsed["source"] = "Godot native extension"
@@ -808,6 +882,30 @@ func _parse_chat_say_output(output: String) -> Dictionary:
 			result["character_name"] = _extract_quoted_field(line, "character=\"")
 			result["message_sent"] = _extract_int_field(line, "message_sent=") == 1
 			result["chat_response_seen"] = _extract_int_field(line, "chat_response_seen=") == 1
+			result["echoed_message_seen"] = _extract_int_field(line, "echoed_message_seen=") == 1
+			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
+			result["chat_type"] = _extract_int_field(line, "chat_type=")
+			result["language"] = _extract_int_field(line, "language=")
+			result["sender_guid"] = _extract_token_after(line, "sender_guid=")
+			result["receiver_guid"] = _extract_token_after(line, "receiver_guid=")
+	return result
+
+
+func _parse_chat_whisper_self_output(output: String) -> Dictionary:
+	var result := _parse_chat_say_output("")
+	result["whisper_seen"] = false
+	result["whisper_inform_seen"] = false
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("CHAT_WHISPER_SELF_SENT"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["message_sent"] = _extract_int_field(line, "message_sent=") == 1
+			result["chat_response_seen"] = _extract_int_field(line, "chat_response_seen=") == 1
+			result["whisper_seen"] = _extract_int_field(line, "whisper_seen=") == 1
+			result["whisper_inform_seen"] = _extract_int_field(line, "whisper_inform_seen=") == 1
 			result["echoed_message_seen"] = _extract_int_field(line, "echoed_message_seen=") == 1
 			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
 			result["chat_type"] = _extract_int_field(line, "chat_type=")

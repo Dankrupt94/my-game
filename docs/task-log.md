@@ -849,3 +849,31 @@ Validation:
 - `./tools/build_godot_protocol_extension_compat.sh` passed.
 - `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` passed with `CHAT_SELF_TEST_OK response_opcode=0x096 chat_type=1 language=7`.
 - Regression self-tests passed for enter-world, movement, object visibility, and interaction/combat when run sequentially.
+
+## 2026-07-01 - Expand Stage 16 Chat With Self-Whisper
+
+Goal: extend the chat slice beyond say-message by proving another `CMSG_MESSAGECHAT` variant and response path.
+
+Plan:
+
+- Add a whisper payload builder.
+- Add a native self-whisper probe that targets the current local test character.
+- Detect both `CHAT_MSG_WHISPER` and `CHAT_MSG_WHISPER_INFORM` responses.
+- Expose self-whisper through the Godot extension and script bridge.
+- Add a chat-scene mode selector and update the headless self-test to exercise both modes.
+
+Result:
+
+- Added `build_chat_whisper_payload`.
+- Added `acore_protocol::chat_whisper_self` and the `--chat-whisper-self` helper command.
+- Added `AcoreProtocolClient.chat_whisper_self(...)`.
+- Added `ProtocolClientBridge.chat_whisper_self(...)`.
+- Updated `scripts/stage16_chat_view.gd` with Say and Whisper Self modes.
+- Updated the Stage 16 matrix and packet spec.
+
+Validation:
+
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--chat-whisper-self` passed with `whisper_seen=1`, `whisper_inform_seen=1`, `chat_type=9`, and `language=0`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` passed with `say_opcode=0x096`, `whisper_opcode=0x096`, `whisper_seen=true`, and `whisper_inform_seen=true`.

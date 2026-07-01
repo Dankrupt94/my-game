@@ -129,6 +129,8 @@ struct ChatSayResult
     bool message_sent = false;
     bool chat_response_seen = false;
     bool echoed_message_seen = false;
+    bool whisper_seen = false;
+    bool whisper_inform_seen = false;
     std::uint16_t response_opcode = 0;
     std::vector<std::uint16_t> skipped_opcodes;
 };
@@ -211,6 +213,15 @@ CombatProbeResult combat_probe(
     FlowOptions options = {});
 
 ChatSayResult chat_say(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::string const& message,
+    FlowOptions options = {});
+
+ChatSayResult chat_whisper_self(
     std::string const& host,
     std::string const& port,
     std::string const& account,

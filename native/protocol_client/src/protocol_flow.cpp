@@ -718,6 +718,22 @@ bool is_chat_response_opcode(std::uint16_t opcode)
     return opcode == SMSG_MESSAGECHAT || opcode == SMSG_GM_MESSAGECHAT;
 }
 
+void validate_chat_message(std::string const& message)
+{
+    if (message.empty())
+    {
+        throw std::runtime_error("chat message must not be empty");
+    }
+    if (message.size() > 255)
+    {
+        throw std::runtime_error("chat message must be 255 bytes or shorter");
+    }
+    if (message.find_first_of("\n\r") != std::string::npos || message.find("|0") != std::string::npos)
+    {
+        throw std::runtime_error("chat message contains unsupported control text");
+    }
+}
+
 LoginVerifyWorld login_selected_character(
     AuthenticatedWorldSession& session,
     CharacterSummary const& selected,
@@ -1369,18 +1385,7 @@ ChatSayResult chat_say(
     std::string const& message,
     FlowOptions options)
 {
-    if (message.empty())
-    {
-        throw std::runtime_error("chat message must not be empty");
-    }
-    if (message.size() > 255)
-    {
-        throw std::runtime_error("chat message must be 255 bytes or shorter");
-    }
-    if (message.find_first_of("\n\r") != std::string::npos || message.find("|0") != std::string::npos)
-    {
-        throw std::runtime_error("chat message contains unsupported control text");
-    }
+    validate_chat_message(message);
 
     auto session = connect_authenticated_world(host, port, account, password, options);
     std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
@@ -1426,6 +1431,90 @@ ChatSayResult chat_say(
             result.receiver_guid = chat.receiver_guid;
             result.received_message = chat.message;
             result.echoed_message_seen = chat.message == message;
+            if (result.echoed_message_seen)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+ChatSayResult chat_whisper_self(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::string const& message,
+    FlowOptions options)
+{
+    validate_chat_message(message);
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    (void)login_selected_character(*session, selected, options);
+
+    bool const logged_in_world = wait_for_logged_in_world(*session, options, 650);
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before whisper");
+    }
+
+    ChatSayResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.message = message;
+    result.language = language_for_character(selected);
+
+    write_world_packet(
+        session->socket.get(),
+        CMSG_MESSAGECHAT,
+        build_chat_whisper_payload(result.language, selected.name, message),
+        &session->crypt);
+    result.message_sent = true;
+
+    for (int i = 0; i < 80; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (is_chat_response_opcode(packet->opcode))
+        {
+            ChatMessageSummary chat = parse_chat_message_summary(
+                packet->payload,
+                packet->opcode == SMSG_GM_MESSAGECHAT);
+            result.chat_response_seen = true;
+            result.response_opcode = packet->opcode;
+            result.chat_type = chat.chat_type;
+            result.language = chat.language;
+            result.sender_guid = chat.sender_guid;
+            result.receiver_guid = chat.receiver_guid;
+            result.received_message = chat.message;
+            if (chat.message == message && chat.chat_type == CHAT_MSG_WHISPER)
+            {
+                result.whisper_seen = true;
+            }
+            if (chat.message == message && chat.chat_type == CHAT_MSG_WHISPER_INFORM)
+            {
+                result.whisper_inform_seen = true;
+            }
+            result.echoed_message_seen = result.whisper_seen && result.whisper_inform_seen;
             if (result.echoed_message_seen)
             {
                 break;

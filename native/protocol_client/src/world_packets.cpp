@@ -619,6 +619,21 @@ std::vector<std::uint8_t> build_chat_say_payload(std::uint32_t language, std::st
     return payload;
 }
 
+std::vector<std::uint8_t> build_chat_whisper_payload(
+    std::uint32_t language,
+    std::string const& target_name,
+    std::string const& message)
+{
+    std::vector<std::uint8_t> payload;
+    append_u32_le(payload, CHAT_MSG_WHISPER);
+    append_u32_le(payload, language);
+    payload.insert(payload.end(), target_name.begin(), target_name.end());
+    append_u8(payload, 0);
+    payload.insert(payload.end(), message.begin(), message.end());
+    append_u8(payload, 0);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload)
 {
     std::vector<std::uint8_t> packet = build_client_header(opcode, payload.size());
@@ -847,6 +862,13 @@ bool world_packet_self_test()
         return false;
     }
 
+    auto whisper_payload = build_chat_whisper_payload(LANG_COMMON, "SafeTest", "secret");
+    auto whisper_packet = build_client_packet(CMSG_MESSAGECHAT, whisper_payload);
+    if (whisper_packet.size() != 6 + 4 + 4 + 9 + 7 || whisper_packet[2] != 0x95)
+    {
+        return false;
+    }
+
     auto create_payload = build_character_create_payload("Codextest");
     if (create_payload.empty() || create_payload.back() != 0)
     {
@@ -912,6 +934,17 @@ bool world_packet_self_test()
     append_u8(chat_response, 0);
     ChatMessageSummary chat = parse_chat_message_summary(chat_response, false);
 
+    std::vector<std::uint8_t> whisper_response;
+    append_u8(whisper_response, CHAT_MSG_WHISPER);
+    append_u32_le(whisper_response, LANG_UNIVERSAL);
+    append_u64_le(whisper_response, 0x1234);
+    append_u32_le(whisper_response, 0);
+    append_u64_le(whisper_response, 0x1234);
+    append_u32_le(whisper_response, 7);
+    whisper_response.insert(whisper_response.end(), {'s', 'e', 'c', 'r', 'e', 't', 0});
+    append_u8(whisper_response, 0);
+    ChatMessageSummary whisper = parse_chat_message_summary(whisper_response, false);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -931,5 +964,9 @@ bool world_packet_self_test()
         && chat.language == LANG_COMMON
         && chat.sender_guid == 0x1234
         && chat.receiver_guid == 0x1234
-        && chat.message == "hello";
+        && chat.message == "hello"
+        && whisper.parsed
+        && whisper.chat_type == CHAT_MSG_WHISPER
+        && whisper.language == LANG_UNIVERSAL
+        && whisper.message == "secret";
 }

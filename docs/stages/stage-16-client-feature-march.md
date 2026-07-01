@@ -49,6 +49,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 
 - 2026-07-01: Stage 16 opened with a dedicated parity matrix. Chat is the first feature slice because it is a core client feature with a narrow protocol surface and a simple Godot UI proof path.
 - 2026-07-01: First chat slice is working. Godot sends a local say-message through `CMSG_MESSAGECHAT` and receives the AzerothCore echo through `SMSG_MESSAGECHAT` opcode `0x096`.
+- 2026-07-01: Chat slice expanded to self-whisper. Godot now sends a whisper packet addressed to the local test character and receives both whisper and whisper-inform responses.
 
 ## Active Slice: Chat
 
@@ -62,7 +63,8 @@ Initial target:
 
 Remaining chat parity work:
 
-- Whisper, channel, party, raid, guild, officer, battleground, emote, AFK, and DND message types.
+- True receiver-side whisper tests with a second account/session.
+- Channel, party, raid, guild, officer, battleground, emote, AFK, and DND message types.
 - Chat tabs, filters, timestamps, scrollback, message colors, and command parsing.
 - System messages and server notifications as first-class UI events.
 - Multi-character/session tests for receiver-side behavior.

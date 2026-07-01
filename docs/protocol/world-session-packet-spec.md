@@ -317,6 +317,21 @@ Initial Stage 16 request values:
 | `language` | `7` for the current human test character | `LANG_COMMON`; Horde races should use Orcish (`1`) for the same first-slice behavior |
 | `message` | Local test string | Must be non-empty, 255 bytes or shorter, and must not contain control text rejected by AzerothCore |
 
+Client self-whisper request:
+
+| Opcode | Value | Payload |
+| --- | ---: | --- |
+| `CMSG_MESSAGECHAT` | `0x095` | `uint32 chat_type`, `uint32 language`, null-terminated target name, null-terminated message |
+
+Initial self-whisper request values:
+
+| Field | Value | Notes |
+| --- | ---: | --- |
+| `chat_type` | `7` | `CHAT_MSG_WHISPER` |
+| `language` | `7` for the current human test character | The server converts normal whisper responses to universal language |
+| `target name` | `Codexstage` | Self-targeted so one local account/session can prove the packet variant |
+| `message` | Local test string | Same validation as say-message |
+
 Server echo response:
 
 | Opcode | Value | Stage 16 parser |
@@ -328,11 +343,14 @@ Observed Stage 16 result:
 
 - Native helper command `--chat-say` sent `Codex Stage16 chat probe` as `Codexstage`.
 - AzerothCore echoed the message with `response_opcode=0x96`, `chat_type=1`, `language=7`, and matching sender/receiver GUIDs.
-- Godot scene `scenes/stage16_chat_view.tscn` passed the same path with `CHAT_SELF_TEST_OK response_opcode=0x096 chat_type=1 language=7`.
+- Native helper command `--chat-whisper-self` sent `Codex Stage16 whisper probe` to `Codexstage`.
+- AzerothCore returned both `CHAT_MSG_WHISPER` and `CHAT_MSG_WHISPER_INFORM`; the final observed response had `chat_type=9` and `language=0`.
+- Godot scene `scenes/stage16_chat_view.tscn` passed both paths with `CHAT_SELF_TEST_OK say_opcode=0x096 whisper_opcode=0x096 whisper_seen=true whisper_inform_seen=true`.
 
 Remaining chat packet work:
 
-- Parse and build whisper/channel/party/guild/raid/emote/AFK/DND variants.
+- Add true receiver-side whisper tests using a second local account/session.
+- Parse and build channel/party/guild/raid/emote/AFK/DND variants.
 - Surface system messages and server notifications in the chat UI.
 - Add receiver-side tests with a second local character/session.
 
