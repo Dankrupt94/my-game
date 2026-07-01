@@ -648,6 +648,18 @@ std::vector<std::uint8_t> build_cast_spell_payload(
     return payload;
 }
 
+std::vector<std::uint8_t> build_cast_spell_unit_payload(
+    std::uint8_t cast_count,
+    std::uint32_t spell_id,
+    std::uint8_t cast_flags,
+    std::uint64_t target_guid)
+{
+    constexpr std::uint32_t TARGET_FLAG_UNIT = 0x00000002;
+    std::vector<std::uint8_t> payload = build_cast_spell_payload(cast_count, spell_id, cast_flags, TARGET_FLAG_UNIT);
+    append_packed_guid(payload, target_guid);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload)
 {
     std::vector<std::uint8_t> packet = build_client_header(opcode, payload.size());
@@ -999,6 +1011,12 @@ bool world_packet_self_test()
     auto cast_payload = build_cast_spell_payload(1, 2457, 0, 0);
     auto cast_packet = build_client_packet(CMSG_CAST_SPELL, cast_payload);
     if (cast_packet.size() != 6 + 1 + 4 + 1 + 4 || cast_packet[2] != 0x2E || cast_packet[3] != 0x01)
+    {
+        return false;
+    }
+    auto targeted_cast_payload = build_cast_spell_unit_payload(2, 78, 0, 0xF1300002D1000CEFULL);
+    auto targeted_cast_packet = build_client_packet(CMSG_CAST_SPELL, targeted_cast_payload);
+    if (targeted_cast_packet.size() <= cast_packet.size() || targeted_cast_packet[2] != 0x2E || targeted_cast_packet[3] != 0x01)
     {
         return false;
     }

@@ -1745,4 +1745,159 @@ SpellCastProbeResult cast_spell_probe(
     (void)request_graceful_logout(*session, options);
     return result;
 }
+
+TargetedSpellCastProbeResult cast_spell_at_target_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint32_t spell_id,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options)
+{
+    if (spell_id == 0)
+    {
+        throw std::runtime_error("spell id must be positive");
+    }
+    if (target_guid == 0)
+    {
+        throw std::runtime_error("target guid or entry must be non-zero");
+    }
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+
+    TargetedSpellCastProbeResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.spell_id = spell_id;
+    result.target_entry = target_entry_from_selector(target_guid);
+    result.target_name = target_name;
+
+    for (int i = 0; i < 180; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (result.logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            result.visible_objects.insert(
+                result.visible_objects.end(),
+                update.visible_objects.begin(),
+                update.visible_objects.end());
+
+            if (!result.live_target_found)
+            {
+                std::optional<VisibleObjectSummary> target = choose_visible_target(result.visible_objects, target_guid, login);
+                if (target)
+                {
+                    result.target_guid = target->guid;
+                    result.target_entry = target->entry;
+                    result.live_target_found = true;
+                }
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            result.logged_in_world = true;
+            if (result.live_target_found)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (!result.logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before targeted spell cast");
+    }
+    if (!result.live_target_found)
+    {
+        (void)request_graceful_logout(*session, options);
+        return result;
+    }
+
+    write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.selection_sent = true;
+    write_world_packet(session->socket.get(), CMSG_ATTACKSWING, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.attack_sent = true;
+    write_world_packet(
+        session->socket.get(),
+        CMSG_CAST_SPELL,
+        build_cast_spell_unit_payload(1, spell_id, 0, result.target_guid),
+        &session->crypt);
+    result.cast_sent = true;
+
+    for (int i = 0; i < 100; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (is_spell_cast_response_opcode(packet->opcode))
+        {
+            try
+            {
+                SpellCastResponseSummary response = parse_spell_cast_response(packet->opcode, packet->payload);
+                if (response.spell_id == spell_id)
+                {
+                    result.response = response;
+                    result.response_seen = true;
+                    result.accepted = response.spell_start || response.spell_go;
+                    if (response.spell_go || response.cast_failed || response.spell_failure)
+                    {
+                        break;
+                    }
+                    continue;
+                }
+            }
+            catch (std::exception const&)
+            {
+                // Keep scanning; packet opcode evidence is retained below.
+            }
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    write_world_packet(session->socket.get(), CMSG_ATTACKSTOP, {}, &session->crypt);
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
 }

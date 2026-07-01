@@ -977,3 +977,37 @@ Validation:
 - `ACORE_SPELLBOOK_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spellbook_view.tscn` still passed with `spells=48` and `cooldowns=1` immediately after casting.
 - `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` still passed with say and self-whisper responses.
 - Local `qwen-agent` advisory review found no concrete blockers for the bounded spell-cast slice.
+
+## 2026-07-01 - Add Stage 16 Targeted Spell-Cast Slice
+
+Goal: prove Godot can select a live AzerothCore unit and send a real unit-target spell-cast packet.
+
+Plan:
+
+- Add a `CMSG_CAST_SPELL` builder for `TARGET_FLAG_UNIT`.
+- Add a native targeted spell-cast probe that reuses the live object parser from Stage 15.
+- Select and attack a nearby creature before casting so the server has the same basic context a normal client would create.
+- Expose targeted casting through the Godot extension and script bridge.
+- Extend the spell-cast scene with a target mode and a headless targeted self-test.
+
+Result:
+
+- Added `build_cast_spell_unit_payload`.
+- Added `acore_protocol::cast_spell_at_target_probe` and the `--cast-spell-target` helper command.
+- Added `AcoreProtocolClient.cast_spell_at_target(...)`.
+- Added `ProtocolClientBridge.cast_spell_at_target(...)`.
+- Extended `scripts/stage16_spell_cast_view.gd` with no-target and unit-target modes.
+- Updated the Stage 16 matrix and packet spec.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--cast-spell-target` passed for spell `78` against nearby creature entry `721` with `live_target_found=1`, `selection_sent=1`, `attack_sent=1`, `cast_sent=1`, `accepted=1`, `response_opcode=0x131`, and `response_spell_id=78`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_TARGETED_SPELL_CAST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spell_cast_view.tscn` passed with `spell_id=78`, `target_entry=721`, `opcode=0x131`, and `accepted=true`.
+- `ACORE_SPELL_CAST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spell_cast_view.tscn` still passed with `spell_id=2457`, `opcode=0x132`, and `accepted=true`.
+- `ACORE_ACTION_BAR_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` still passed with `slots=144` and `populated=3`.
+- `ACORE_SPELLBOOK_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spellbook_view.tscn` still passed with `spells=48` and `cooldowns=1`.
+- `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` still passed with say and self-whisper responses.
+- Local `qwen-agent` advisory review found no concrete blockers for the bounded targeted spell-cast slice.

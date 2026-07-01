@@ -4,9 +4,15 @@ const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
 
 const TEST_CHARACTER_NAME := "Codexstage"
 const DEFAULT_SPELL_ID := 2457
+const DEFAULT_TARGETED_SPELL_ID := 78
+const DEFAULT_TARGET_ENTRY := 721
+const DEFAULT_TARGET_NAME := "Nearby Creature"
 
 var status_label: Label
 var spell_id_input: SpinBox
+var target_mode_check: CheckBox
+var target_entry_input: SpinBox
+var target_name_input: LineEdit
 var cast_button: Button
 var result_log: TextEdit
 var self_test_finished := false
@@ -14,7 +20,13 @@ var self_test_finished := false
 
 func _ready() -> void:
 	_build_view()
-	if OS.get_environment("ACORE_SPELL_CAST_SELF_TEST") == "1":
+	if OS.get_environment("ACORE_TARGETED_SPELL_CAST_SELF_TEST") == "1":
+		spell_id_input.value = DEFAULT_TARGETED_SPELL_ID
+		target_mode_check.button_pressed = true
+		target_entry_input.value = DEFAULT_TARGET_ENTRY
+		target_name_input.text = DEFAULT_TARGET_NAME
+		call_deferred("_cast_selected_spell")
+	elif OS.get_environment("ACORE_SPELL_CAST_SELF_TEST") == "1":
 		call_deferred("_cast_selected_spell")
 
 
@@ -66,6 +78,24 @@ func _build_view() -> void:
 	spell_id_input.custom_minimum_size = Vector2(160, 38)
 	controls.add_child(spell_id_input)
 
+	target_mode_check = CheckBox.new()
+	target_mode_check.text = "Target"
+	target_mode_check.custom_minimum_size = Vector2(110, 38)
+	controls.add_child(target_mode_check)
+
+	target_entry_input = SpinBox.new()
+	target_entry_input.min_value = 1
+	target_entry_input.max_value = 9999999
+	target_entry_input.step = 1
+	target_entry_input.value = DEFAULT_TARGET_ENTRY
+	target_entry_input.custom_minimum_size = Vector2(130, 38)
+	controls.add_child(target_entry_input)
+
+	target_name_input = LineEdit.new()
+	target_name_input.text = DEFAULT_TARGET_NAME
+	target_name_input.custom_minimum_size = Vector2(180, 38)
+	controls.add_child(target_name_input)
+
 	cast_button = Button.new()
 	cast_button.text = "Cast"
 	cast_button.custom_minimum_size = Vector2(120, 38)
@@ -86,7 +116,15 @@ func _cast_selected_spell() -> void:
 	cast_button.disabled = true
 
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.cast_spell(TEST_CHARACTER_NAME, spell_id)
+	var result := {}
+	if target_mode_check.button_pressed:
+		result = bridge.cast_spell_at_target(
+			TEST_CHARACTER_NAME,
+			spell_id,
+			int(target_entry_input.value),
+			target_name_input.text.strip_edges())
+	else:
+		result = bridge.cast_spell(TEST_CHARACTER_NAME, spell_id)
 	cast_button.disabled = false
 
 	var ok := bool(result.get("ok", false))
@@ -107,6 +145,12 @@ func _render_result(result: Dictionary) -> void:
 	lines.append("Character: " + TEST_CHARACTER_NAME)
 	lines.append("Spell id: " + str(result.get("spell_id", int(spell_id_input.value))))
 	lines.append("Cast sent: " + str(result.get("cast_sent", false)))
+	if bool(result.get("live_target_found", false)) or target_mode_check.button_pressed:
+		lines.append("Target found: " + str(result.get("live_target_found", false)))
+		lines.append("Target entry: " + str(result.get("target_entry", int(target_entry_input.value))))
+		lines.append("Target GUID: " + str(result.get("target_guid", "0x0")))
+		lines.append("Selection sent: " + str(result.get("selection_sent", false)))
+		lines.append("Attack sent: " + str(result.get("attack_sent", false)))
 	lines.append("Logged in world: " + str(result.get("logged_in_world", false)))
 	lines.append("Response seen: " + str(result.get("response_seen", false)))
 	lines.append("Accepted: " + str(result.get("accepted", false)))
@@ -129,18 +173,31 @@ func _render_result(result: Dictionary) -> void:
 
 
 func _finish_self_test(ok: bool, result: Dictionary) -> void:
-	if OS.get_environment("ACORE_SPELL_CAST_SELF_TEST") != "1":
+	var self_test := OS.get_environment("ACORE_SPELL_CAST_SELF_TEST") == "1" \
+		or OS.get_environment("ACORE_TARGETED_SPELL_CAST_SELF_TEST") == "1"
+	if not self_test:
 		return
 	if self_test_finished:
 		return
 	self_test_finished = true
 
 	if ok:
-		print("SPELL_CAST_SELF_TEST_OK spell_id=%s opcode=0x%s accepted=%s" % [
-			str(result.get("spell_id", DEFAULT_SPELL_ID)),
-			"%03x" % int(result.get("response_opcode", 0)),
-			str(result.get("accepted", false)),
-		])
+		var label := "TARGETED_SPELL_CAST_SELF_TEST_OK" if target_mode_check.button_pressed else "SPELL_CAST_SELF_TEST_OK"
+		if target_mode_check.button_pressed:
+			print("%s spell_id=%s target_entry=%s opcode=0x%s accepted=%s" % [
+				label,
+				str(result.get("spell_id", DEFAULT_TARGETED_SPELL_ID)),
+				str(result.get("target_entry", DEFAULT_TARGET_ENTRY)),
+				"%03x" % int(result.get("response_opcode", 0)),
+				str(result.get("accepted", false)),
+			])
+		else:
+			print("%s spell_id=%s opcode=0x%s accepted=%s" % [
+				label,
+				str(result.get("spell_id", DEFAULT_SPELL_ID)),
+				"%03x" % int(result.get("response_opcode", 0)),
+				str(result.get("accepted", false)),
+			])
 		get_tree().quit(0)
 	else:
 		push_error("SPELL_CAST_SELF_TEST_FAILED: " + str(result.get("error", result.get("output", "unknown"))))

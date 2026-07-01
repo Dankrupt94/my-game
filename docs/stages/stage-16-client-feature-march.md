@@ -17,7 +17,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 - Vendors.
 - Quests.
 - Trainers.
-- Spells.
+- Spells. Working expanded slice: initial spellbook, no-target cast, and live unit-target cast.
 - Action bars.
 - Auras.
 - Groups.
@@ -54,6 +54,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 - 2026-07-01: First spellbook slice is working. Godot parses `SMSG_INITIAL_SPELLS` and displays the server-provided initial spell IDs.
 - 2026-07-01: First action-bar slice is working. Godot parses `SMSG_ACTION_BUTTONS`, unpacks the 144 server-provided action slots, and displays populated slots in a read-only action-bar scene.
 - 2026-07-01: First spell-cast slice is working. Godot sends `CMSG_CAST_SPELL` for the local warrior stance spell `2457` and receives `SMSG_SPELL_GO` opcode `0x132`.
+- 2026-07-01: Targeted spell-cast slice is working. Godot selects a live creature, sends a unit-target `CMSG_CAST_SPELL` for spell `78`, and receives `SMSG_SPELL_START` opcode `0x131`.
 
 ## Active Slice: Chat
 
@@ -83,12 +84,14 @@ Completed first target:
 - [x] Tolerate AzerothCore initial-spell packets where the advertised cooldown-map count is larger than the cooldown rows actually serialized.
 - [x] Send a safe no-target `CMSG_CAST_SPELL` and parse the accepted `SMSG_SPELL_GO` response.
 - [x] Add a Godot spell-cast scene with a headless self-test.
+- [x] Send a live unit-target `CMSG_CAST_SPELL` after selecting and attacking a nearby creature.
+- [x] Reuse the spell-cast scene for a targeted headless self-test.
 
 Remaining spell parity work:
 
 - Resolve spell names, ranks, icons, and descriptions from local-only data sources.
-- Expand `CMSG_CAST_SPELL` support with target flags, item targets, destination targets, and cast-count edge cases.
-- Parse cooldown, cast-fail, interrupt, aura, and combat-result packets.
+- Expand `CMSG_CAST_SPELL` support with friendly targets, item targets, source/destination targets, string targets, and cast-count edge cases.
+- Parse cooldown, cast-fail, interrupt, aura, damage/healing, threat, and combat-result packets.
 
 ## Active Slice: Action Bars
 
@@ -104,5 +107,5 @@ Remaining action-bar parity work:
 - Resolve spell/item/macro/equipment-set actions to display names and local-only icons.
 - Add drag/drop placement, remove-slot behavior, paging, and keybinds.
 - Build and validate `CMSG_SET_ACTION_BUTTON` against a controlled local character.
-- Add spell casting from action buttons after `CMSG_CAST_SPELL` support lands.
+- Add spell casting from action buttons using the no-target and unit-target cast paths.
 - Preserve exact server persistence behavior and document any Godot UI compatibility tweaks.

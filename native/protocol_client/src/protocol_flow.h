@@ -168,6 +168,26 @@ struct SpellCastProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct TargetedSpellCastProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint32_t spell_id = 0;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    bool live_target_found = false;
+    bool selection_sent = false;
+    bool attack_sent = false;
+    bool cast_sent = false;
+    bool logged_in_world = false;
+    bool response_seen = false;
+    bool accepted = false;
+    SpellCastResponseSummary response;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -286,5 +306,16 @@ SpellCastProbeResult cast_spell_probe(
     std::string const& password,
     std::string const& character_name,
     std::uint32_t spell_id,
+    FlowOptions options = {});
+
+TargetedSpellCastProbeResult cast_spell_at_target_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint32_t spell_id,
+    std::uint64_t target_guid,
+    std::string const& target_name,
     FlowOptions options = {});
 }

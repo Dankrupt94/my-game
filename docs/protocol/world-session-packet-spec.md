@@ -386,7 +386,7 @@ Remaining spell packet work:
 
 - Resolve spell IDs to names, ranks, descriptions, and icons through local-only data.
 - Parse cooldown update packets after casts.
-- Build and validate `CMSG_CAST_SPELL` with target flags.
+- Expand `CMSG_CAST_SPELL` beyond empty and unit-target masks.
 - Parse cast success/failure, interrupt, aura, and combat-result packets.
 
 ## Spell Cast Slice
@@ -408,6 +408,16 @@ First-slice request values:
 | `cast_flags` | `0` | No client movement/item extras in this slice |
 | `target mask` | `0` | Empty `SpellCastTargets`; target defaults to caster context where the spell allows it |
 
+Unit-target request values:
+
+| Field | Value | Notes |
+| --- | ---: | --- |
+| `cast_count` | `1` | Simple client cast counter for the probe |
+| `spell_id` | `78` | Local test warrior attack spell, selected because the test character already has it on the server-provided action buttons |
+| `cast_flags` | `0` | No client movement/item extras in this request; the server response may include its own cast flags |
+| `target mask` | `0x00000002` | `TARGET_FLAG_UNIT` |
+| `target guid` | Live packed object GUID | Resolved from the Stage 15 visible-object parser, not from a database spawn id |
+
 Server responses parsed by the Stage 16 summary parser:
 
 | Opcode | Value | Stage 16 support |
@@ -423,11 +433,13 @@ Observed Stage 16 result:
 - Native helper command `--cast-spell` sent spell `2457` as `Codexstage`.
 - AzerothCore accepted the cast and returned `SMSG_SPELL_GO` (`0x132`) with `response_spell_id=2457` and `cast_count=1`.
 - Godot scene `scenes/stage16_spell_cast_view.tscn` passed with `SPELL_CAST_SELF_TEST_OK spell_id=2457 opcode=0x132 accepted=true`.
+- Native helper command `--cast-spell-target` selected a live nearby creature matching entry `721`, sent spell `78`, and observed `live_target_found=1`, `selection_sent=1`, `attack_sent=1`, `cast_sent=1`, `accepted=1`, `response_opcode=0x131`, `response_spell_id=78`, and `cast_flags=0x802`.
+- Godot scene `scenes/stage16_spell_cast_view.tscn` passed with `TARGETED_SPELL_CAST_SELF_TEST_OK spell_id=78 target_entry=721 opcode=0x131 accepted=true`.
 
 Remaining spell-cast work:
 
 - Drive casts from action-bar slot clicks instead of a raw spell-id input.
-- Add target masks for selected enemy, friendly target, item target, source location, destination location, and string targets.
+- Add target masks for friendly target, item target, source location, destination location, and string targets.
 - Parse and surface cast failures, global cooldown/cooldown updates, interrupt messages, aura application, damage/healing results, and combat log consequences.
 
 ## Initial Action Buttons Slice

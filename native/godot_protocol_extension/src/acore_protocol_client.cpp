@@ -264,6 +264,9 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("cast_spell", "host", "port", "account", "password", "character_name", "spell_id"),
         &AcoreProtocolClient::cast_spell);
+    ClassDB::bind_method(
+        D_METHOD("cast_spell_at_target", "host", "port", "account", "password", "character_name", "spell_id", "target_entry", "target_name"),
+        &AcoreProtocolClient::cast_spell_at_target);
 }
 
 Dictionary AcoreProtocolClient::self_test()
@@ -638,6 +641,75 @@ Dictionary AcoreProtocolClient::cast_spell(
         result["spell_go"] = flow.response.spell_go;
         result["cast_failed"] = flow.response.cast_failed;
         result["spell_failure"] = flow.response.spell_failure;
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::cast_spell_at_target(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t spell_id,
+    int64_t target_entry,
+    String const& target_name)
+{
+    try
+    {
+        if (spell_id <= 0)
+        {
+            return failure("spell id must be positive");
+        }
+        if (target_entry <= 0)
+        {
+            return failure("target entry must be positive");
+        }
+
+        acore_protocol::TargetedSpellCastProbeResult flow = acore_protocol::cast_spell_at_target_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<std::uint32_t>(spell_id),
+            static_cast<std::uint64_t>(target_entry),
+            to_std_string(target_name));
+
+        Dictionary result;
+        result["ok"] = flow.cast_sent && flow.accepted;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["spell_id"] = static_cast<int>(flow.spell_id);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["live_target_found"] = flow.live_target_found;
+        result["selection_sent"] = flow.selection_sent;
+        result["attack_sent"] = flow.attack_sent;
+        result["cast_sent"] = flow.cast_sent;
+        result["logged_in_world"] = flow.logged_in_world;
+        result["response_seen"] = flow.response_seen;
+        result["accepted"] = flow.accepted;
+        result["response"] = spell_cast_response_dictionary(flow.response);
+        result["response_opcode"] = static_cast<int>(flow.response.opcode);
+        result["response_spell_id"] = static_cast<int>(flow.response.spell_id);
+        result["cast_count"] = static_cast<int>(flow.response.cast_count);
+        result["cast_flags"] = static_cast<int64_t>(flow.response.cast_flags);
+        result["fail_reason"] = static_cast<int>(flow.response.fail_reason);
+        result["spell_start"] = flow.response.spell_start;
+        result["spell_go"] = flow.response.spell_go;
+        result["cast_failed"] = flow.response.cast_failed;
+        result["spell_failure"] = flow.response.spell_failure;
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

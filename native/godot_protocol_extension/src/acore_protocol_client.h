@@ -88,4 +88,13 @@ public:
         godot::String const& password,
         godot::String const& character_name,
         int64_t spell_id);
+    godot::Dictionary cast_spell_at_target(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        int64_t spell_id,
+        int64_t target_entry,
+        godot::String const& target_name);
 };

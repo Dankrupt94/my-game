@@ -208,6 +208,11 @@ std::vector<std::uint8_t> build_cast_spell_payload(
     std::uint32_t spell_id,
     std::uint8_t cast_flags,
     std::uint32_t target_mask);
+std::vector<std::uint8_t> build_cast_spell_unit_payload(
+    std::uint8_t cast_count,
+    std::uint32_t spell_id,
+    std::uint8_t cast_flags,
+    std::uint64_t target_guid);
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload);
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);
