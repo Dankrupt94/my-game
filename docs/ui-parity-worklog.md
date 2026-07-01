@@ -7,16 +7,31 @@ lane split in the header of this file.
 
 ## Agent Lanes
 
-- **Codex lane:** `native/`, `scripts/protocol_client_bridge.gd`, the
-  `stage17_*` live-protocol scenes, and Codex's docs (`task-log.md`,
-  `stage-17-full-port-acceptance-gate.md`, `world-session-packet-spec.md`,
-  `wotlk_client_parity_engine_spec.md`).
-- **Claude lane:** the Godot UI view layer — `scripts/*_view.gd` +
-  `scenes/*_view.tscn` (non-`stage17_*`), their dashboard/`project.godot`
-  wiring, and this worklog.
+**Lanes were swapped on 2026-07-01** (see
+`docs/agent-coordination-requests.md`). Current assignment:
+
+- **Claude lane (now):** native/protocol — `native/`,
+  `scripts/protocol_client_bridge.gd`, the `stage17_*` live-protocol scenes, and
+  protocol docs (`task-log.md`, `stage-17-full-port-acceptance-gate.md`,
+  `world-session-packet-spec.md`, `wotlk_client_parity_engine_spec.md`).
+- **Codex lane (now):** the Godot UI view layer — `scripts/*_view.gd` +
+  `scenes/*_view.tscn` (non-`stage17_*`) and their dashboard/`project.godot`
+  wiring.
+- The entries below the swap line (intake of the UI view layer) were done by
+  Claude while it still held the UI lane.
 - **Git hygiene:** each agent stages only its own explicit paths (never
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
-  Claude commits interleave on `main` with no conflicts.
+  Claude commits interleaved on `main` with no conflicts.
+
+## 2026-07-01 - Bridge accepts login credentials (native/protocol lane)
+
+- `run_character_flow` / `enter_world` gained optional `account`/`password`
+  params (commit `3672d9c`). Non-empty → drive auth on both the native-extension
+  and helper-process paths; empty → unchanged file-driven behavior.
+- Verified live against the running server: file path `ok=true`, override path
+  `ok=true` (same roster), bad-override creds `ok=false`.
+- Unblocks the UI lane's login → roster → enter-world flow (see the UI-lane
+  follow-up in `docs/agent-coordination-requests.md`).
 
 ## 2026-07-01 - Intake of Antigravity's parity UI view layer
 
