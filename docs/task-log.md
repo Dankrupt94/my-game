@@ -1,5 +1,18 @@
 # Task Log
 
+## 2026-07-01 - Stage 12 Enter World Prototype Started
+
+Goal: create a disposable local test character for the ignored protocol account and complete the Stage 12 enter-world prototype as far as the current local server and protocol parser allow.
+
+Plan:
+
+- Preserve this before-task note.
+- Create a local-only test character for `CODEXPROTO` without committing credentials or database dumps.
+- Add `CMSG_PLAYER_LOGIN` support and parse `SMSG_LOGIN_VERIFY_WORLD`.
+- Capture initial `SMSG_UPDATE_OBJECT`/compressed update packet presence and implement the safest practical parser boundary.
+- Add a Godot scene that renders a basic grid and marker at the server-reported login coordinates.
+- Validate through native helper, Godot extension, and headless Godot scene checks.
+
 ## 2026-06-30 - Stage 11 Godot GDExtension Wrapper Checkpoint Started
 
 Goal: attempt the first actual Godot-native wrapper around the protocol bridge so Godot can eventually call the validated character-flow path without launching a helper process.

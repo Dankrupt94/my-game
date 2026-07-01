@@ -1,6 +1,6 @@
 # Stage 12 - Enter World Prototype
 
-Status: Planned
+Status: In Progress
 
 ## Goal
 
@@ -16,7 +16,16 @@ Initiate character world entry, verify authentication responses, extract player 
 
 ## Entry Criteria
 
-- Stage 11 minimal protocol client successfully retrieves character enumeration data over TCP.
+- [x] Stage 11 minimal protocol client successfully retrieves character enumeration data over TCP.
+- [x] Godot-native `AcoreProtocolClient` extension can run the authenticated character-flow check through the dashboard bridge.
+
+## Stage Start Notes
+
+Started on 2026-07-01.
+
+Stage 12 begins after Stage 11 proved authserver SRP6, realm parsing, world auth, encrypted `CMSG_CHAR_ENUM`, and Godot-native character enumeration through the `AcoreProtocolClient` GDExtension.
+
+The immediate local blocker is that the ignored `CODEXPROTO` smoke-test account has no characters. The first step is to create a disposable local-only test character through the protocol path, then use that character to validate `CMSG_PLAYER_LOGIN` and `SMSG_LOGIN_VERIFY_WORLD`.
 
 ## Done Criteria
 
