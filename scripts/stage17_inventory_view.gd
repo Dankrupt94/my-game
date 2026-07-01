@@ -14,8 +14,10 @@ const SLOT_NAMES := [
 var status_label: Label
 var money_label: Label
 var detail_label: Label
+var swap_label: Label
 var slot_grid: GridContainer
 var self_test_finished := false
+var swap_self_test_finished := false
 
 
 func _ready() -> void:
@@ -64,6 +66,21 @@ func _build_view() -> void:
 	money_label.add_theme_font_size_override("font_size", 18)
 	stack.add_child(money_label)
 
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 10)
+	stack.add_child(action_row)
+
+	var swap_button := Button.new()
+	swap_button.text = "Test Move"
+	swap_button.tooltip_text = "Backpack 1 -> Backpack 3"
+	swap_button.pressed.connect(_run_swap_probe)
+	action_row.add_child(swap_button)
+
+	swap_label = Label.new()
+	swap_label.text = "Move: idle"
+	swap_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_row.add_child(swap_label)
+
 	slot_grid = GridContainer.new()
 	slot_grid.columns = 6
 	slot_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -100,6 +117,9 @@ func _load_inventory() -> void:
 		str(result.get("item_template_count", 0)),
 		str(result.get("coinage", 0)),
 	])
+	if OS.get_environment("ACORE_INVENTORY_SWAP_SELF_TEST") == "1" and not swap_self_test_finished:
+		call_deferred("_run_swap_probe")
+		return
 	_finish_self_test(slots.size() == 39, result)
 
 
@@ -178,6 +198,29 @@ func _show_slot(slot: Dictionary, index: int) -> void:
 	]
 
 
+func _run_swap_probe() -> void:
+	swap_label.text = "Move: running"
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.swap_inventory_slots(TEST_CHARACTER_NAME, 23, 25)
+	var ok := bool(result.get("ok", false))
+	if ok:
+		swap_label.text = "Move: restored"
+	else:
+		swap_label.text = "Move: failed"
+		detail_label.text = str(result.get("error", result.get("output", "Inventory move failed")))
+	print("INVENTORY_SWAP_READY source=%s destination=%s swap_confirmed=%s restore_confirmed=%s" % [
+		str(result.get("source_slot", 23)),
+		str(result.get("destination_slot", 25)),
+		str(result.get("swap_confirmed", false)),
+		str(result.get("restore_confirmed", false)),
+	])
+	if OS.get_environment("ACORE_INVENTORY_SWAP_SELF_TEST") == "1":
+		_finish_swap_self_test(ok, result)
+		return
+	if ok:
+		call_deferred("_load_inventory")
+
+
 func _section_for_slot(index: int) -> String:
 	if index < 19:
 		return "equipment"
@@ -217,4 +260,20 @@ func _finish_self_test(ok: bool, result: Dictionary) -> void:
 		get_tree().quit(0)
 	else:
 		push_error("INVENTORY_SELF_TEST_FAILED: " + str(result.get("error", result.get("output", "unknown"))))
+		get_tree().quit(1)
+
+
+func _finish_swap_self_test(ok: bool, result: Dictionary) -> void:
+	if swap_self_test_finished:
+		return
+	swap_self_test_finished = true
+
+	if ok:
+		print("INVENTORY_SWAP_SELF_TEST_OK source=%s destination=%s" % [
+			str(result.get("source_slot", 23)),
+			str(result.get("destination_slot", 25)),
+		])
+		get_tree().quit(0)
+	else:
+		push_error("INVENTORY_SWAP_SELF_TEST_FAILED: " + str(result.get("error", result.get("output", "unknown"))))
 		get_tree().quit(1)

@@ -351,6 +351,9 @@ void AcoreProtocolClient::_bind_methods()
         D_METHOD("inventory_snapshot", "host", "port", "account", "password", "character_name"),
         &AcoreProtocolClient::inventory_snapshot);
     ClassDB::bind_method(
+        D_METHOD("swap_inventory_slots", "host", "port", "account", "password", "character_name", "source_slot", "destination_slot"),
+        &AcoreProtocolClient::swap_inventory_slots);
+    ClassDB::bind_method(
         D_METHOD("set_action_button", "host", "port", "account", "password", "character_name", "button", "action", "type"),
         &AcoreProtocolClient::set_action_button);
     ClassDB::bind_method(
@@ -806,6 +809,63 @@ Dictionary AcoreProtocolClient::set_action_button(
         result["after_restore_populated"] = flow.after_restore.populated;
         result["after_restore_action"] = static_cast<int>(flow.after_restore.action);
         result["after_restore_type"] = static_cast<int>(flow.after_restore.type);
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::swap_inventory_slots(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t source_slot,
+    int64_t destination_slot)
+{
+    try
+    {
+        if (source_slot < 0 || source_slot >= static_cast<int64_t>(PlayerInventorySnapshotSlots))
+        {
+            return failure("source inventory slot must be from 0 to 38");
+        }
+        if (destination_slot < 0 || destination_slot >= static_cast<int64_t>(PlayerInventorySnapshotSlots))
+        {
+            return failure("destination inventory slot must be from 0 to 38");
+        }
+
+        acore_protocol::InventorySwapProbeResult flow = acore_protocol::swap_inventory_slots_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<std::uint8_t>(source_slot),
+            static_cast<std::uint8_t>(destination_slot));
+
+        Dictionary result;
+        result["ok"] = flow.swap_sent && flow.swap_confirmed && flow.restore_sent && flow.restore_confirmed;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["source_slot"] = static_cast<int>(flow.source_slot);
+        result["destination_slot"] = static_cast<int>(flow.destination_slot);
+        result["before_seen"] = flow.before_seen;
+        result["swap_sent"] = flow.swap_sent;
+        result["swap_confirmed"] = flow.swap_confirmed;
+        result["restore_sent"] = flow.restore_sent;
+        result["restore_confirmed"] = flow.restore_confirmed;
+        result["source_before"] = inventory_slot_dictionary(flow.source_before);
+        result["destination_before"] = inventory_slot_dictionary(flow.destination_before);
+        result["source_after_swap"] = inventory_slot_dictionary(flow.source_after_swap);
+        result["destination_after_swap"] = inventory_slot_dictionary(flow.destination_after_swap);
+        result["source_after_restore"] = inventory_slot_dictionary(flow.source_after_restore);
+        result["destination_after_restore"] = inventory_slot_dictionary(flow.destination_after_restore);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

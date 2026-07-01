@@ -87,6 +87,14 @@ public:
         godot::String const& account,
         godot::String const& password,
         godot::String const& character_name);
+    godot::Dictionary swap_inventory_slots(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        int64_t source_slot,
+        int64_t destination_slot);
     godot::Dictionary set_action_button(
         godot::String const& host,
         godot::String const& port,

@@ -869,6 +869,16 @@ std::vector<std::uint8_t> build_set_action_button_payload(
     return payload;
 }
 
+std::vector<std::uint8_t> build_swap_inventory_item_payload(
+    std::uint8_t source_slot,
+    std::uint8_t destination_slot)
+{
+    std::vector<std::uint8_t> payload;
+    append_u8(payload, destination_slot);
+    append_u8(payload, source_slot);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload)
 {
     std::vector<std::uint8_t> packet = build_client_header(opcode, payload.size());
@@ -1393,6 +1403,16 @@ bool world_packet_self_test()
     auto item_query_payload = build_item_query_single_payload(38);
     auto item_query_packet = build_client_packet(CMSG_ITEM_QUERY_SINGLE, item_query_payload);
     if (item_query_packet.size() != 10 || item_query_packet[2] != 0x56)
+    {
+        return false;
+    }
+    auto swap_inventory_payload = build_swap_inventory_item_payload(23, 25);
+    auto swap_inventory_packet = build_client_packet(CMSG_SWAP_INV_ITEM, swap_inventory_payload);
+    if (swap_inventory_packet.size() != 8
+        || swap_inventory_packet[2] != 0x0D
+        || swap_inventory_packet[3] != 0x01
+        || swap_inventory_packet[6] != 25
+        || swap_inventory_packet[7] != 23)
     {
         return false;
     }

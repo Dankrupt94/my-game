@@ -625,6 +625,72 @@ int inventory_snapshot(
     return result.inventory_seen && result.inventory.slots.size() == PlayerInventorySnapshotSlots ? 0 : 1;
 }
 
+std::uint8_t parse_inventory_slot_arg(std::string const& value, char const* name)
+{
+    std::size_t parsed = 0;
+    unsigned long slot = std::stoul(value, &parsed, 10);
+    if (parsed != value.size() || slot >= PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error(std::string(name) + " must be an integer from 0 to 38");
+    }
+    return static_cast<std::uint8_t>(slot);
+}
+
+void print_swap_slot(std::string const& prefix, InventorySlotSummary const& slot)
+{
+    std::cout << " " << prefix << "_populated=" << (slot.populated ? 1 : 0)
+              << " " << prefix << "_guid=0x" << std::hex << slot.item_guid << std::dec
+              << " " << prefix << "_entry=" << slot.item_entry
+              << " " << prefix << "_stack=" << slot.stack_count
+              << " " << prefix << "_name=\"" << slot.item_name << "\"";
+}
+
+int swap_inventory_slots(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& source_slot_text,
+    std::string const& destination_slot_text)
+{
+    std::uint8_t const source_slot = parse_inventory_slot_arg(source_slot_text, "source slot");
+    std::uint8_t const destination_slot = parse_inventory_slot_arg(destination_slot_text, "destination slot");
+
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::InventorySwapProbeResult result = acore_protocol::swap_inventory_slots_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        source_slot,
+        destination_slot,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "INVENTORY_SWAP_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " source_slot=" << static_cast<int>(result.source_slot)
+              << " destination_slot=" << static_cast<int>(result.destination_slot)
+              << " before_seen=" << (result.before_seen ? 1 : 0)
+              << " swap_sent=" << (result.swap_sent ? 1 : 0)
+              << " swap_confirmed=" << (result.swap_confirmed ? 1 : 0)
+              << " restore_sent=" << (result.restore_sent ? 1 : 0)
+              << " restore_confirmed=" << (result.restore_confirmed ? 1 : 0)
+              << " skipped=" << result.skipped_opcodes.size();
+    print_swap_slot("source_before", result.source_before);
+    print_swap_slot("destination_before", result.destination_before);
+    print_swap_slot("source_after_swap", result.source_after_swap);
+    print_swap_slot("destination_after_swap", result.destination_after_swap);
+    print_swap_slot("source_after_restore", result.source_after_restore);
+    print_swap_slot("destination_after_restore", result.destination_after_restore);
+    std::cout << "\n";
+
+    return result.swap_sent && result.swap_confirmed && result.restore_sent && result.restore_confirmed ? 0 : 1;
+}
+
 int set_action_button(
     std::string const& host,
     std::string const& port,
@@ -830,6 +896,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --spellbook <host> <port> <account> <character-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --action-buttons <host> <port> <account> <character-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --inventory-snapshot <host> <port> <account> <character-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --swap-inventory-slots <host> <port> <account> <character-name> <source-slot> <destination-slot>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --set-action-button <host> <port> <account> <character-name> <button> <action> <type>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --cast-spell <host> <port> <account> <character-name> <spell-id>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --cast-spell-target <host> <port> <account> <character-name> <spell-id> <target-guid-or-entry> <target-name>\n"
@@ -914,6 +981,11 @@ int main(int argc, char** argv)
         if (argc == 6 && std::strcmp(argv[1], "--inventory-snapshot") == 0)
         {
             return inventory_snapshot(argv[2], argv[3], argv[4], argv[5]);
+        }
+
+        if (argc == 8 && std::strcmp(argv[1], "--swap-inventory-slots") == 0)
+        {
+            return swap_inventory_slots(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
         }
 
         if (argc == 9 && std::strcmp(argv[1], "--set-action-button") == 0)

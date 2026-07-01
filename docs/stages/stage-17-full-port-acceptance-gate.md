@@ -56,3 +56,13 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Validation: native `--inventory-snapshot` passed for `Codexstage` with 39 slots, 7 populated slots, 7 item-detail rows, and 7 resolved names.
 - Validation: `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
 - Remaining work: item icons, full tooltips/stats, nested bag contents beyond the base backpack, item actions, equipment changes, loot-to-inventory flow, and persistence checks after mutation.
+
+### 2026-07-01 - Reversible Inventory Move/Swap Probe
+
+- Added the first server-mutating Stage 17 inventory action through `CMSG_SWAP_INV_ITEM`.
+- The native flow reads the current inventory, refuses to run if the source slot is empty, sends a base-backpack move from slot `23` to slot `25`, rereads the server state, then restores the item from slot `25` to slot `23`.
+- The confirmation checks compare the pre-move and post-move slot GUIDs so the probe proves the server state changed and then returned to its starting shape.
+- The Godot extension, script bridge, and `scenes/stage17_inventory_view.tscn` expose the same reversible action through a `Test Move` control and a headless swap self-test.
+- Validation: native `--swap-inventory-slots` passed for `Codexstage` with `before_seen=1`, `swap_confirmed=1`, and `restore_confirmed=1` for slots `23` and `25`.
+- Validation: `ACORE_INVENTORY_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `swap_confirmed=true` and `restore_confirmed=true`.
+- Remaining work: player-driven drag/drop, arbitrary slot validation, nested bag moves, equipment swaps, item splitting, item use, item destruction, failure-code UI, item cooldowns, loot-to-bag handoff, and long-session persistence checks.

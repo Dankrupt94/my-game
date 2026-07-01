@@ -263,14 +263,25 @@ Item template query:
 | Client to server | `CMSG_ITEM_QUERY_SINGLE` (`0x056`) | `uint32 item_entry` | Request display/template metadata for a discovered item entry |
 | Server to client | `SMSG_ITEM_QUERY_SINGLE_RESPONSE` (`0x058`) | Starts with `uint32 item_entry`, class/subclass fields, four name strings, display id, quality, prices, inventory type, allowable masks, item level, and required level | Parses the early stable fields needed for read-only inventory names and future tooltips |
 
+Base inventory swap:
+
+| Direction | Opcode | Payload | Stage 17 use |
+| --- | ---: | --- | --- |
+| Client to server | `CMSG_SWAP_INV_ITEM` (`0x10D`) | `uint8 destination_slot`, then `uint8 source_slot` | Moves or swaps items inside the base inventory bag. Stage 17 uses source slot `23` and destination slot `25`, then restores `25` back to `23`. |
+| Server to client | `SMSG_INVENTORY_CHANGE_FAILURE` (`0x112`) | Failure payload varies by reason | Treated as a failed move during the bounded probe. |
+
+The AzerothCore handler reads destination first, then source, and calls `Player::SwapItem` with `INVENTORY_SLOT_BAG_0`. Stage 17 confirms the mutation by reading inventory snapshots before the move, after the move, and after the restore.
+
 Stage 17 inventory snapshot behavior:
 
 - `parse_update_object_summary` now reads value update masks into field/value pairs instead of only skipping them.
 - When the update GUID matches the selected player GUID, the parser reconstructs 64-bit item GUIDs for 39 equipment, bag, and backpack slots.
 - Item object create/update blocks are routed to inventory item detail parsing instead of the general nearby-object list.
 - After item entries are known, the flow sends bounded item-template queries and applies resolved names back onto matching slots.
-- The Godot scene `scenes/stage17_inventory_view.tscn` displays these slots as live read-only server state with item names, entries, stack counts, and durability where present.
+- The Godot scene `scenes/stage17_inventory_view.tscn` displays these slots as live server state with item names, entries, stack counts, and durability where present.
+- The same scene can run a reversible base-backpack move/restore probe through the Godot protocol bridge.
 - Local validation observed 39 slots, 7 populated item GUIDs, 7 item-detail rows, and 7 resolved item names for `Codexstage`; coinage was `0`, and the zero-valued coinage field was not included in that live update packet.
+- Local validation also moved the slot `23` item to slot `25`, confirmed the destination held the same GUID, restored the item to slot `23`, and confirmed slot `25` was empty again.
 
 Important Stage 15 correction: database spawn GUIDs are not live packet GUIDs. AzerothCore creates runtime object counters when the map instantiates creatures/gameobjects. Client actions must target the live `ObjectGuid` from the update stream.
 

@@ -17,6 +17,7 @@ constexpr std::uint32_t CMSG_LOGOUT_REQUEST = 0x04B;
 constexpr std::uint32_t CMSG_MESSAGECHAT = 0x095;
 constexpr std::uint32_t CMSG_SET_ACTION_BUTTON = 0x128;
 constexpr std::uint32_t CMSG_CAST_SPELL = 0x12E;
+constexpr std::uint32_t CMSG_SWAP_INV_ITEM = 0x10D;
 constexpr std::uint32_t CMSG_SET_SELECTION = 0x13D;
 constexpr std::uint32_t CMSG_ATTACKSWING = 0x141;
 constexpr std::uint32_t CMSG_ATTACKSTOP = 0x142;
@@ -34,6 +35,7 @@ constexpr std::uint16_t SMSG_LOGOUT_COMPLETE = 0x04D;
 constexpr std::uint16_t SMSG_ITEM_QUERY_SINGLE_RESPONSE = 0x058;
 constexpr std::uint16_t SMSG_MESSAGECHAT = 0x096;
 constexpr std::uint16_t SMSG_UPDATE_OBJECT = 0x0A9;
+constexpr std::uint16_t SMSG_INVENTORY_CHANGE_FAILURE = 0x112;
 constexpr std::uint16_t SMSG_ACTION_BUTTONS = 0x129;
 constexpr std::uint16_t SMSG_INITIAL_SPELLS = 0x12A;
 constexpr std::uint16_t SMSG_CAST_FAILED = 0x130;
@@ -314,6 +316,9 @@ std::vector<std::uint8_t> build_set_action_button_payload(
     std::uint8_t button,
     std::uint32_t action,
     std::uint8_t type);
+std::vector<std::uint8_t> build_swap_inventory_item_payload(
+    std::uint8_t source_slot,
+    std::uint8_t destination_slot);
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload);
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);

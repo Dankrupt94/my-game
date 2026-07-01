@@ -173,6 +173,26 @@ struct InventorySnapshotResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct InventorySwapProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint8_t source_slot = 0;
+    std::uint8_t destination_slot = 0;
+    InventorySlotSummary source_before;
+    InventorySlotSummary destination_before;
+    InventorySlotSummary source_after_swap;
+    InventorySlotSummary destination_after_swap;
+    InventorySlotSummary source_after_restore;
+    InventorySlotSummary destination_after_restore;
+    bool before_seen = false;
+    bool swap_sent = false;
+    bool swap_confirmed = false;
+    bool restore_sent = false;
+    bool restore_confirmed = false;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct SetActionButtonProbeResult
 {
     RealmInfo realm;
@@ -341,6 +361,16 @@ InventorySnapshotResult read_inventory_snapshot(
     std::string const& account,
     std::string const& password,
     std::string const& character_name,
+    FlowOptions options = {});
+
+InventorySwapProbeResult swap_inventory_slots_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint8_t source_slot,
+    std::uint8_t destination_slot,
     FlowOptions options = {});
 
 SetActionButtonProbeResult set_action_button_probe(

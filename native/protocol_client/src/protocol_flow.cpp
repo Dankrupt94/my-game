@@ -784,6 +784,49 @@ InventorySlotSummary* find_inventory_slot(PlayerInventorySummary& inventory, std
     return nullptr;
 }
 
+InventorySlotSummary const* find_inventory_slot(PlayerInventorySummary const& inventory, std::uint8_t slot)
+{
+    for (InventorySlotSummary const& summary : inventory.slots)
+    {
+        if (summary.slot == slot)
+        {
+            return &summary;
+        }
+    }
+    return nullptr;
+}
+
+InventorySlotSummary inventory_slot_at(PlayerInventorySummary const& inventory, std::uint8_t slot)
+{
+    if (InventorySlotSummary const* summary = find_inventory_slot(inventory, slot))
+    {
+        return *summary;
+    }
+
+    InventorySlotSummary empty;
+    empty.slot = slot;
+    if (slot < 19)
+    {
+        empty.section = 0;
+    }
+    else if (slot < 23)
+    {
+        empty.section = 1;
+    }
+    else
+    {
+        empty.section = 2;
+    }
+    return empty;
+}
+
+bool inventory_slot_matches(InventorySlotSummary const& actual, InventorySlotSummary const& expected)
+{
+    return actual.populated == expected.populated
+        && actual.item_guid == expected.item_guid
+        && (!expected.populated || actual.item_entry == expected.item_entry);
+}
+
 void ensure_inventory_slot(PlayerInventorySummary& inventory, InventorySlotSummary const& source)
 {
     if (find_inventory_slot(inventory, source.slot) == nullptr)
@@ -1112,6 +1155,67 @@ bool send_set_action_button_once(
 
     (void)request_graceful_logout(*session, options);
     return true;
+}
+
+bool send_swap_inventory_item_once(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint8_t source_slot,
+    std::uint8_t destination_slot,
+    FlowOptions options,
+    std::vector<std::uint16_t>& skipped_opcodes)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    (void)login_selected_character(*session, selected, options);
+
+    bool const logged_in_world = wait_for_logged_in_world(*session, options, 650);
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before swapping inventory slots");
+    }
+
+    write_world_packet(
+        session->socket.get(),
+        CMSG_SWAP_INV_ITEM,
+        build_swap_inventory_item_payload(source_slot, destination_slot),
+        &session->crypt);
+
+    bool failed = false;
+    for (int i = 0; i < 24; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            continue;
+        }
+        if (packet->opcode == SMSG_INVENTORY_CHANGE_FAILURE)
+        {
+            failed = true;
+            break;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        skipped_opcodes.push_back(packet->opcode);
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return !failed;
 }
 }
 
@@ -2121,6 +2225,126 @@ InventorySnapshotResult read_inventory_snapshot(
     }
 
     (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+InventorySwapProbeResult swap_inventory_slots_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint8_t source_slot,
+    std::uint8_t destination_slot,
+    FlowOptions options)
+{
+    if (source_slot == destination_slot)
+    {
+        throw std::runtime_error("source and destination inventory slots must be different");
+    }
+    if (source_slot >= PlayerInventorySnapshotSlots || destination_slot >= PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error("inventory slots must be from 0 to 38");
+    }
+
+    InventorySwapProbeResult result;
+    result.source_slot = source_slot;
+    result.destination_slot = destination_slot;
+
+    InventorySnapshotResult before = read_inventory_snapshot(host, port, account, password, character_name, options);
+    result.realm = before.realm;
+    result.character = before.character;
+    result.before_seen = before.inventory_seen;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), before.skipped_opcodes.begin(), before.skipped_opcodes.end());
+    if (!before.inventory_seen || before.inventory.slots.size() != PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error("did not observe inventory before swap probe");
+    }
+
+    result.source_before = inventory_slot_at(before.inventory, source_slot);
+    result.destination_before = inventory_slot_at(before.inventory, destination_slot);
+    if (!result.source_before.populated)
+    {
+        throw std::runtime_error("source inventory slot is empty; refusing to run swap probe");
+    }
+
+    result.swap_sent = send_swap_inventory_item_once(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        source_slot,
+        destination_slot,
+        options,
+        result.skipped_opcodes);
+
+    InventorySnapshotResult after_swap;
+    try
+    {
+        after_swap = read_inventory_snapshot(host, port, account, password, character_name, options);
+    }
+    catch (...)
+    {
+        (void)send_swap_inventory_item_once(
+            host,
+            port,
+            account,
+            password,
+            character_name,
+            destination_slot,
+            source_slot,
+            options,
+            result.skipped_opcodes);
+        throw;
+    }
+
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), after_swap.skipped_opcodes.begin(), after_swap.skipped_opcodes.end());
+    result.source_after_swap = inventory_slot_at(after_swap.inventory, source_slot);
+    result.destination_after_swap = inventory_slot_at(after_swap.inventory, destination_slot);
+    result.swap_confirmed = result.swap_sent
+        && after_swap.inventory_seen
+        && inventory_slot_matches(result.source_after_swap, result.destination_before)
+        && inventory_slot_matches(result.destination_after_swap, result.source_before);
+
+    if (!result.swap_confirmed)
+    {
+        if (result.destination_after_swap.item_guid == result.source_before.item_guid)
+        {
+            (void)send_swap_inventory_item_once(
+                host,
+                port,
+                account,
+                password,
+                character_name,
+                destination_slot,
+                source_slot,
+                options,
+                result.skipped_opcodes);
+        }
+        throw std::runtime_error("inventory swap was sent but not confirmed by the next inventory snapshot");
+    }
+
+    result.restore_sent = send_swap_inventory_item_once(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        destination_slot,
+        source_slot,
+        options,
+        result.skipped_opcodes);
+
+    InventorySnapshotResult after_restore = read_inventory_snapshot(host, port, account, password, character_name, options);
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), after_restore.skipped_opcodes.begin(), after_restore.skipped_opcodes.end());
+    result.source_after_restore = inventory_slot_at(after_restore.inventory, source_slot);
+    result.destination_after_restore = inventory_slot_at(after_restore.inventory, destination_slot);
+    result.restore_confirmed = result.restore_sent
+        && after_restore.inventory_seen
+        && inventory_slot_matches(result.source_after_restore, result.source_before)
+        && inventory_slot_matches(result.destination_after_restore, result.destination_before);
+
     return result;
 }
 

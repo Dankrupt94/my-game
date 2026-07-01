@@ -1165,3 +1165,34 @@ Validation:
 - `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
 - `godot-4 --headless --path . --quit` passed.
 - Local `qwen-agent` advisory review produced only generic checklist reminders; no actionable blocker was confirmed after live and Godot validation.
+
+## 2026-07-01 - Add Stage 17 Reversible Inventory Move Slice
+
+Goal: prove the Godot client path can perform a real inventory mutation against AzerothCore and then safely restore the test character state.
+
+Plan:
+
+- Add `CMSG_SWAP_INV_ITEM` packet support with the AzerothCore read order: destination slot first, source slot second.
+- Build a native probe that snapshots inventory before the move, moves base-backpack slot `23` to slot `25`, rereads the server state, restores slot `25` to slot `23`, and rereads again.
+- Expose the same probe through the Godot extension and script bridge.
+- Add a `Test Move` control and headless self-test path to the Stage 17 inventory scene.
+- Document the port milestone as the first reversible inventory action, while keeping full inventory parity gaps visible.
+
+Result:
+
+- Added `--swap-inventory-slots` to the native protocol helper.
+- Added `InventorySwapProbeResult` and restore-aware confirmation logic.
+- Added `AcoreProtocolClient.swap_inventory_slots(...)` and `ProtocolClientBridge.swap_inventory_slots(...)`.
+- Updated `scenes/stage17_inventory_view.tscn` / `scripts/stage17_inventory_view.gd` to run the reversible move and refresh the inventory view.
+- Updated the feature parity matrix, Stage 17 gate notes, and world-session packet spec.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed, including the `CMSG_SWAP_INV_ITEM` packet byte-order check.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- Native `--swap-inventory-slots` passed for `Codexstage` with `before_seen=1`, `swap_confirmed=1`, and `restore_confirmed=1` for slots `23` and `25`.
+- `ACORE_INVENTORY_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `swap_confirmed=true` and `restore_confirmed=true`.
+- `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
+- `godot-4 --headless --path . --quit` passed.
+- Local `qwen-agent` advisory review returned only general checklist reminders; no actionable blocker was confirmed after live native and Godot validation.
