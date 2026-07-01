@@ -1341,6 +1341,41 @@ Remaining work:
 - Collect nonzero-money loot evidence for `CMSG_LOOT_MONEY` / `SMSG_LOOT_MONEY_NOTIFY`.
 - Add group loot, roll, master-loot, quest-loot, and long-session persistence checks.
 
+## 2026-07-01 - Add Stage 17 Loot Scene Inventory Refresh UI
+
+Goal: move the loot proof from raw changed-slot output toward a player-visible Godot workflow that can choose a target and show refreshed inventory after looting.
+
+Plan:
+
+- Add target entry/name controls to the Stage 17 loot scene for the fight-to-loot and loot-to-bag paths.
+- Keep the quick loot-open regression path fixed to entry `38`.
+- Render changed inventory slots after `Loot + Bag`.
+- Render the refreshed after-loot inventory snapshot when the native extension returns it.
+- Preserve the existing headless self-test paths.
+
+Result:
+
+- Added editable target controls to `scripts/stage17_loot_view.gd`.
+- Updated `Fight + Loot` and `Loot + Bag` to use the selected target entry/name.
+- Added a second inventory list to the loot scene.
+- `Loot + Bag` now shows both changed slots and the refreshed inventory after the loot handoff.
+- Helper-process fallback still displays changed slots when a full after-inventory dictionary is unavailable.
+
+Validation:
+
+- `godot-4 --headless --path . --quit` passed.
+- `git diff --check` passed.
+- `ACORE_LOOT_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `changed_slots=1`, `stack_changed=1`, `coinage_delta=0`, `handoff=true`, and response opcode `0x160`.
+- `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with release response opcode `0x161`.
+- `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` initially hit a transient live-target miss after the quick check, then passed on rerun with `dead=true`, `lootable=true`, `loot_response=true`, item removal confirmation, release response, and opcode `0x160`.
+- Local `qwen-agent` advisory review reported no blocker, only UI-layout and validation cautions that the headless checks covered for this slice.
+
+Remaining work:
+
+- Replace target entry/name controls with in-world click targeting.
+- Keep a persistent world session for combat and looting instead of one-shot probes.
+- Merge loot, inventory, target, and combat state into the normal gameplay HUD.
+
 ## 2026-07-01 - Add Stage 17 Loot-To-Inventory Handoff Slice
 
 Goal: prove that the Godot corpse-loot pickup path changes the character's inventory state after item pickup, instead of only proving that loot packets were accepted.

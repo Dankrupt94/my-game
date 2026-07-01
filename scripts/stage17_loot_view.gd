@@ -9,7 +9,10 @@ const CORPSE_LOOT_TARGET_ENTRY := 299
 var status_label: Label
 var target_label: Label
 var loot_label: Label
+var target_entry_input: SpinBox
+var target_name_input: LineEdit
 var item_list: ItemList
+var inventory_list: ItemList
 var self_test_finished := false
 
 
@@ -64,6 +67,29 @@ func _build_view() -> void:
 	target_label.text = "Waiting for AzerothCore loot response."
 	stack.add_child(target_label)
 
+	var target_row := HBoxContainer.new()
+	target_row.add_theme_constant_override("separation", 10)
+	stack.add_child(target_row)
+
+	var target_caption := Label.new()
+	target_caption.text = "Target"
+	target_caption.custom_minimum_size = Vector2(64, 34)
+	target_row.add_child(target_caption)
+
+	target_entry_input = SpinBox.new()
+	target_entry_input.min_value = 1
+	target_entry_input.max_value = 9999999
+	target_entry_input.step = 1
+	target_entry_input.value = CORPSE_LOOT_TARGET_ENTRY
+	target_entry_input.custom_minimum_size = Vector2(130, 34)
+	target_row.add_child(target_entry_input)
+
+	target_name_input = LineEdit.new()
+	target_name_input.text = "Nearby Creature"
+	target_name_input.custom_minimum_size = Vector2(180, 34)
+	target_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	target_row.add_child(target_name_input)
+
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 10)
 	stack.add_child(action_row)
@@ -92,11 +118,16 @@ func _build_view() -> void:
 	item_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stack.add_child(item_list)
 
+	inventory_list = ItemList.new()
+	inventory_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_child(inventory_list)
+
 
 func _run_loot_probe() -> void:
 	status_label.text = "Running"
 	loot_label.text = "Loot: opening"
 	item_list.clear()
+	inventory_list.clear()
 	var bridge := ProtocolClientBridge.new()
 	var result := bridge.loot_open_probe(TEST_CHARACTER_NAME, LOOT_OPEN_TARGET_ENTRY, "Nearby Creature")
 	var ok := bool(result.get("ok", false))
@@ -129,8 +160,9 @@ func _run_corpse_loot_probe() -> void:
 	status_label.text = "Running"
 	loot_label.text = "Loot: fighting"
 	item_list.clear()
+	inventory_list.clear()
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.corpse_loot_probe(TEST_CHARACTER_NAME, CORPSE_LOOT_TARGET_ENTRY, "Nearby Creature")
+	var result := bridge.corpse_loot_probe(TEST_CHARACTER_NAME, _target_entry(), _target_name())
 	var ok := bool(result.get("ok", false))
 	if not ok:
 		status_label.text = "Failed"
@@ -146,7 +178,7 @@ func _run_corpse_loot_probe() -> void:
 	]
 	_render_loot(result)
 	print("CORPSE_LOOT_SELF_TEST_READY target_entry=%s dead=%s lootable=%s loot_response_seen=%s money_notify=%s item_removed=%s release_response=%s gold=%s item_count=%s opcode=0x%s" % [
-		str(result.get("target_entry", CORPSE_LOOT_TARGET_ENTRY)),
+		str(result.get("target_entry", _target_entry())),
 		str(result.get("target_dead_seen", false)),
 		str(result.get("target_lootable_seen", false)),
 		str(result.get("loot_response_seen", false)),
@@ -164,8 +196,9 @@ func _run_loot_inventory_handoff_probe() -> void:
 	status_label.text = "Running"
 	loot_label.text = "Loot: bag check"
 	item_list.clear()
+	inventory_list.clear()
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.loot_inventory_handoff_probe(TEST_CHARACTER_NAME, CORPSE_LOOT_TARGET_ENTRY, "Nearby Creature")
+	var result := bridge.loot_inventory_handoff_probe(TEST_CHARACTER_NAME, _target_entry(), _target_name())
 	var ok := bool(result.get("ok", false))
 	if not ok:
 		status_label.text = "Failed"
@@ -181,8 +214,9 @@ func _run_loot_inventory_handoff_probe() -> void:
 	]
 	_render_loot(result)
 	_render_inventory_changes(result)
+	_render_inventory_after(result)
 	print("LOOT_INVENTORY_SELF_TEST_READY target_entry=%s dead=%s loot_response_seen=%s item_removed=%s inventory_before=%s inventory_after=%s changed_slots=%s added_slots=%s stack_changed=%s coinage_delta=%s handoff=%s opcode=0x%s" % [
-		str(result.get("target_entry", CORPSE_LOOT_TARGET_ENTRY)),
+		str(result.get("target_entry", _target_entry())),
 		str(result.get("target_dead_seen", false)),
 		str(result.get("loot_response_seen", false)),
 		str(result.get("loot_item_removed_count", 0)),
@@ -196,6 +230,19 @@ func _run_loot_inventory_handoff_probe() -> void:
 		_opcode_hex(int(result.get("response_opcode", 0))),
 	])
 	_finish_loot_inventory_self_test(true, result)
+
+
+func _target_entry() -> int:
+	if target_entry_input == null:
+		return CORPSE_LOOT_TARGET_ENTRY
+	return int(target_entry_input.value)
+
+
+func _target_name() -> String:
+	if target_name_input == null:
+		return "Nearby Creature"
+	var value := target_name_input.text.strip_edges()
+	return "Nearby Creature" if value.is_empty() else value
 
 
 func _render_loot(result: Dictionary) -> void:
@@ -245,6 +292,41 @@ func _render_inventory_changes(result: Dictionary) -> void:
 			item_name,
 			str(slot.get("stack_count", 0)),
 		])
+
+
+func _render_inventory_after(result: Dictionary) -> void:
+	inventory_list.clear()
+	var inventory: Dictionary = result.get("inventory_after", {})
+	var slots: Array = inventory.get("slots", [])
+	if slots.is_empty():
+		var changed: Array = result.get("changed_slots", [])
+		if changed.is_empty():
+			inventory_list.add_item("Inventory snapshot unavailable")
+			return
+		inventory_list.add_item("Changed inventory slots")
+		for slot in changed:
+			if typeof(slot) == TYPE_DICTIONARY:
+				inventory_list.add_item(_inventory_slot_text(slot))
+		return
+
+	inventory_list.add_item("Inventory after loot")
+	for slot in slots:
+		if typeof(slot) != TYPE_DICTIONARY:
+			continue
+		if not bool(slot.get("populated", false)):
+			continue
+		inventory_list.add_item(_inventory_slot_text(slot))
+
+
+func _inventory_slot_text(slot: Dictionary) -> String:
+	var item_name := str(slot.get("item_name", ""))
+	if item_name.is_empty():
+		item_name = "item " + str(slot.get("item_entry", 0))
+	return "Slot %s: %s x%s" % [
+		str(slot.get("slot", 0)),
+		item_name,
+		str(slot.get("stack_count", 0)),
+	]
 
 
 func _money_text(copper: int) -> String:

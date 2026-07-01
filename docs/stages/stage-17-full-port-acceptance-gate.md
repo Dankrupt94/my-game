@@ -117,3 +117,13 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Validation: `ACORE_LOOT_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `changed_slots=1`, `stack_changed=1`, `handoff=true`, and response opcode `0x160`.
 - Validation: `ACORE_LOOT_OPEN_SELF_TEST=1` and `ACORE_CORPSE_LOOT_SELF_TEST=1` still passed when rerun sequentially after the handoff change.
 - Remaining work: replace this proof button with normal corpse-click loot UX, refresh the visible inventory panel automatically after pickup, handle full bags and item locks, collect nonzero-money evidence, and add long-session persistence checks.
+
+### 2026-07-01 - Loot Scene Target And Inventory Refresh UI
+
+- Extended `scenes/stage17_loot_view.tscn` from fixed test buttons toward a more player-facing loot workflow.
+- Added editable target entry/name controls for the fight-to-loot and loot-to-bag paths.
+- The `Loot + Bag` path now renders both changed inventory slots and a refreshed after-loot inventory list in the scene, so the player-facing surface shows where the picked-up item landed or stacked.
+- Validation: `godot-4 --headless --path . --quit` passed.
+- Validation: `ACORE_LOOT_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `changed_slots=1`, `stack_changed=1`, `handoff=true`, and response opcode `0x160`.
+- Validation: `ACORE_LOOT_OPEN_SELF_TEST=1` passed, and a rerun of `ACORE_CORPSE_LOOT_SELF_TEST=1` passed after a transient live-target miss.
+- Remaining work: replace target-entry controls with in-world click targeting, keep a persistent session instead of one-shot probes, and merge the loot/inventory surfaces into the normal gameplay HUD.
