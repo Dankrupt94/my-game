@@ -6,19 +6,16 @@ const LOCAL_ACCOUNT_ENV := "res://local_runtime/protocol-test-account.env"
 const NATIVE_CLIENT_CLASS := "AcoreProtocolClient"
 
 
-func run_character_flow(host: String = "127.0.0.1", port: String = "3724") -> Dictionary:
-	var native_result := _run_native_character_flow(host, port)
+func run_character_flow(host: String = "127.0.0.1", port: String = "3724", account: String = "", password: String = "") -> Dictionary:
+	var native_result := _run_native_character_flow(host, port, account, password)
 	if not native_result.is_empty():
 		return native_result
 
 	var helper := _helper_path()
-	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
 	if not FileAccess.file_exists(helper):
 		return _failure("Native protocol helper is not built yet: " + helper)
-	if not FileAccess.file_exists(env_file):
-		return _failure("Local protocol account file is missing: " + env_file)
 
-	var credentials := _load_protocol_credentials(env_file)
+	var credentials := _resolve_credentials(account, password)
 	if not bool(credentials.get("ok", false)):
 		return credentials
 
@@ -69,19 +66,16 @@ func create_test_character(name: String = "Codexstage", host: String = "127.0.0.
 	return parsed
 
 
-func enter_world(character_name: String = "", host: String = "127.0.0.1", port: String = "3724") -> Dictionary:
-	var native_result := _run_native_enter_world(character_name, host, port)
+func enter_world(character_name: String = "", host: String = "127.0.0.1", port: String = "3724", account: String = "", password: String = "") -> Dictionary:
+	var native_result := _run_native_enter_world(character_name, host, port, account, password)
 	if not native_result.is_empty():
 		return native_result
 
 	var helper := _helper_path()
-	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
 	if not FileAccess.file_exists(helper):
 		return _failure("Native protocol helper is not built yet: " + helper)
-	if not FileAccess.file_exists(env_file):
-		return _failure("Local protocol account file is missing: " + env_file)
 
-	var credentials := _load_protocol_credentials(env_file)
+	var credentials := _resolve_credentials(account, password)
 	if not bool(credentials.get("ok", false)):
 		return credentials
 
@@ -1091,19 +1085,21 @@ func run_self_test() -> Dictionary:
 	}
 
 
-func _run_native_character_flow(host: String, port: String) -> Dictionary:
+func _run_native_character_flow(host: String, port: String, account_override: String = "", password_override: String = "") -> Dictionary:
 	if not ClassDB.class_exists(NATIVE_CLIENT_CLASS):
 		return {}
 
-	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
-	if not FileAccess.file_exists(env_file):
-		return _failure("Local protocol account file is missing: " + env_file)
-
-	var account_data := _read_protocol_account_file(env_file)
-	var account := str(account_data.get("ACORE_PROTOCOL_ACCOUNT", ""))
-	var password := str(account_data.get("ACORE_PROTOCOL_PASSWORD", ""))
+	var account := account_override.strip_edges()
+	var password := password_override
 	if account.is_empty() or password.is_empty():
-		return _failure("Local protocol account file is missing ACORE_PROTOCOL_ACCOUNT or ACORE_PROTOCOL_PASSWORD")
+		var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+		if not FileAccess.file_exists(env_file):
+			return _failure("Local protocol account file is missing: " + env_file)
+		var account_data := _read_protocol_account_file(env_file)
+		account = str(account_data.get("ACORE_PROTOCOL_ACCOUNT", ""))
+		password = str(account_data.get("ACORE_PROTOCOL_PASSWORD", ""))
+		if account.is_empty() or password.is_empty():
+			return _failure("Local protocol account file is missing ACORE_PROTOCOL_ACCOUNT or ACORE_PROTOCOL_PASSWORD")
 
 	var client: Object = ClassDB.instantiate(NATIVE_CLIENT_CLASS)
 	if client == null:
@@ -1152,8 +1148,8 @@ func _run_native_create_character(name: String, host: String, port: String) -> D
 	return parsed
 
 
-func _run_native_enter_world(character_name: String, host: String, port: String) -> Dictionary:
-	var credentials := _load_native_credentials()
+func _run_native_enter_world(character_name: String, host: String, port: String, account_override: String = "", password_override: String = "") -> Dictionary:
+	var credentials := _load_native_credentials(account_override, password_override)
 	if not credentials.get("available", false):
 		return credentials.get("result", {})
 
@@ -1917,19 +1913,21 @@ func _run_native_cast_spell_at_target(
 	return parsed
 
 
-func _load_native_credentials() -> Dictionary:
+func _load_native_credentials(account_override: String = "", password_override: String = "") -> Dictionary:
 	if not ClassDB.class_exists(NATIVE_CLIENT_CLASS):
 		return {"available": false, "result": {}}
 
-	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
-	if not FileAccess.file_exists(env_file):
-		return {"available": false, "result": _failure("Local protocol account file is missing: " + env_file)}
-
-	var account_data := _read_protocol_account_file(env_file)
-	var account := str(account_data.get("ACORE_PROTOCOL_ACCOUNT", ""))
-	var password := str(account_data.get("ACORE_PROTOCOL_PASSWORD", ""))
+	var account := account_override.strip_edges()
+	var password := password_override
 	if account.is_empty() or password.is_empty():
-		return {"available": false, "result": _failure("Local protocol account file is missing ACORE_PROTOCOL_ACCOUNT or ACORE_PROTOCOL_PASSWORD")}
+		var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+		if not FileAccess.file_exists(env_file):
+			return {"available": false, "result": _failure("Local protocol account file is missing: " + env_file)}
+		var account_data := _read_protocol_account_file(env_file)
+		account = str(account_data.get("ACORE_PROTOCOL_ACCOUNT", ""))
+		password = str(account_data.get("ACORE_PROTOCOL_PASSWORD", ""))
+		if account.is_empty() or password.is_empty():
+			return {"available": false, "result": _failure("Local protocol account file is missing ACORE_PROTOCOL_ACCOUNT or ACORE_PROTOCOL_PASSWORD")}
 
 	var client: Object = ClassDB.instantiate(NATIVE_CLIENT_CLASS)
 	if client == null:
@@ -1945,6 +1943,18 @@ func _load_native_credentials() -> Dictionary:
 		"account": account,
 		"password": password,
 	}
+
+
+func _resolve_credentials(account: String, password: String) -> Dictionary:
+	# Prefer explicit credentials (e.g. typed at the login screen). Fall back to
+	# the local protocol account file when either is empty, preserving the
+	# original file-driven behavior for all existing callers.
+	if account.strip_edges() != "" and password != "":
+		return {"ok": true, "account": account.strip_edges(), "password": password}
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+	return _load_protocol_credentials(env_file)
 
 
 func _load_protocol_credentials(env_file: String) -> Dictionary:
