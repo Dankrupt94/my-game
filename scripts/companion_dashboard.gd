@@ -409,6 +409,8 @@ func _on_protocol_character_flow_done(result: Dictionary) -> void:
 func _format_protocol_flow_result(result: Dictionary) -> String:
 	var lines := PackedStringArray()
 	lines.append("Protocol character-flow " + ("OK" if bool(result.get("ok", false)) else "failed"))
+	if result.has("source"):
+		lines.append("Source: " + str(result["source"]))
 	lines.append("Exit code: " + str(result.get("exit_code", "?")))
 	if result.has("realm_line"):
 		lines.append(str(result["realm_line"]))
@@ -419,7 +421,10 @@ func _format_protocol_flow_result(result: Dictionary) -> String:
 
 	var characters: Array = result.get("characters", [])
 	for character in characters:
-		lines.append(str(character))
+		if typeof(character) == TYPE_DICTIONARY:
+			lines.append(_format_protocol_character(character))
+		else:
+			lines.append(str(character))
 
 	var output := str(result.get("output", "")).strip_edges()
 	if not output.is_empty() and not bool(result.get("ok", false)):
@@ -427,6 +432,16 @@ func _format_protocol_flow_result(result: Dictionary) -> String:
 			output = output.substr(0, 1200) + "\n...[output truncated]..."
 		lines.append(output)
 	return "\n".join(lines)
+
+
+func _format_protocol_character(character: Dictionary) -> String:
+	return "CHAR guid=" + str(character.get("guid", "?")) \
+		+ " name=\"" + str(character.get("name", "")) + "\"" \
+		+ " level=" + str(character.get("level", "?")) \
+		+ " race=" + str(character.get("race", "?")) \
+		+ " class=" + str(character.get("class", "?")) \
+		+ " map=" + str(character.get("map", "?")) \
+		+ " pos=(" + str(character.get("x", "?")) + "," + str(character.get("y", "?")) + "," + str(character.get("z", "?")) + ")"
 
 
 func _apply_status_report(report: Dictionary) -> void:

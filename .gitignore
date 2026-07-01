@@ -5,6 +5,7 @@ export_presets.cfg
 *.translation
 *.tmp
 *.log
+*.uid
 logs/
 local_reports/
 local_runtime/
@@ -14,6 +15,11 @@ __pycache__/
 *.pyc
 build/
 native/**/build/
+native/**/build-*/
+bin/*.so
+bin/*.dll
+bin/*.dylib
+bin/*.framework/
 
 # Local-only proprietary client/extracted assets.
 # Keep these on disk for the authorized local prototype, but do not commit them.

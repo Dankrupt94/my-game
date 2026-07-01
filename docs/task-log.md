@@ -12,6 +12,18 @@ Plan:
 - Preserve the existing helper-process bridge as the fallback until Godot loading and threaded execution are proven.
 - Validate Godot headless startup and native protocol smoke checks before committing.
 
+Result:
+
+- Built local `godot-cpp` bindings from the installed Godot 4.7 extension API dump.
+- Added `native/godot_protocol_extension/` with a registered `AcoreProtocolClient` GDExtension class.
+- Added `acore_protocol.gdextension` and a local ignored extension binary target under `bin/`.
+- Found that a host-built extension required GLIBC `2.43`, which Snap Godot could not load.
+- Added `tools/build_godot_protocol_extension_compat.sh`, which builds the extension inside Ubuntu 24.04 through Docker to avoid the Snap loader mismatch.
+- Added Godot smoke scripts for direct extension validation and dashboard bridge validation.
+- Updated the dashboard protocol bridge to prefer `AcoreProtocolClient` when available, while retaining the helper-process fallback.
+- Validated Snap Godot import, direct extension self-test, direct extension live character flow, dashboard bridge live character flow, and main scene startup.
+- Used local `qwen-agent` as a narrow advisory reviewer; final acceptance came from Godot load and live protocol checks.
+
 ## 2026-06-30 - Stage 11 Godot-Native Protocol Boundary Checkpoint Started
 
 Goal: move the validated protocol flow toward a Godot-native loading boundary so the project can retire the blocking helper-process bridge.

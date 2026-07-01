@@ -66,11 +66,15 @@ The first implementation checkpoint should be a safe local smoke harness that ca
 - Added `tools/protocol_bridge_ctypes_smoke.py` to prove the shared library can be loaded locally and can return JSON without exposing passwords.
 - Documented the Godot-native boundary in `docs/protocol/godot-native-boundary.md`.
 - Confirmed the dashboard still uses the helper-process bridge until a true Godot wrapper is built.
+- Added the first true Godot GDExtension wrapper under `native/godot_protocol_extension/`.
+- Added `acore_protocol.gdextension`, which registers `AcoreProtocolClient` when the local ignored extension binary exists.
+- Added `tools/build_godot_protocol_extension_compat.sh` to build the extension in Ubuntu 24.04 through Docker so Snap Godot can load it without the host GLIBC `2.43` mismatch.
+- Added `tools/godot_protocol_extension_smoke.gd` and `tools/protocol_bridge_smoke.gd` for Godot-native extension and dashboard-bridge validation.
+- Updated `scripts/protocol_client_bridge.gd` so `Check Protocol` prefers the Godot-native extension and keeps the helper process as fallback.
 
 ## Next Checkpoint
 
-- Build a true Godot load path for `acore_protocol_bridge`, most likely a GDExtension wrapper around the C++ core or another Godot-supported native call path.
-- Replace the blocking helper process bridge with that native Godot call path once it can run the same character-flow check from a worker thread.
+- Move the native extension call fully into the dashboard worker-thread flow and remove the helper-process dependency after repeated stable runs.
 - Track Warden handling separately before claiming full default-server compatibility.
 - Decide when to restore random bot autologin for gameplay-load testing after protocol smoke tests are stable.
 
@@ -100,6 +104,13 @@ Completed on 2026-06-30:
 - `python3 tools/protocol_bridge_ctypes_smoke.py` loaded the shared library, printed self-test JSON, and skipped character flow safely when no local credentials were present.
 - With `local_runtime/protocol-test-account.env` loaded, `python3 tools/protocol_bridge_ctypes_smoke.py` returned character-flow JSON with `auth_flow_ok`, `world_auth_ok`, and `char_enum_ok` all true.
 - Local `qwen-agent` reviewed the narrow C ABI/CMake wrapper and reported no concrete issues; final acceptance came from the build and smoke checks.
+- `tools/build_godot_protocol_extension_compat.sh` built the Godot protocol extension through Docker/Ubuntu 24.04 after the host-built binary failed to load in Snap Godot due to a GLIBC `2.43` requirement.
+- `godot-4 --headless --path . --import` verified the compatible GDExtension without loader errors.
+- `godot-4 --headless --path . --script res://tools/godot_protocol_extension_smoke.gd` instantiated `AcoreProtocolClient` and passed its no-secret self-test.
+- With `local_runtime/protocol-test-account.env` present, `godot-4 --headless --path . --script res://tools/godot_protocol_extension_smoke.gd` returned character-flow JSON with `auth_flow_ok`, `world_auth_ok`, and `char_enum_ok` all true.
+- `godot-4 --headless --path . --script res://tools/protocol_bridge_smoke.gd` returned `ok:true` and `source:"Godot native extension"`, proving the dashboard bridge now prefers the extension path.
+- `godot-4 --headless --path . --scene res://main.tscn --quit-after 1` still succeeded after loading the GDExtension.
+- Local `qwen-agent` reviewed the narrow GDExtension and dashboard bridge changes and reported no concrete blockers; final acceptance came from Godot load and live protocol checks.
 - No account credentials, session keys, packet captures, proprietary client files, or local runtime files were committed.
 
 ## Done Criteria

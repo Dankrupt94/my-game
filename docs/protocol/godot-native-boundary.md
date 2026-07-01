@@ -1,16 +1,17 @@
 # Godot Native Protocol Boundary
 
-Status: Stage 11 checkpoint
+Status: Stage 11 checkpoint, GDExtension wrapper added
 
 ## Purpose
 
-The validated auth, realm, world-auth, and character-enum flow now has three layers:
+The validated auth, realm, world-auth, and character-enum flow now has four layers:
 
 - `acore_protocol_core`: reusable C++ protocol implementation.
 - `acore_protocol_client`: CLI smoke helper and fallback dashboard bridge target.
 - `acore_protocol_bridge`: shared-library boundary for a future Godot-native wrapper.
+- `AcoreProtocolClient`: Godot GDExtension wrapper class.
 
-This checkpoint does not replace the dashboard helper-process bridge yet. It creates the native loading boundary needed to replace that bridge with a GDExtension or another Godot-supported native call path.
+The dashboard bridge now prefers the GDExtension wrapper when Godot can load it, and keeps the helper process as the fallback.
 
 ## Shared Library
 
@@ -54,15 +55,22 @@ Passwords are input-only and must never appear in JSON, logs, docs, or commits.
 
 ## Godot Integration Plan
 
-The next Godot-native wrapper should:
+Current Godot wrapper:
 
-- Keep `scripts/protocol_client_bridge.gd` as a working fallback until native loading is proven.
+- `acore_protocol.gdextension`
+- `native/godot_protocol_extension/`
+- `AcoreProtocolClient.self_test()`
+- `AcoreProtocolClient.character_flow(host, port, account, password)`
+
+The wrapper is called through `scripts/protocol_client_bridge.gd`, which returns the same dictionary shape the dashboard already expects.
+
+The next Godot-native hardening step should:
+
 - Call the native protocol boundary from a worker thread, because auth and world socket reads are blocking.
-- Parse the returned JSON into the same dictionary shape currently used by the dashboard.
-- Preserve the current dashboard status label and log formatting.
+- Keep the current dashboard status label and log formatting.
 - Avoid storing account passwords in scenes or tracked project settings.
 
-Tooling note: this machine currently has Godot 4.7 Mono, but `dotnet` and `scons` were not available during this checkpoint. That is why this step stops at a plain shared-library boundary instead of claiming a finished GDExtension.
+Tooling note: this machine currently uses Snap Godot 4.7. A host-built GDExtension required GLIBC `2.43`, which Snap Godot could not load. The working build path uses `tools/build_godot_protocol_extension_compat.sh` to build the extension inside Ubuntu 24.04 through Docker.
 
 ## Validation
 
@@ -85,3 +93,17 @@ Expected local-account milestones:
 - character-flow JSON includes `"auth_flow_ok":true`
 - character-flow JSON includes `"world_auth_ok":true`
 - character-flow JSON includes `"char_enum_ok":true`
+
+Run the Godot-native wrapper smoke test:
+
+```bash
+godot-4 --headless --path . --script res://tools/godot_protocol_extension_smoke.gd
+```
+
+Run the dashboard bridge path:
+
+```bash
+godot-4 --headless --path . --script res://tools/protocol_bridge_smoke.gd
+```
+
+The bridge path should report `"source":"Godot native extension"`.
