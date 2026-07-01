@@ -1,5 +1,17 @@
 # Task Log
 
+## 2026-06-30 - Stage 11 Godot GDExtension Wrapper Checkpoint Started
+
+Goal: attempt the first actual Godot-native wrapper around the protocol bridge so Godot can eventually call the validated character-flow path without launching a helper process.
+
+Plan:
+
+- Keep downloaded Godot C++ binding sources and Python build tools local-only and ignored.
+- Use the installed Godot 4.7 engine to generate any needed extension API files.
+- Build the smallest loadable GDExtension wrapper first.
+- Preserve the existing helper-process bridge as the fallback until Godot loading and threaded execution are proven.
+- Validate Godot headless startup and native protocol smoke checks before committing.
+
 ## 2026-06-30 - Stage 11 Godot-Native Protocol Boundary Checkpoint Started
 
 Goal: move the validated protocol flow toward a Godot-native loading boundary so the project can retire the blocking helper-process bridge.

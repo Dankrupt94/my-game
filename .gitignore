@@ -9,6 +9,7 @@ logs/
 local_reports/
 local_runtime/
 .venv/
+local_dependencies/
 __pycache__/
 *.pyc
 build/
