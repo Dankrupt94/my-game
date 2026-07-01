@@ -1,34 +1,9 @@
 extends Control
 
-const DASHBOARD_SCENE := "res://main.tscn"
-const SETTINGS_FILE_PATH := "user://settings.cfg"
-const SETTINGS_SELF_TEST_FILE_PATH := "user://settings-self-test.cfg"
+const SettingsRuntime = preload("res://scripts/settings_runtime.gd")
 
-var settings := {
-	"video": {
-		"resolution": "1280x720",
-		"fullscreen": false,
-		"vsync": true
-	},
-	"audio": {
-		"volume_master": 0.8,
-		"volume_music": 0.6,
-		"volume_sfx": 0.7,
-		"volume_ambience": 0.5
-	},
-	"gameplay": {
-		"auto_loot": true,
-		"quest_tracker": true,
-		"detailed_tooltips": true
-	},
-	"keybindings": {
-		"move_forward": KEY_W,
-		"move_backward": KEY_S,
-		"turn_left": KEY_A,
-		"turn_right": KEY_D,
-		"jump": KEY_SPACE
-	}
-}
+const DASHBOARD_SCENE := "res://main.tscn"
+var settings := SettingsRuntime.default_settings()
 
 var tab_container: TabContainer
 var res_option: OptionButton
@@ -49,13 +24,13 @@ var active_rebind_action := ""
 var status_label: Label
 var log_output: TextEdit
 
-var settings_file_path := SETTINGS_FILE_PATH
+var settings_file_path := SettingsRuntime.SETTINGS_FILE_PATH
 
 
 func _ready() -> void:
 	if OS.get_environment("ACORE_SETTINGS_SELF_TEST") == "1":
-		settings_file_path = SETTINGS_SELF_TEST_FILE_PATH
-		_delete_settings_file(settings_file_path)
+		settings_file_path = SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH
+		SettingsRuntime.delete_settings_file(settings_file_path)
 	_load_settings()
 	_apply_all_settings()
 	_build_view()
@@ -330,7 +305,7 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventKey and event.is_pressed():
-		var keycode: int = int(event.physical_keycode)
+		var keycode := int(event.physical_keycode)
 		if keycode == KEY_NONE:
 			keycode = int(event.keycode)
 
@@ -348,16 +323,11 @@ func _on_rebind_pressed(action: String) -> void:
 
 
 func _load_settings() -> void:
-	var config := ConfigFile.new()
-	var err := config.load(settings_file_path)
-	if err != OK:
+	var existed := SettingsRuntime.settings_file_exists(settings_file_path)
+	settings = SettingsRuntime.load_settings(settings_file_path)
+	if not existed:
 		_log("No custom settings file found at " + settings_file_path + ". Using default parameters.")
 		return
-
-	for section in settings.keys():
-		for key in settings[section].keys():
-			if config.has_section_key(section, key):
-				settings[section][key] = config.get_value(section, key)
 	_log("Configuration settings loaded successfully from disk.")
 
 
@@ -385,12 +355,7 @@ func _pull_settings_from_controls() -> void:
 
 
 func _write_settings_file() -> void:
-	var config := ConfigFile.new()
-	for section in settings.keys():
-		for key in settings[section].keys():
-			config.set_value(section, key, settings[section][key])
-
-	var err := config.save(settings_file_path)
+	var err := SettingsRuntime.save_settings(settings, settings_file_path)
 	if err == OK:
 		status_label.text = "Saved successfully"
 		_log("Settings saved permanently to " + settings_file_path + ".")
@@ -400,48 +365,7 @@ func _write_settings_file() -> void:
 
 
 func _apply_all_settings() -> void:
-	var fs_mode: int = DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN if bool(settings["video"]["fullscreen"]) else DisplayServer.WINDOW_MODE_WINDOWED
-	DisplayServer.window_set_mode(fs_mode)
-	if fs_mode == DisplayServer.WINDOW_MODE_WINDOWED:
-		DisplayServer.window_set_size(_resolution_to_size(str(settings["video"]["resolution"])))
-
-	var vs_mode: int = DisplayServer.VSYNC_ENABLED if bool(settings["video"]["vsync"]) else DisplayServer.VSYNC_DISABLED
-	DisplayServer.window_set_vsync_mode(vs_mode)
-
-	_apply_bus_volume("Master", float(settings["audio"]["volume_master"]))
-	_apply_bus_volume("Music", float(settings["audio"]["volume_music"]))
-	_apply_bus_volume("SFX", float(settings["audio"]["volume_sfx"]))
-	_apply_bus_volume("Ambience", float(settings["audio"]["volume_ambience"]))
-
-	for action in settings["keybindings"].keys():
-		var keycode: int = int(settings["keybindings"][action])
-		if not InputMap.has_action(action):
-			InputMap.add_action(action)
-		else:
-			InputMap.action_erase_events(action)
-
-		var ev := InputEventKey.new()
-		ev.physical_keycode = keycode
-		InputMap.action_add_event(action, ev)
-
-
-func _apply_bus_volume(bus_name: String, val: float) -> void:
-	var bus_idx := AudioServer.get_bus_index(bus_name)
-	if bus_idx >= 0:
-		AudioServer.set_bus_mute(bus_idx, val <= 0.001)
-		if val > 0.001:
-			AudioServer.set_bus_volume_db(bus_idx, linear_to_db(val))
-
-
-func _resolution_to_size(value: String) -> Vector2i:
-	var parts := value.split("x")
-	if parts.size() != 2:
-		return Vector2i(1280, 720)
-	var width := int(parts[0])
-	var height := int(parts[1])
-	if width <= 0 or height <= 0:
-		return Vector2i(1280, 720)
-	return Vector2i(width, height)
+	SettingsRuntime.apply_runtime_settings(settings)
 
 
 func _update_ui_controls() -> void:
@@ -465,7 +389,7 @@ func _update_ui_controls() -> void:
 	check_tooltips.button_pressed = settings["gameplay"]["detailed_tooltips"]
 
 	for action in rebind_buttons.keys():
-		var keycode: int = int(settings["keybindings"][action])
+		var keycode := int(settings["keybindings"][action])
 		rebind_buttons[action].text = OS.get_keycode_string(keycode)
 
 
@@ -475,29 +399,7 @@ func _on_save_pressed() -> void:
 
 
 func _on_defaults_pressed() -> void:
-	settings["video"] = {
-		"resolution": "1280x720",
-		"fullscreen": false,
-		"vsync": true
-	}
-	settings["audio"] = {
-		"volume_master": 0.8,
-		"volume_music": 0.6,
-		"volume_sfx": 0.7,
-		"volume_ambience": 0.5
-	}
-	settings["gameplay"] = {
-		"auto_loot": true,
-		"quest_tracker": true,
-		"detailed_tooltips": true
-	}
-	settings["keybindings"] = {
-		"move_forward": KEY_W,
-		"move_backward": KEY_S,
-		"turn_left": KEY_A,
-		"turn_right": KEY_D,
-		"jump": KEY_SPACE
-	}
+	settings = SettingsRuntime.default_settings()
 	_update_ui_controls()
 	_save_settings()
 	_apply_all_settings()
@@ -563,19 +465,13 @@ func _run_self_test() -> void:
 		_fail_self_test("InputMap event key physical_keycode did not match KEY_UP")
 		return
 
-	_delete_settings_file(settings_file_path)
+	SettingsRuntime.delete_settings_file(settings_file_path)
 	print("SETTINGS_SELF_TEST_OK: settings load, mutate, save, reload, and InputMap bindings verification passed.")
 	get_tree().quit(0)
 
 
-func _delete_settings_file(path: String) -> void:
-	var absolute_path := ProjectSettings.globalize_path(path)
-	if FileAccess.file_exists(absolute_path):
-		DirAccess.remove_absolute(absolute_path)
-
-
 func _fail_self_test(reason: String) -> void:
-	if settings_file_path == SETTINGS_SELF_TEST_FILE_PATH:
-		_delete_settings_file(settings_file_path)
+	if settings_file_path == SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH:
+		SettingsRuntime.delete_settings_file(settings_file_path)
 	push_error("SETTINGS_SELF_TEST_FAILED: " + reason)
 	get_tree().quit(1)

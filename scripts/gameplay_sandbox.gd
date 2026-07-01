@@ -1,5 +1,7 @@
 extends Node3D
 
+const SettingsRuntime = preload("res://scripts/settings_runtime.gd")
+
 const MOVE_SPEED := 6.0
 const GRAVITY := 18.0
 const CAMERA_DISTANCE := 8.0
@@ -49,6 +51,11 @@ var loaded_inventory := PackedStringArray()
 
 
 func _ready() -> void:
+	_apply_saved_keybindings()
+	if OS.get_environment("ACORE_SANDBOX_KEYBIND_SETTINGS_SELF_TEST") == "1":
+		set_physics_process(false)
+		_run_keybind_settings_self_test()
+		return
 	_build_world()
 	_build_ui()
 	selectable_targets = [npc, enemy]
@@ -266,21 +273,21 @@ func _build_ui() -> void:
 
 
 func _update_camera_input(delta: float) -> void:
-	if Input.is_key_pressed(KEY_Q):
+	if Input.is_action_pressed("camera_left"):
 		camera_yaw += 1.9 * delta
-	if Input.is_key_pressed(KEY_E):
+	if Input.is_action_pressed("camera_right"):
 		camera_yaw -= 1.9 * delta
 
 
 func _update_player_movement(delta: float) -> void:
 	var input := Vector3.ZERO
-	if Input.is_key_pressed(KEY_W):
+	if Input.is_action_pressed("move_forward"):
 		input.z -= 1.0
-	if Input.is_key_pressed(KEY_S):
+	if Input.is_action_pressed("move_backward"):
 		input.z += 1.0
-	if Input.is_key_pressed(KEY_A):
+	if Input.is_action_pressed("move_left"):
 		input.x -= 1.0
-	if Input.is_key_pressed(KEY_D):
+	if Input.is_action_pressed("move_right"):
 		input.x += 1.0
 
 	var direction := Vector3.ZERO
@@ -301,25 +308,53 @@ func _update_player_movement(delta: float) -> void:
 
 
 func _update_key_actions() -> void:
-	var tab_pressed := Input.is_key_pressed(KEY_TAB)
+	var tab_pressed := Input.is_action_pressed("target_next")
 	if tab_pressed and not tab_was_pressed:
 		_select_next_target()
 	tab_was_pressed = tab_pressed
 
-	var attack_pressed := Input.is_key_pressed(KEY_1)
+	var attack_pressed := Input.is_action_pressed("attack_primary")
 	if attack_pressed and not attack_was_pressed:
 		_try_attack()
 	attack_was_pressed = attack_pressed
 
-	var interact_pressed := Input.is_key_pressed(KEY_F)
+	var interact_pressed := Input.is_action_pressed("interact")
 	if interact_pressed and not interact_was_pressed:
 		_try_interact()
 	interact_was_pressed = interact_pressed
 
-	var reset_pressed := Input.is_key_pressed(KEY_R)
+	var reset_pressed := Input.is_action_pressed("reset_sandbox")
 	if reset_pressed and not reset_was_pressed:
 		_reset_sandbox()
 	reset_was_pressed = reset_pressed
+
+
+func _apply_saved_keybindings(path: String = SettingsRuntime.SETTINGS_FILE_PATH) -> void:
+	SettingsRuntime.apply_keybindings(SettingsRuntime.load_settings(path))
+
+
+func _run_keybind_settings_self_test() -> void:
+	var test_settings := SettingsRuntime.default_settings()
+	test_settings["keybindings"]["move_forward"] = KEY_UP
+	var save_error := SettingsRuntime.save_settings(test_settings, SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH)
+	if save_error != OK:
+		push_error("SANDBOX_KEYBIND_SETTINGS_SELF_TEST_FAILED: could not save temporary settings")
+		get_tree().quit(1)
+		return
+	_apply_saved_keybindings(SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH)
+	var events := InputMap.action_get_events("move_forward")
+	var matched := false
+	for event in events:
+		if event is InputEventKey and event.physical_keycode == KEY_UP:
+			matched = true
+			break
+	SettingsRuntime.delete_settings_file(SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH)
+	if not matched:
+		push_error("SANDBOX_KEYBIND_SETTINGS_SELF_TEST_FAILED: move_forward did not use saved keybinding")
+		get_tree().quit(1)
+		return
+	print("SANDBOX_KEYBIND_SETTINGS_SELF_TEST_OK move_forward=KEY_UP")
+	get_tree().quit(0)
 
 
 func _update_enemy_pressure(delta: float) -> void:

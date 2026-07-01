@@ -229,3 +229,15 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `godot-4 --headless --path . --scene res://scenes/settings_view.tscn --quit` loaded the scene outside self-test mode.
 - Local `qwen-agent` advisory review reported no blockers for the settings scene and dashboard navigation changes.
 - Remaining work: add mouse/camera settings, UI scale, more complete keybind coverage, per-character/account scope decisions, and use these settings from the persistent gameplay HUD.
+
+### 2026-07-01 - Gameplay Sandbox Consumes Saved Keybindings
+
+- Added `scripts/settings_runtime.gd` as shared settings load/save/apply code for the settings scene and gameplay consumers.
+- Expanded default keybindings to include movement, camera yaw, target cycling, primary attack, interact, reset, and jump actions.
+- Updated `scenes/gameplay_sandbox.tscn` logic to apply saved keybindings at startup and use `InputMap` actions instead of hardcoded movement/action keys.
+- Updated the modular sandbox bootstrap to apply the same saved keybindings before registering fallback defaults.
+- Validation: `ACORE_SETTINGS_SELF_TEST=1 godot-4 --headless --path . res://scenes/settings_view.tscn` still passed after the shared runtime refactor.
+- Validation: `ACORE_SANDBOX_KEYBIND_SETTINGS_SELF_TEST=1 godot-4 --headless --path . res://scenes/gameplay_sandbox.tscn` passed, proving the sandbox consumes a saved `move_forward=KEY_UP` binding.
+- Validation: `ACORE_SANDBOX_SELF_TEST=1 godot-4 --headless --path . res://scenes/gameplay_sandbox.tscn` still passed after switching to action-based input.
+- Local `qwen-agent` advisory review reported no blockers for the shared settings runtime and sandbox input changes.
+- Remaining work: carry the shared settings runtime into the future persistent world HUD, live camera controls, and broader interaction/combat keybinds.

@@ -1,13 +1,14 @@
 extends Node3D
 
 const FLOATING_TEXT_SCENE := preload("res://scenes/floating_text.tscn")
+const SettingsRuntime = preload("res://scripts/settings_runtime.gd")
 
 @onready var player: CharacterBody3D = $Player
 @onready var targeting_system: Node3D = $TargetingSystem
 @onready var cooldown_manager: Node = $CooldownManager
 
 func _ready() -> void:
-	# Register inputs
+	SettingsRuntime.apply_keybindings(SettingsRuntime.load_settings())
 	_ensure_input_action("move_forward", KEY_W)
 	_ensure_input_action("move_backward", KEY_S)
 	_ensure_input_action("move_left", KEY_A)

@@ -52,13 +52,15 @@ ACORE_SANDBOX_DATA_SELF_TEST=1 snap run godot-4 --headless --quit-after 600 --pa
 
 ## Controls
 
-- `WASD`: move.
-- `Q` / `E`: rotate the third-person camera.
-- `Tab`: cycle target.
-- `1`: strike the targeted enemy.
-- `F`: talk to the targeted NPC.
-- `R`: reset the sandbox.
+- `WASD`: move by default.
+- `Q` / `E`: rotate the third-person camera by default.
+- `Tab`: cycle target by default.
+- `1`: strike the targeted enemy by default.
+- `F`: talk to the targeted NPC by default.
+- `R`: reset the sandbox by default.
 - Dashboard button: return to the companion dashboard.
+
+The sandbox applies saved keybindings from `user://settings.cfg` on startup through `scripts/settings_runtime.gd`, so these defaults can be changed from the settings scene.
 
 ## Gameplay Systems
 
@@ -96,6 +98,7 @@ Validated on 2026-06-30:
 - Dashboard scene loads in Godot 4.7 headless.
 - Sandbox scene loads directly in Godot 4.7 headless.
 - Sandbox self-test prints `SANDBOX_SELF_TEST_OK` after exercising mentor interaction, enemy defeat, task completion, and target health UI state.
+- Sandbox keybinding settings self-test prints `SANDBOX_KEYBIND_SETTINGS_SELF_TEST_OK` after loading a temporary settings file and applying a saved movement binding.
 - Sandbox data self-test prints `SANDBOX_DATA_SELF_TEST_OK` after loading bridge records and spawning creature placeholders.
 - Modular scaffold scripts parse successfully with Godot 4.7 `--check-only --script`.
 - Tracked-file guard found no proprietary client assets, local reports, local runtime files, or logs in Git.

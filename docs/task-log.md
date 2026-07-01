@@ -1688,3 +1688,33 @@ Remaining work:
 - Add mouse/camera sensitivity, UI scale, combat text/chat options, and broader keybind coverage.
 - Decide account-wide versus character-specific settings storage.
 - Wire the saved settings into the persistent gameplay HUD and camera/input systems.
+
+## 2026-07-01 - Wire Saved Keybindings Into Gameplay Sandbox
+
+Goal: make the settings work matter outside the settings screen by applying saved keybindings in a playable scene.
+
+Plan:
+
+- Move settings load/save/apply behavior into a shared runtime helper.
+- Expand default keybindings to cover sandbox movement, camera yaw, targeting, attack, interact, reset, and jump.
+- Update the gameplay sandbox to use `InputMap` actions instead of hardcoded key checks.
+- Add a focused headless self-test proving the sandbox consumes a saved movement binding.
+
+Result:
+
+- Added `scripts/settings_runtime.gd`.
+- Refactored `scripts/settings_view.gd` to use the shared runtime helper.
+- Updated `scripts/gameplay_sandbox.gd` to apply saved keybindings at startup and read action state for movement/camera/action controls.
+- Updated the modular `scripts/sandbox.gd` bootstrap to apply saved keybindings before registering fallback defaults.
+
+Validation:
+
+- `ACORE_SETTINGS_SELF_TEST=1 godot-4 --headless --path . res://scenes/settings_view.tscn` passed after the shared runtime refactor.
+- `ACORE_SANDBOX_KEYBIND_SETTINGS_SELF_TEST=1 godot-4 --headless --path . res://scenes/gameplay_sandbox.tscn` passed with `move_forward=KEY_UP`.
+- `ACORE_SANDBOX_SELF_TEST=1 godot-4 --headless --path . res://scenes/gameplay_sandbox.tscn` still passed after replacing raw key checks with actions.
+- Local `qwen-agent` advisory review reported no blockers for the shared settings runtime and sandbox input changes.
+
+Remaining work:
+
+- Carry the shared settings runtime into the eventual persistent world HUD, live camera controller, and broader combat/interaction keybind surface.
+- Add mouse/camera sensitivity and UI scale settings.
