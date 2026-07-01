@@ -451,9 +451,9 @@ Remaining loot packet work:
 - Parse and surface loot errors, bind prompts, quest item rules, group loot settings, rolls, master loot, and permission edge cases.
 - Add long-session persistence checks for looted money/items.
 
-## Trainer List Slice
+## Trainer List And Buy Slice
 
-Stage 17 now has the first read-only trainer-list path required by [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md).
+Stage 17 now has the first trainer-list and trainer-buy response paths required by [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md).
 
 Relevant opcodes:
 
@@ -461,12 +461,22 @@ Relevant opcodes:
 | --- | ---: | --- |
 | `CMSG_TRAINER_LIST` | `0x1B0` | Sends selected trainer GUID after moving within NPC interaction range |
 | `SMSG_TRAINER_LIST` | `0x1B1` | Parses trainer GUID, trainer type, spell rows, requirements, and greeting |
+| `CMSG_TRAINER_BUY_SPELL` | `0x1B2` | Sends selected trainer GUID and requested trainer spell id |
+| `SMSG_TRAINER_BUY_SUCCEEDED` | `0x1B3` | Parses trainer GUID and learned spell id |
+| `SMSG_TRAINER_BUY_FAILED` | `0x1B4` | Parses trainer GUID, attempted spell id, and failure reason |
 
 Client request payload:
 
 | Field | Size | Notes |
 | --- | ---: | --- |
 | trainer GUID | 8 | Raw little-endian object GUID, using AzerothCore's shared NPC hello packet reader |
+
+Trainer-buy request payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| trainer GUID | 8 | Raw little-endian object GUID |
+| spell id | 4 | Trainer row spell id to learn |
 
 Server response payload from `WorldPackets::NPC::TrainerList::Write`:
 
@@ -490,11 +500,12 @@ Observed Stage 17 result:
 - Native helper command `--trainer-list` selected a visible local trainer entry, moved within AzerothCore's NPC interaction distance, sent `CMSG_TRAINER_LIST`, parsed `SMSG_TRAINER_LIST`, and returned to the login position.
 - The live response had opcode `0x1B1` and 6 trainer spell rows for `Codexstage`.
 - Godot scene `scenes/stage17_trainer_view.tscn` passed `ACORE_TRAINER_LIST_SELF_TEST=1` with `moved_close=true`, `returned=true`, `spell_count=6`, and response opcode `0x1B1`.
+- Native helper command `--trainer-buy` then opened the same trainer list, sent `CMSG_TRAINER_BUY_SPELL` for spell `6673`, and parsed `SMSG_TRAINER_BUY_FAILED` with failure reason `1` because the current test character only had 2 copper.
+- Godot scene `scenes/stage17_trainer_view.tscn` passed `ACORE_TRAINER_BUY_SELF_TEST=1` with `buy_spell_sent=true`, `buy_response_seen=true`, `failed=true`, `failure_reason=1`, and response opcode `0x1B4`.
 
 Remaining trainer packet work:
 
-- Add `CMSG_TRAINER_BUY_SPELL`, `SMSG_TRAINER_BUY_SUCCEEDED`, and `SMSG_TRAINER_BUY_FAILED`.
-- Verify money updates and learned-spell updates after a safe local learn action.
+- Verify `SMSG_TRAINER_BUY_SUCCEEDED`, money updates, and learned-spell updates after a safe local learn action with enough copper.
 - Surface disabled-state explanations, spell ranks/names/icons, and failure reasons in the Godot trainer UI.
 - Replace fixed local target entry controls with normal visible-object click targeting and persistent-session flow.
 

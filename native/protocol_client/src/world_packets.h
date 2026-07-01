@@ -28,6 +28,7 @@ constexpr std::uint32_t CMSG_LOOT_MONEY = 0x15E;
 constexpr std::uint32_t CMSG_LOOT_RELEASE = 0x15F;
 constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
 constexpr std::uint32_t CMSG_TRAINER_LIST = 0x1B0;
+constexpr std::uint32_t CMSG_TRAINER_BUY_SPELL = 0x1B2;
 constexpr std::uint32_t CMSG_TIME_SYNC_RESP = 0x391;
 constexpr std::uint32_t MSG_MOVE_START_FORWARD = 0x0B5;
 constexpr std::uint32_t MSG_MOVE_STOP = 0x0B7;
@@ -64,6 +65,8 @@ constexpr std::uint16_t SMSG_LOOT_CLEAR_MONEY = 0x165;
 constexpr std::uint16_t SMSG_COMPRESSED_UPDATE_OBJECT = 0x1F6;
 constexpr std::uint16_t SMSG_GOSSIP_MESSAGE = 0x17D;
 constexpr std::uint16_t SMSG_TRAINER_LIST = 0x1B1;
+constexpr std::uint16_t SMSG_TRAINER_BUY_SUCCEEDED = 0x1B3;
+constexpr std::uint16_t SMSG_TRAINER_BUY_FAILED = 0x1B4;
 constexpr std::uint16_t SMSG_LOGIN_VERIFY_WORLD = 0x236;
 constexpr std::uint16_t SMSG_TIME_SYNC_REQ = 0x390;
 constexpr std::uint16_t SMSG_GM_MESSAGECHAT = 0x3B3;
@@ -338,6 +341,17 @@ struct TrainerListSummary
     std::vector<TrainerSpellSummary> spells;
 };
 
+struct TrainerBuyResponseSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t trainer_guid = 0;
+    std::int32_t spell_id = 0;
+    std::int32_t failure_reason = 0;
+    bool succeeded = false;
+    bool failed = false;
+};
+
 struct LootResponseSummary
 {
     bool parsed = false;
@@ -362,6 +376,7 @@ std::vector<std::uint8_t> build_auth_session_payload(
 std::vector<std::uint8_t> build_character_create_payload(std::string const& name);
 std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_guid);
 std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid);
+std::vector<std::uint8_t> build_trainer_buy_spell_payload(std::uint64_t trainer_guid, std::uint32_t spell_id);
 std::vector<std::uint8_t> build_loot_payload(std::uint64_t raw_guid);
 std::vector<std::uint8_t> build_loot_release_payload(std::uint64_t raw_guid);
 std::vector<std::uint8_t> build_autostore_loot_item_payload(std::uint8_t loot_slot);
@@ -408,6 +423,8 @@ AttackerStateUpdateSummary parse_attacker_state_update(std::span<const std::uint
 SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::span<const std::uint8_t> payload);
 LootResponseSummary parse_loot_response(std::span<const std::uint8_t> payload);
 TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> payload);
+TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload);
+TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std::uint8_t> payload);
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,

@@ -354,6 +354,19 @@ Dictionary trainer_list_dictionary(TrainerListSummary const& trainer_list)
     return value;
 }
 
+Dictionary trainer_buy_response_dictionary(TrainerBuyResponseSummary const& response)
+{
+    Dictionary value;
+    value["parsed"] = response.parsed;
+    value["payload_size"] = static_cast<int>(response.payload_size);
+    value["trainer_guid"] = guid_to_hex(response.trainer_guid);
+    value["spell_id"] = static_cast<int>(response.spell_id);
+    value["failure_reason"] = static_cast<int>(response.failure_reason);
+    value["succeeded"] = response.succeeded;
+    value["failed"] = response.failed;
+    return value;
+}
+
 Dictionary loot_response_dictionary(LootResponseSummary const& loot)
 {
     Dictionary value;
@@ -440,6 +453,12 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("trainer_list_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "target_name"),
         &AcoreProtocolClient::trainer_list_probe_selector);
+    ClassDB::bind_method(
+        D_METHOD("trainer_buy_spell_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name", "spell_id"),
+        &AcoreProtocolClient::trainer_buy_spell_probe);
+    ClassDB::bind_method(
+        D_METHOD("trainer_buy_spell_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "target_name", "spell_id"),
+        &AcoreProtocolClient::trainer_buy_spell_probe_selector);
     ClassDB::bind_method(
         D_METHOD("combat_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
         &AcoreProtocolClient::combat_probe);
@@ -668,6 +687,98 @@ Dictionary AcoreProtocolClient::trainer_list_probe_selector(
         result["spell_count"] = static_cast<int>(flow.trainer_list.spell_count);
         result["greeting"] = String(flow.trainer_list.greeting.c_str());
         result["spells"] = trainer_spell_array(flow.trainer_list.spells);
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::trainer_buy_spell_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    String const& target_name,
+    int64_t spell_id)
+{
+    return trainer_buy_spell_probe_selector(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        String::num_int64(target_entry),
+        target_name,
+        spell_id);
+}
+
+Dictionary AcoreProtocolClient::trainer_buy_spell_probe_selector(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    String const& target_selector,
+    String const& target_name,
+    int64_t spell_id)
+{
+    try
+    {
+        std::uint64_t const selector = parse_target_selector(target_selector, "trainer target selector");
+        if (spell_id <= 0)
+        {
+            return failure("trainer spell id must be positive");
+        }
+
+        acore_protocol::TrainerBuySpellProbeResult flow = acore_protocol::trainer_buy_spell_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            selector,
+            to_std_string(target_name),
+            static_cast<std::uint32_t>(spell_id));
+
+        Dictionary result;
+        result["ok"] = flow.live_target_found && flow.selection_sent && flow.trainer_list_response_seen
+            && flow.buy_spell_sent && flow.buy_response_seen;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["spell_id"] = static_cast<int>(flow.spell_id);
+        result["live_target_found"] = flow.live_target_found;
+        result["target_has_position"] = flow.target_has_position;
+        result["target_x"] = flow.target_x;
+        result["target_y"] = flow.target_y;
+        result["target_z"] = flow.target_z;
+        result["approach_movement_sent"] = flow.approach_movement_sent;
+        result["return_movement_sent"] = flow.return_movement_sent;
+        result["selection_sent"] = flow.selection_sent;
+        result["trainer_list_sent"] = flow.trainer_list_sent;
+        result["trainer_list_response_seen"] = flow.trainer_list_response_seen;
+        result["trainer_list"] = trainer_list_dictionary(flow.trainer_list);
+        result["trainer_type"] = static_cast<int>(flow.trainer_list.trainer_type);
+        result["spell_count"] = static_cast<int>(flow.trainer_list.spell_count);
+        result["spells"] = trainer_spell_array(flow.trainer_list.spells);
+        result["buy_spell_sent"] = flow.buy_spell_sent;
+        result["buy_response_seen"] = flow.buy_response_seen;
+        result["buy_response"] = trainer_buy_response_dictionary(flow.buy_response);
+        result["buy_succeeded"] = flow.buy_response.succeeded;
+        result["buy_failed"] = flow.buy_response.failed;
+        result["failure_reason"] = static_cast<int>(flow.buy_response.failure_reason);
+        result["response_opcode"] = static_cast<int>(flow.response_opcode);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);

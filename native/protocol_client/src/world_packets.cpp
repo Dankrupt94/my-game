@@ -785,6 +785,14 @@ std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid)
     return payload;
 }
 
+std::vector<std::uint8_t> build_trainer_buy_spell_payload(std::uint64_t trainer_guid, std::uint32_t spell_id)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, trainer_guid);
+    append_u32_le(payload, spell_id);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_loot_payload(std::uint64_t raw_guid)
 {
     return build_raw_guid_payload(raw_guid);
@@ -1336,6 +1344,39 @@ TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> pay
     return summary;
 }
 
+TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    TrainerBuyResponseSummary summary;
+    summary.payload_size = payload.size();
+    summary.trainer_guid = read_u64_le(payload, offset);
+    summary.spell_id = static_cast<std::int32_t>(read_u32_le(payload, offset));
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("trainer buy success parser left trailing bytes");
+    }
+    summary.succeeded = true;
+    summary.parsed = true;
+    return summary;
+}
+
+TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    TrainerBuyResponseSummary summary;
+    summary.payload_size = payload.size();
+    summary.trainer_guid = read_u64_le(payload, offset);
+    summary.spell_id = static_cast<std::int32_t>(read_u32_le(payload, offset));
+    summary.failure_reason = static_cast<std::int32_t>(read_u32_le(payload, offset));
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("trainer buy failure parser left trailing bytes");
+    }
+    summary.failed = true;
+    summary.parsed = true;
+    return summary;
+}
+
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,
@@ -1591,6 +1632,15 @@ bool world_packet_self_test()
     {
         return false;
     }
+    auto trainer_buy_payload = build_trainer_buy_spell_payload(0xF13000038F000001ULL, 6673);
+    auto trainer_buy_packet = build_client_packet(CMSG_TRAINER_BUY_SPELL, trainer_buy_payload);
+    if (trainer_buy_packet.size() != 18
+        || trainer_buy_packet[2] != 0xB2
+        || trainer_buy_packet[3] != 0x01
+        || trainer_buy_payload.size() != 12)
+    {
+        return false;
+    }
 
     auto create_payload = build_character_create_payload("Codextest");
     if (create_payload.empty() || create_payload.back() != 0)
@@ -1807,6 +1857,17 @@ bool world_packet_self_test()
     trainer_list_payload.insert(trainer_list_payload.end(), {'T', 'r', 'a', 'i', 'n', ' ', 'w', 'e', 'l', 'l', '.', 0});
     TrainerListSummary trainer_list = parse_trainer_list_response(trainer_list_payload);
 
+    std::vector<std::uint8_t> trainer_buy_success_payload;
+    append_u64_le(trainer_buy_success_payload, 0xF13000038F000001ULL);
+    append_u32_le(trainer_buy_success_payload, 6673);
+    TrainerBuyResponseSummary trainer_buy_success = parse_trainer_buy_succeeded_response(trainer_buy_success_payload);
+
+    std::vector<std::uint8_t> trainer_buy_failure_payload;
+    append_u64_le(trainer_buy_failure_payload, 0xF13000038F000001ULL);
+    append_u32_le(trainer_buy_failure_payload, 6673);
+    append_u32_le(trainer_buy_failure_payload, 1);
+    TrainerBuyResponseSummary trainer_buy_failure = parse_trainer_buy_failed_response(trainer_buy_failure_payload);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -1902,6 +1963,17 @@ bool world_packet_self_test()
         && trainer_list.spells[0].money_cost == 100
         && trainer_list.spells[0].req_level == 1
         && trainer_list.greeting == "Train well."
+        && trainer_buy_success.parsed
+        && trainer_buy_success.succeeded
+        && !trainer_buy_success.failed
+        && trainer_buy_success.trainer_guid == 0xF13000038F000001ULL
+        && trainer_buy_success.spell_id == 6673
+        && trainer_buy_failure.parsed
+        && trainer_buy_failure.failed
+        && !trainer_buy_failure.succeeded
+        && trainer_buy_failure.trainer_guid == 0xF13000038F000001ULL
+        && trainer_buy_failure.spell_id == 6673
+        && trainer_buy_failure.failure_reason == 1
         && loot_response.items[0].display_id == 777
         && loot_response.items[0].slot_type == 0;
 }

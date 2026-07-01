@@ -404,6 +404,57 @@ int trainer_list_probe(
         && result.trainer_list_response_seen && result.trainer_list.spell_count > 0 ? 0 : 1;
 }
 
+int trainer_buy_spell_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_guid,
+    std::string const& target_name,
+    std::string const& spell_id)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::TrainerBuySpellProbeResult result = acore_protocol::trainer_buy_spell_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_guid),
+        target_name,
+        static_cast<std::uint32_t>(std::stoul(spell_id)),
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "TRAINER_BUY_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " target_name=\"" << result.target_name << "\""
+              << " spell_id=" << result.spell_id
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " target_has_position=" << (result.target_has_position ? 1 : 0)
+              << " visible_objects=" << result.visible_objects.size()
+              << " approach_movement_sent=" << (result.approach_movement_sent ? 1 : 0)
+              << " return_movement_sent=" << (result.return_movement_sent ? 1 : 0)
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " trainer_list_sent=" << (result.trainer_list_sent ? 1 : 0)
+              << " trainer_list_response_seen=" << (result.trainer_list_response_seen ? 1 : 0)
+              << " spell_count=" << result.trainer_list.spell_count
+              << " buy_spell_sent=" << (result.buy_spell_sent ? 1 : 0)
+              << " buy_response_seen=" << (result.buy_response_seen ? 1 : 0)
+              << " buy_succeeded=" << (result.buy_response.succeeded ? 1 : 0)
+              << " buy_failed=" << (result.buy_response.failed ? 1 : 0)
+              << " failure_reason=" << result.buy_response.failure_reason
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    return result.live_target_found && result.selection_sent && result.trainer_list_response_seen
+        && result.buy_spell_sent && result.buy_response_seen ? 0 : 1;
+}
+
 int combat_probe(
     std::string const& host,
     std::string const& port,
@@ -1252,6 +1303,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --move-heartbeat <host> <port> <account> <character-name> <delta-x> <delta-y> <delta-orientation>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --npc-interaction <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --trainer-list <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --trainer-buy <host> <port> <account> <character-name> <target-guid-or-entry> <target-name> <spell-id>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --loot-open-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --corpse-loot-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
@@ -1322,6 +1374,11 @@ int main(int argc, char** argv)
         if (argc == 8 && std::strcmp(argv[1], "--trainer-list") == 0)
         {
             return trainer_list_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+        }
+
+        if (argc == 9 && std::strcmp(argv[1], "--trainer-buy") == 0)
+        {
+            return trainer_buy_spell_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
         }
 
         if (argc == 8 && std::strcmp(argv[1], "--combat-probe") == 0)

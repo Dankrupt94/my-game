@@ -1536,3 +1536,42 @@ Remaining work:
 - Show spell names, ranks, icons, requirements, and disabled-state reasons.
 - Replace fixed local target entry controls with normal player click targeting.
 - Fold trainer interactions into a persistent world session and normal gameplay HUD.
+
+## 2026-07-01 - Add Stage 17 Trainer Buy Failure Probe
+
+Goal: move the trainer slice from read-only list viewing toward real spell-learning behavior by sending a trainer-buy request and parsing the server response.
+
+Plan:
+
+- Add packet support for `CMSG_TRAINER_BUY_SPELL`, `SMSG_TRAINER_BUY_SUCCEEDED`, and `SMSG_TRAINER_BUY_FAILED`.
+- Reuse the trainer-list proximity flow so the buy request follows AzerothCore's NPC interaction-distance rules.
+- Expose the buy request through the native helper, Godot extension, script bridge, and trainer scene.
+- Validate against the current local test character without adding money or forcing a successful learn.
+- Update the Stage 17 docs to record the failure-path proof and the remaining success-path work.
+
+Result:
+
+- Added `TrainerBuyResponseSummary` parsing for success and failure payloads.
+- Added `build_trainer_buy_spell_payload(...)`.
+- Added native `--trainer-buy`.
+- Added `AcoreProtocolClient.trainer_buy_spell_probe(...)` and selector variant.
+- Added `ProtocolClientBridge.trainer_buy_spell_probe(...)`.
+- Added a `Try Learn` action and `ACORE_TRAINER_BUY_SELF_TEST=1` path to `scenes/stage17_trainer_view.tscn`.
+- Current live state: `Codexstage` has 2 copper, while the chosen trainer spell costs more than that, so AzerothCore correctly returns failure reason `1` (`not enough money`).
+
+Validation:
+
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--trainer-buy` passed with `trainer_list_response_seen=1`, `buy_spell_sent=1`, `buy_response_seen=1`, `buy_failed=1`, `failure_reason=1`, and response opcode `0x1B4`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `godot-4 --headless --path . --quit` passed.
+- `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` still passed.
+- `ACORE_TRAINER_BUY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `succeeded=false`, `failed=true`, `failure_reason=1`, and response opcode `0x1B4`.
+- Local `qwen-agent` advisory review reported no blockers for the native protocol changes or the Godot bridge/UI changes.
+
+Remaining work:
+
+- Add a local money-backed trainer success fixture.
+- Prove `SMSG_TRAINER_BUY_SUCCEEDED` and verify the learned spell appears in the spellbook.
+- Verify coinage decreases after a successful learn.
+- Add final trainer UI details: names, ranks, icons, richer disabled-state text, and player-driven trainer target selection.

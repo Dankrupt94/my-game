@@ -174,3 +174,17 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `moved_close=true`, `returned=true`, `spell_count=6`, and response opcode `0x1B1`.
 - Local `qwen-agent` advisory review reported no blockers.
 - Remaining work: learn-spell packets, server money updates, failure-code UI, spell names/icons/ranks, normal player click-to-trainer selection, and persistent-session integration.
+
+### 2026-07-01 - Trainer Buy Failure Response Probe
+
+- Extended the trainer slice from read-only list viewing into a server-authoritative trainer-buy request path.
+- Added `CMSG_TRAINER_BUY_SPELL`, `SMSG_TRAINER_BUY_SUCCEEDED`, and `SMSG_TRAINER_BUY_FAILED` support to the native packet layer.
+- Added native `--trainer-buy`, Godot extension methods, `ProtocolClientBridge.trainer_buy_spell_probe(...)`, and a `Try Learn` action in `scenes/stage17_trainer_view.tscn`.
+- The current local test character has only 2 copper, so the live validation intentionally proves the safe failure path for spell `6673` instead of forcing a successful learn.
+- Validation: native `--trainer-buy` passed with `trainer_list_response_seen=1`, `buy_spell_sent=1`, `buy_response_seen=1`, `buy_failed=1`, `failure_reason=1`, and response opcode `0x1B4`.
+- Validation: `./tools/build_godot_protocol_extension_compat.sh` passed.
+- Validation: `godot-4 --headless --path . --quit` passed.
+- Validation: `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` still passed.
+- Validation: `ACORE_TRAINER_BUY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `succeeded=false`, `failed=true`, `failure_reason=1`, and response opcode `0x1B4`.
+- Local `qwen-agent` advisory review reported no blockers for the native protocol changes or the Godot bridge/UI changes.
+- Remaining work: prepare a money-backed local test fixture, prove `SMSG_TRAINER_BUY_SUCCEEDED`, verify spellbook and coinage refresh after learning, then replace the fixed test button with normal player trainer interaction.

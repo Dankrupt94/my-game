@@ -5,7 +5,10 @@ const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
 const TEST_CHARACTER_NAME := "Codexstage"
 const TRAINER_TARGET_ENTRY := 911
 const TRAINER_TARGET_NAME := "Nearby Trainer"
+const TRAINER_BUY_TEST_SPELL_ID := 6673
 const SMSG_TRAINER_LIST := 0x1B1
+const SMSG_TRAINER_BUY_SUCCEEDED := 0x1B3
+const SMSG_TRAINER_BUY_FAILED := 0x1B4
 
 var status_label: Label
 var target_label: Label
@@ -17,7 +20,10 @@ var spell_list: ItemList
 
 func _ready() -> void:
 	_build_view()
-	call_deferred("_run_trainer_list_probe")
+	if OS.get_environment("ACORE_TRAINER_BUY_SELF_TEST") == "1":
+		call_deferred("_run_trainer_buy_probe")
+	else:
+		call_deferred("_run_trainer_list_probe")
 
 
 func _build_view() -> void:
@@ -90,6 +96,12 @@ func _build_view() -> void:
 	refresh_button.pressed.connect(_run_trainer_list_probe)
 	target_row.add_child(refresh_button)
 
+	var learn_button := Button.new()
+	learn_button.text = "Try Learn"
+	learn_button.custom_minimum_size = Vector2(108, 34)
+	learn_button.pressed.connect(_run_trainer_buy_probe)
+	target_row.add_child(learn_button)
+
 	trainer_label = Label.new()
 	trainer_label.text = "Trainer: idle"
 	trainer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -131,6 +143,46 @@ func _run_trainer_list_probe() -> void:
 		_opcode_hex(int(result.get("response_opcode", 0))),
 	])
 	_finish_self_test(true, result)
+
+
+func _run_trainer_buy_probe() -> void:
+	status_label.text = "Running"
+	trainer_label.text = "Trainer: sending spell request"
+	spell_list.clear()
+
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.trainer_buy_spell_probe(
+		TEST_CHARACTER_NAME,
+		_target_entry(),
+		_target_name(),
+		TRAINER_BUY_TEST_SPELL_ID)
+	var ok := bool(result.get("ok", false))
+	if not ok:
+		status_label.text = "Failed"
+		target_label.text = _failure_summary("Trainer buy probe failed", result)
+		_finish_buy_self_test(false, result)
+		return
+
+	status_label.text = "Ready"
+	target_label.text = "Target %s entry %s, moved close=%s, returned=%s, buy opcode 0x%s." % [
+		str(result.get("target_guid", "0x0")),
+		str(result.get("target_entry", _target_entry())),
+		str(result.get("approach_movement_sent", false)),
+		str(result.get("return_movement_sent", false)),
+		_opcode_hex(int(result.get("response_opcode", 0))),
+	]
+	_render_trainer_buy(result)
+	print("TRAINER_BUY_SELF_TEST_READY target_entry=%s spell_id=%s moved_close=%s returned=%s succeeded=%s failed=%s failure_reason=%s opcode=0x%s" % [
+		str(result.get("target_entry", _target_entry())),
+		str(result.get("spell_id", TRAINER_BUY_TEST_SPELL_ID)),
+		str(result.get("approach_movement_sent", false)),
+		str(result.get("return_movement_sent", false)),
+		str(result.get("buy_succeeded", false)),
+		str(result.get("buy_failed", false)),
+		str(result.get("failure_reason", 0)),
+		_opcode_hex(int(result.get("response_opcode", 0))),
+	])
+	_finish_buy_self_test(true, result)
 
 
 func _target_entry() -> int:
@@ -176,6 +228,26 @@ func _render_trainer(result: Dictionary) -> void:
 		spell_list.add_item(row)
 
 
+func _render_trainer_buy(result: Dictionary) -> void:
+	var spell_id := int(result.get("spell_id", TRAINER_BUY_TEST_SPELL_ID))
+	if bool(result.get("buy_succeeded", false)):
+		trainer_label.text = "Learned spell %s." % str(spell_id)
+		spell_list.add_item("Spell %s learned by server response" % str(spell_id))
+		return
+
+	var reason := int(result.get("failure_reason", 0))
+	trainer_label.text = "Spell %s was not learned: %s." % [
+		str(spell_id),
+		_trainer_failure_reason(reason),
+	]
+	spell_list.add_item("Spell %s failed: %s" % [
+		str(spell_id),
+		_trainer_failure_reason(reason),
+	])
+	if int(result.get("spell_count", 0)) > 0:
+		spell_list.add_item("Trainer list was visible with %s spell row(s)" % str(result.get("spell_count", 0)))
+
+
 func _finish_self_test(ok: bool, result: Dictionary) -> void:
 	if OS.get_environment("ACORE_TRAINER_LIST_SELF_TEST") != "1":
 		return
@@ -194,6 +266,29 @@ func _finish_self_test(ok: bool, result: Dictionary) -> void:
 	get_tree().quit(1)
 
 
+func _finish_buy_self_test(ok: bool, result: Dictionary) -> void:
+	if OS.get_environment("ACORE_TRAINER_BUY_SELF_TEST") != "1":
+		return
+	var opcode := int(result.get("response_opcode", 0))
+	if ok \
+			and bool(result.get("trainer_list_response_seen", false)) \
+			and bool(result.get("buy_spell_sent", false)) \
+			and bool(result.get("buy_response_seen", false)) \
+			and (opcode == SMSG_TRAINER_BUY_SUCCEEDED or opcode == SMSG_TRAINER_BUY_FAILED):
+		print("TRAINER_BUY_SELF_TEST_OK spell_id=%s succeeded=%s failed=%s failure_reason=%s response_opcode=0x%s" % [
+			str(result.get("spell_id", TRAINER_BUY_TEST_SPELL_ID)),
+			str(result.get("buy_succeeded", false)),
+			str(result.get("buy_failed", false)),
+			str(result.get("failure_reason", 0)),
+			_opcode_hex(opcode),
+		])
+		get_tree().quit(0)
+		return
+
+	push_error("TRAINER_BUY_SELF_TEST_FAILED " + JSON.stringify(result))
+	get_tree().quit(1)
+
+
 func _failure_summary(prefix: String, result: Dictionary) -> String:
 	var source := str(result.get("source", "unknown source"))
 	var output := str(result.get("output", "")).strip_edges()
@@ -202,6 +297,18 @@ func _failure_summary(prefix: String, result: Dictionary) -> String:
 	if output.is_empty():
 		return "%s via %s." % [prefix, source]
 	return "%s via %s: %s" % [prefix, source, output]
+
+
+func _trainer_failure_reason(reason: int) -> String:
+	match reason:
+		0:
+			return "unavailable"
+		1:
+			return "not enough money"
+		2:
+			return "not enough skill"
+		_:
+			return "failure " + str(reason)
 
 
 func _money_text(copper: int) -> String:
