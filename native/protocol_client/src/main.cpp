@@ -455,6 +455,69 @@ int trainer_buy_spell_probe(
         && result.buy_spell_sent && result.buy_response_seen ? 0 : 1;
 }
 
+int vendor_list_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_guid,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::VendorListProbeResult result = acore_protocol::vendor_list_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_guid),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "VENDOR_LIST_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " target_name=\"" << result.target_name << "\""
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " target_has_position=" << (result.target_has_position ? 1 : 0)
+              << " visible_objects=" << result.visible_objects.size()
+              << " approach_movement_sent=" << (result.approach_movement_sent ? 1 : 0)
+              << " return_movement_sent=" << (result.return_movement_sent ? 1 : 0)
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " vendor_list_sent=" << (result.vendor_list_sent ? 1 : 0)
+              << " vendor_list_response_seen=" << (result.vendor_list_response_seen ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " item_count=" << static_cast<int>(result.vendor_list.item_count)
+              << " error_code=" << static_cast<int>(result.vendor_list.error_code)
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    std::size_t printed = 0;
+    for (VendorItemSummary const& item : result.vendor_list.items)
+    {
+        if (printed >= 80)
+        {
+            break;
+        }
+        std::cout << "VENDOR_ITEM"
+                  << " vendor_slot=" << item.vendor_slot
+                  << " item_id=" << item.item_id
+                  << " display_id=" << item.display_id
+                  << " left_in_stock=" << item.left_in_stock
+                  << " buy_price=" << item.buy_price
+                  << " max_durability=" << item.max_durability
+                  << " buy_count=" << item.buy_count
+                  << " extended_cost=" << item.extended_cost
+                  << "\n";
+        ++printed;
+    }
+    return result.live_target_found && result.selection_sent && result.vendor_list_sent
+        && result.vendor_list_response_seen && result.vendor_list.item_count > 0 ? 0 : 1;
+}
+
 int combat_probe(
     std::string const& host,
     std::string const& port,
@@ -1373,6 +1436,11 @@ int main(int argc, char** argv)
         if (argc == 9 && std::strcmp(argv[1], "--trainer-buy") == 0)
         {
             return trainer_buy_spell_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
+        }
+
+        if (argc == 8 && std::strcmp(argv[1], "--vendor-list") == 0)
+        {
+            return vendor_list_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
         }
 
         if (argc == 8 && std::strcmp(argv[1], "--combat-probe") == 0)

@@ -219,6 +219,20 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Local `qwen-agent` advisory review reported no blockers for the row rendering update.
 - Remaining work: wire real spell names/icons/ranks from the local-only data/asset pipeline and expand disabled-state explanations.
 
+### 2026-07-01 - Vendor List Protocol Probe
+
+- Continued Stage 17 against [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md), specifically the vendor-window portion of the NPC services checklist.
+- Added `CMSG_LIST_INVENTORY` / `SMSG_LIST_INVENTORY` support to the native protocol helper and Godot extension.
+- Added `ProtocolClientBridge.vendor_list_probe_selector(...)` with helper-process fallback parsing.
+- Added `scenes/stage17_vendor_view.tscn` as the first Godot vendor surface, with live visible-target scanning, exact GUID selection, and numeric item rows for server-returned vendor stock.
+- Kept committed vendor rows item-id based only; item names, icons, and client-derived tooltip data remain local-only future work.
+- Local validation target: visible vendor entry `1213`, selected by runtime GUID when present.
+- Validation: native `--vendor-list` passed for `Codexstage` against entry `1213` with `live_target_found=1`, `approach_movement_sent=1`, `return_movement_sent=1`, `vendor_list_response_seen=1`, response opcode `0x19F`, and 8 item rows.
+- Validation: `ACORE_VENDOR_TARGET_PICKER_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with `target_count=146`, selected entry `1213`, and selected GUID `0xf1300004bd000cf4`.
+- Validation: `ACORE_VENDOR_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with `moved_close=true`, `returned=true`, 8 item rows, and response opcode `0x19F`.
+- Local `qwen-agent` advisory review reported no blockers for the vendor protocol, bridge, and scene slice.
+- Remaining work: live buy/sell/repair packets, inventory refresh after purchases/sales, stock and failure-code UI, item metadata/icons/tooltips through local-only pipelines, in-world click targeting, and persistent-session integration.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

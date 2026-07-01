@@ -1718,3 +1718,42 @@ Remaining work:
 
 - Carry the shared settings runtime into the eventual persistent world HUD, live camera controller, and broader combat/interaction keybind surface.
 - Add mouse/camera sensitivity and UI scale settings.
+
+## 2026-07-01 - Add Stage 17 Vendor List Slice
+
+Goal: add the first vendor-window proof required by `docs/wotlk_client_parity_engine_spec.md` without committing proprietary item or NPC names.
+
+Plan:
+
+- Read AzerothCore's vendor-list handler and packet writer.
+- Add native packet parsing for `CMSG_LIST_INVENTORY` / `SMSG_LIST_INVENTORY`.
+- Expose the vendor-list probe through the Godot native extension and script bridge.
+- Add a Godot vendor scene that selects a live visible target by exact GUID and renders numeric item rows.
+- Document this as a read-only vendor-list slice, not full vendor parity.
+
+Result:
+
+- Added `VendorListSummary` and `VendorItemSummary` parsing to the native protocol helper.
+- Added native `--vendor-list` flow with interaction-range movement, selection, inventory-list request, response parsing, and return movement.
+- Added Godot extension and `ProtocolClientBridge.vendor_list_probe_selector(...)` support.
+- Added `scenes/stage17_vendor_view.tscn` and `scripts/stage17_vendor_view.gd`.
+- Added dashboard navigation for the vendor scene while preserving parallel dashboard edits from Antigravity.
+
+Validation target:
+
+- Local visible vendor entry `1213`, using exact runtime GUID selection when present.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--vendor-list` passed for `Codexstage` against entry `1213`, resolved GUID `0xf1300004bd000cf4`, received opcode `0x19F`, and parsed 8 vendor item rows.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `godot-4 --headless --path . --quit` passed.
+- `ACORE_VENDOR_TARGET_PICKER_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with selected entry `1213`.
+- `ACORE_VENDOR_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with 8 item rows and response opcode `0x19F`.
+- Local `qwen-agent` advisory review reported no blockers for the vendor protocol, bridge, and scene slice.
+
+Remaining work:
+
+- Add buy, sell, repair, inventory refresh after purchase/sale, stock/failure UI, item metadata/icons/tooltips through local-only pipelines, in-world click targeting, and persistent-session integration.

@@ -1377,6 +1377,51 @@ TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std:
     return summary;
 }
 
+VendorListSummary parse_vendor_list_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    VendorListSummary summary;
+    summary.payload_size = payload.size();
+    summary.vendor_guid = read_u64_le(payload, offset);
+    summary.item_count = read_u8(payload, offset);
+
+    if (summary.item_count == 0)
+    {
+        if (offset < payload.size())
+        {
+            summary.error_code = read_u8(payload, offset);
+        }
+        if (offset != payload.size())
+        {
+            throw std::runtime_error("vendor list parser left trailing bytes after empty response");
+        }
+        summary.parsed = true;
+        return summary;
+    }
+
+    summary.items.reserve(summary.item_count);
+    for (std::uint8_t i = 0; i < summary.item_count; ++i)
+    {
+        VendorItemSummary item;
+        item.vendor_slot = read_u32_le(payload, offset);
+        item.item_id = read_u32_le(payload, offset);
+        item.display_id = read_u32_le(payload, offset);
+        item.left_in_stock = read_u32_le(payload, offset);
+        item.buy_price = read_u32_le(payload, offset);
+        item.max_durability = read_u32_le(payload, offset);
+        item.buy_count = read_u32_le(payload, offset);
+        item.extended_cost = read_u32_le(payload, offset);
+        summary.items.push_back(item);
+    }
+
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("vendor list parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,
@@ -1632,6 +1677,15 @@ bool world_packet_self_test()
     {
         return false;
     }
+    auto vendor_list_payload = build_raw_guid_payload(0xF1300004BD000001ULL);
+    auto vendor_list_packet = build_client_packet(CMSG_LIST_INVENTORY, vendor_list_payload);
+    if (vendor_list_packet.size() != 14
+        || vendor_list_packet[2] != 0x9E
+        || vendor_list_packet[3] != 0x01
+        || vendor_list_payload.size() != 8)
+    {
+        return false;
+    }
     auto trainer_buy_payload = build_trainer_buy_spell_payload(0xF13000038F000001ULL, 6673);
     auto trainer_buy_packet = build_client_packet(CMSG_TRAINER_BUY_SPELL, trainer_buy_payload);
     if (trainer_buy_packet.size() != 18
@@ -1839,6 +1893,25 @@ bool world_packet_self_test()
     append_u8(loot_response_payload, 0);
     LootResponseSummary loot_response = parse_loot_response(loot_response_payload);
 
+    std::vector<std::uint8_t> vendor_payload;
+    append_u64_le(vendor_payload, 0xF1300004BD000001ULL);
+    append_u8(vendor_payload, 1);
+    append_u32_le(vendor_payload, 2);
+    append_u32_le(vendor_payload, 159);
+    append_u32_le(vendor_payload, 321);
+    append_u32_le(vendor_payload, 0xFFFFFFFF);
+    append_u32_le(vendor_payload, 75);
+    append_u32_le(vendor_payload, 24);
+    append_u32_le(vendor_payload, 5);
+    append_u32_le(vendor_payload, 0);
+    VendorListSummary vendor_list = parse_vendor_list_response(vendor_payload);
+
+    std::vector<std::uint8_t> empty_vendor_payload;
+    append_u64_le(empty_vendor_payload, 0xF1300004BD000001ULL);
+    append_u8(empty_vendor_payload, 0);
+    append_u8(empty_vendor_payload, 0);
+    VendorListSummary empty_vendor_list = parse_vendor_list_response(empty_vendor_payload);
+
     std::vector<std::uint8_t> trainer_list_payload;
     append_u64_le(trainer_list_payload, 0xF13000038F000001ULL);
     append_u32_le(trainer_list_payload, 0);
@@ -1955,6 +2028,18 @@ bool world_packet_self_test()
         && loot_response.items[0].slot == 0
         && loot_response.items[0].item_id == 25
         && loot_response.items[0].count == 2
+        && vendor_list.parsed
+        && vendor_list.vendor_guid == 0xF1300004BD000001ULL
+        && vendor_list.item_count == 1
+        && vendor_list.items.size() == 1
+        && vendor_list.items[0].vendor_slot == 2
+        && vendor_list.items[0].item_id == 159
+        && vendor_list.items[0].left_in_stock == 0xFFFFFFFF
+        && vendor_list.items[0].buy_price == 75
+        && vendor_list.items[0].buy_count == 5
+        && empty_vendor_list.parsed
+        && empty_vendor_list.item_count == 0
+        && empty_vendor_list.error_code == 0
         && trainer_list.parsed
         && trainer_list.trainer_guid == 0xF13000038F000001ULL
         && trainer_list.spell_count == 1

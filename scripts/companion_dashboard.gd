@@ -21,6 +21,7 @@ const SPELLBOOK_SCENE := "res://scenes/stage16_spellbook_view.tscn"
 const ACTION_BAR_SCENE := "res://scenes/stage16_action_bar_view.tscn"
 const SPELL_CAST_SCENE := "res://scenes/stage16_spell_cast_view.tscn"
 const SETTINGS_SCENE := "res://scenes/settings_view.tscn"
+const VENDOR_SCENE := "res://scenes/stage17_vendor_view.tscn"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
 const DATA_VIEWS := ["summary", "accounts", "characters", "online", "creatures", "items", "quests", "spells"]
@@ -131,6 +132,10 @@ func _register_command_actions() -> void:
 			"label": "Settings",
 			"handler": Callable(self, "_action_open_settings"),
 		},
+		"open_vendor": {
+			"label": "Vendor",
+			"handler": Callable(self, "_action_open_vendor"),
+		},
 	}
 
 
@@ -195,6 +200,7 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("open_action_bar"))
 	actions.add_child(_action_button("open_spell_cast"))
 	actions.add_child(_action_button("open_settings"))
+	actions.add_child(_action_button("open_vendor"))
 	actions.add_child(_action_button("protocol_character_flow"))
 	actions.add_child(_action_button("open_logs"))
 	actions.add_child(_action_button("open_reports"))
@@ -469,6 +475,12 @@ func _action_open_settings() -> void:
 	var error := get_tree().change_scene_to_file(SETTINGS_SCENE)
 	if error != OK:
 		_append_log("Could not open settings scene. Error code: " + str(error))
+
+
+func _action_open_vendor() -> void:
+	var error := get_tree().change_scene_to_file(VENDOR_SCENE)
+	if error != OK:
+		_append_log("Could not open vendor scene. Error code: " + str(error))
 
 
 func _action_launch_client() -> void:

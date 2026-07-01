@@ -167,9 +167,9 @@ These optimizations and visual enhancements can be introduced in later stages or
 
 ## Current Status
 
-Current stage: Stage 16 is in progress.
+Current stage: Stage 17 is in progress.
 
-Reason: Stages 11 through 15 established the direct auth/world protocol helper, character listing, enter-world flow, movement probe, object visibility, live-GUID targeting, NPC interaction, and first combat probe. Stage 16 is now the client feature parity march, starting with chat.
+Reason: Stages 11 through 16 established the direct auth/world protocol helper and the first client-feature slices. Stage 17 is now the full-port acceptance push, using [WotLK Client Parity Engine Spec](wotlk_client_parity_engine_spec.md) as the detailed reference for making the Godot client fully playable against AzerothCore rather than stopping at a companion or partial prototype.
 
 ## Non-Negotiable Safety Rules
 

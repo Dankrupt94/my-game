@@ -161,6 +161,29 @@ struct TrainerBuySpellProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct VendorListProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    bool live_target_found = false;
+    bool target_has_position = false;
+    float target_x = 0;
+    float target_y = 0;
+    float target_z = 0;
+    bool approach_movement_sent = false;
+    bool return_movement_sent = false;
+    bool selection_sent = false;
+    bool vendor_list_sent = false;
+    bool vendor_list_response_seen = false;
+    std::uint16_t response_opcode = 0;
+    VendorListSummary vendor_list;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct CombatProbeResult
 {
     RealmInfo realm;
@@ -511,6 +534,16 @@ TrainerBuySpellProbeResult trainer_buy_spell_probe(
     std::uint64_t target_guid,
     std::string const& target_name,
     std::uint32_t spell_id,
+    FlowOptions options = {});
+
+VendorListProbeResult vendor_list_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
     FlowOptions options = {});
 
 CombatProbeResult combat_probe(

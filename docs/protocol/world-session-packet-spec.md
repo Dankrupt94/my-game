@@ -512,6 +512,54 @@ Remaining trainer packet work:
 - Replace the target scan/list picker with normal in-world click targeting and persistent-session flow.
 - Keep the local trainer-buy fixture documented and rerun it before repeat success-path validations.
 
+## Vendor List Slice
+
+Stage 17 now has the first vendor-list path required by [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md). This is a read-only vendor window slice: it opens a live AzerothCore vendor inventory and renders server-returned item rows by id and numeric fields. Buy, sell, repair, item names, icons, and tooltips remain future work.
+
+Relevant opcodes:
+
+| Opcode | Value | Stage 17 support |
+| --- | ---: | --- |
+| `CMSG_LIST_INVENTORY` | `0x19E` | Sends selected vendor GUID after moving within NPC interaction range |
+| `SMSG_LIST_INVENTORY` | `0x19F` | Parses vendor GUID, item count, optional empty-list error byte, and item rows |
+
+Client request payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| vendor GUID | 8 | Raw little-endian object GUID |
+
+Server response payload from `WorldSession::SendListInventory`:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| vendor GUID | 8 | Server object GUID |
+| item count | 1 | Number of visible vendor item rows |
+| empty-list error | 1 optional | Present when item count is `0`; AzerothCore writes `0` for no inventory |
+| vendor slot | 4 per row | One-based vendor slot |
+| item id | 4 per row | Item template id |
+| display id | 4 per row | Item display id |
+| left in stock | 4 per row | `0xFFFFFFFF` means unlimited stock |
+| buy price | 4 per row | Copper price after reputation discount |
+| max durability | 4 per row | Item template max durability |
+| buy count | 4 per row | Stack/count bought per purchase |
+| extended cost | 4 per row | Extended-cost id, or `0` |
+
+Observed Stage 17 result:
+
+- The native helper command `--vendor-list` selects a visible local vendor entry by exact runtime GUID or entry selector, moves within AzerothCore NPC interaction distance, sends `CMSG_LIST_INVENTORY`, parses `SMSG_LIST_INVENTORY`, and returns to the login position.
+- Latest native validation against entry `1213` resolved GUID `0xf1300004bd000cf4`, returned opcode `0x19F`, and parsed 8 item rows.
+- Godot scene `scenes/stage17_vendor_view.tscn` scans visible targets, prefers local vendor entry `1213`, sends the selected exact GUID through `ProtocolClientBridge.vendor_list_probe_selector(...)`, and renders numeric vendor item rows.
+- `ACORE_VENDOR_TARGET_PICKER_SELF_TEST=1` selected entry `1213` by exact GUID from 146 visible unit targets.
+- `ACORE_VENDOR_LIST_SELF_TEST=1` passed with `moved_close=true`, `returned=true`, 8 item rows, and response opcode `0x19F`.
+- The scene uses generic labels and item ids only. Committed data does not include proprietary NPC names, item names, icons, or extracted client data.
+
+Remaining vendor packet work:
+
+- Add buy, sell, repair, failure-code UI, stock refresh, and inventory refresh after purchase/sale.
+- Resolve item names/icons/tooltips through the local-only data/asset pipeline.
+- Replace the target scan/list picker with normal in-world click targeting and persistent-session flow.
+
 ## Chat Say Slice
 
 Stage 16 starts the long client feature parity march with a minimal chat path.
