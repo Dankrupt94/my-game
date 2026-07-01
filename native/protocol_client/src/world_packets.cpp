@@ -1371,6 +1371,42 @@ TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> pay
     return summary;
 }
 
+QuestGiverListSummary parse_questgiver_quest_list_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    QuestGiverListSummary summary;
+    summary.payload_size = payload.size();
+    summary.questgiver_guid = read_u64_le(payload, offset);
+    summary.greeting = read_c_string(payload, offset);
+    summary.emote_delay = read_u32_le(payload, offset);
+    summary.emote_type = read_u32_le(payload, offset);
+    summary.quest_count = static_cast<std::int32_t>(read_u8(payload, offset));
+    if (summary.quest_count < 0)
+    {
+        throw std::runtime_error("questgiver quest list contains a negative quest count");
+    }
+    summary.quests.reserve(static_cast<std::size_t>(summary.quest_count));
+
+    for (std::int32_t i = 0; i < summary.quest_count; ++i)
+    {
+        QuestGiverQuestSummary quest;
+        quest.quest_id = read_u32_le(payload, offset);
+        quest.quest_icon = read_u32_le(payload, offset);
+        quest.quest_level = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        quest.quest_flags = read_u32_le(payload, offset);
+        quest.repeatable = read_u8(payload, offset);
+        quest.title = read_c_string(payload, offset);
+        summary.quests.push_back(quest);
+    }
+
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("questgiver quest list parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload)
 {
     std::size_t offset = 0;
@@ -2064,6 +2100,20 @@ bool world_packet_self_test()
     append_u32_le(trainer_buy_failure_payload, 1);
     TrainerBuyResponseSummary trainer_buy_failure = parse_trainer_buy_failed_response(trainer_buy_failure_payload);
 
+    std::vector<std::uint8_t> questgiver_list_payload;
+    append_u64_le(questgiver_list_payload, 0xF130000123000001ULL);
+    questgiver_list_payload.insert(questgiver_list_payload.end(), {'G', 'r', 'e', 'e', 't', '.', 0});
+    append_u32_le(questgiver_list_payload, 1);   // emote delay
+    append_u32_le(questgiver_list_payload, 2);   // emote type
+    append_u8(questgiver_list_payload, 1);       // quest count
+    append_u32_le(questgiver_list_payload, 42);  // quest id
+    append_u32_le(questgiver_list_payload, 2);   // quest icon
+    append_u32_le(questgiver_list_payload, 5);   // quest level
+    append_u32_le(questgiver_list_payload, 8);   // quest flags
+    append_u8(questgiver_list_payload, 0);       // repeatable icon
+    questgiver_list_payload.insert(questgiver_list_payload.end(), {'K', 'i', 'l', 'l', ' ', 'r', 'a', 't', 's', 0});
+    QuestGiverListSummary questgiver_list = parse_questgiver_quest_list_response(questgiver_list_payload);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -2185,6 +2235,15 @@ bool world_packet_self_test()
         && trainer_list.spells[0].money_cost == 100
         && trainer_list.spells[0].req_level == 1
         && trainer_list.greeting == "Train well."
+        && questgiver_list.parsed
+        && questgiver_list.questgiver_guid == 0xF130000123000001ULL
+        && questgiver_list.greeting == "Greet."
+        && questgiver_list.emote_type == 2
+        && questgiver_list.quest_count == 1
+        && questgiver_list.quests.size() == 1
+        && questgiver_list.quests[0].quest_id == 42
+        && questgiver_list.quests[0].quest_level == 5
+        && questgiver_list.quests[0].title == "Kill rats"
         && trainer_buy_success.parsed
         && trainer_buy_success.succeeded
         && !trainer_buy_success.failed

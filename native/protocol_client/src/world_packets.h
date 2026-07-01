@@ -27,6 +27,7 @@ constexpr std::uint32_t CMSG_LOOT = 0x15D;
 constexpr std::uint32_t CMSG_LOOT_MONEY = 0x15E;
 constexpr std::uint32_t CMSG_LOOT_RELEASE = 0x15F;
 constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
+constexpr std::uint32_t CMSG_QUESTGIVER_HELLO = 0x184;
 constexpr std::uint32_t CMSG_LIST_INVENTORY = 0x19E;
 constexpr std::uint32_t CMSG_SELL_ITEM = 0x1A0;
 constexpr std::uint32_t CMSG_BUY_ITEM = 0x1A2;
@@ -72,6 +73,7 @@ constexpr std::uint16_t SMSG_SELL_ITEM = 0x1A1;
 constexpr std::uint16_t SMSG_BUY_ITEM = 0x1A4;
 constexpr std::uint16_t SMSG_BUY_FAILED = 0x1A5;
 constexpr std::uint16_t SMSG_TRAINER_LIST = 0x1B1;
+constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_LIST = 0x185;
 constexpr std::uint16_t SMSG_TRAINER_BUY_SUCCEEDED = 0x1B3;
 constexpr std::uint16_t SMSG_TRAINER_BUY_FAILED = 0x1B4;
 constexpr std::uint16_t SMSG_LOGIN_VERIFY_WORLD = 0x236;
@@ -359,6 +361,28 @@ struct TrainerBuyResponseSummary
     bool failed = false;
 };
 
+struct QuestGiverQuestSummary
+{
+    std::uint32_t quest_id = 0;
+    std::uint32_t quest_icon = 0;
+    std::int32_t quest_level = 0;
+    std::uint32_t quest_flags = 0;
+    std::uint8_t repeatable = 0;
+    std::string title;
+};
+
+struct QuestGiverListSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t questgiver_guid = 0;
+    std::string greeting;
+    std::uint32_t emote_delay = 0;
+    std::uint32_t emote_type = 0;
+    std::int32_t quest_count = 0;
+    std::vector<QuestGiverQuestSummary> quests;
+};
+
 struct VendorItemSummary
 {
     std::uint32_t vendor_slot = 0;
@@ -486,6 +510,7 @@ AttackerStateUpdateSummary parse_attacker_state_update(std::span<const std::uint
 SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::span<const std::uint8_t> payload);
 LootResponseSummary parse_loot_response(std::span<const std::uint8_t> payload);
 TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> payload);
+QuestGiverListSummary parse_questgiver_quest_list_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std::uint8_t> payload);
 VendorListSummary parse_vendor_list_response(std::span<const std::uint8_t> payload);
