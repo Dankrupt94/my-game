@@ -18,7 +18,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 - Quests.
 - Trainers.
 - Spells. Working expanded slice: initial spellbook, no-target cast, and live unit-target cast.
-- Action bars.
+- Action bars. Working expanded slice: server-provided slots plus spell-slot casting.
 - Auras.
 - Groups.
 - Guilds.
@@ -55,6 +55,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 - 2026-07-01: First action-bar slice is working. Godot parses `SMSG_ACTION_BUTTONS`, unpacks the 144 server-provided action slots, and displays populated slots in a read-only action-bar scene.
 - 2026-07-01: First spell-cast slice is working. Godot sends `CMSG_CAST_SPELL` for the local warrior stance spell `2457` and receives `SMSG_SPELL_GO` opcode `0x132`.
 - 2026-07-01: Targeted spell-cast slice is working. Godot selects a live creature, sends a unit-target `CMSG_CAST_SPELL` for spell `78`, and receives `SMSG_SPELL_START` opcode `0x131`.
+- 2026-07-01: Action-button spell-cast slice is working. Godot renders all 144 action slots, clicks server action button `73`, casts spell `78`, and receives `SMSG_SPELL_START` opcode `0x131`.
 
 ## Active Slice: Chat
 
@@ -101,11 +102,14 @@ Completed first target:
 - [x] Unpack all 144 action slots as `action = packed & 0x00FFFFFF` and `type = packed >> 24`.
 - [x] Expose action-button data through the native helper and Godot extension.
 - [x] Add a Godot action-bar scene with a headless self-test.
+- [x] Render all 144 action slots in Godot.
+- [x] Connect populated spell slots to the no-target and unit-target cast paths.
+- [x] Add a Godot action-button cast self-test that casts server button `73`.
 
 Remaining action-bar parity work:
 
 - Resolve spell/item/macro/equipment-set actions to display names and local-only icons.
 - Add drag/drop placement, remove-slot behavior, paging, and keybinds.
 - Build and validate `CMSG_SET_ACTION_BUTTON` against a controlled local character.
-- Add spell casting from action buttons using the no-target and unit-target cast paths.
 - Preserve exact server persistence behavior and document any Godot UI compatibility tweaks.
+- Add item use, macro, equipment set, paging, and non-spell action behavior.

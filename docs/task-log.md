@@ -1011,3 +1011,26 @@ Validation:
 - `ACORE_SPELLBOOK_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spellbook_view.tscn` still passed with `spells=48` and `cooldowns=1`.
 - `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` still passed with say and self-whisper responses.
 - Local `qwen-agent` advisory review found no concrete blockers for the bounded targeted spell-cast slice.
+
+## 2026-07-01 - Add Stage 16 Action-Button Cast Slice
+
+Goal: prove Godot can use a server-provided action-bar spell slot as a playable cast command.
+
+Plan:
+
+- Render all 144 server-provided action slots instead of only the first visible page.
+- Make populated spell slots clickable in the Godot action-bar scene.
+- Route spell action `78` through the targeted spell-cast path so button `73` can cast against a live nearby creature.
+- Add a headless Godot self-test for action-button casting.
+
+Result:
+
+- Updated `scripts/stage16_action_bar_view.gd` to render all 144 slots.
+- Replaced static populated-slot panels with clickable buttons for spell actions.
+- Added target controls for the current unit-target cast probe.
+- Added `ACORE_ACTION_BAR_CAST_SELF_TEST=1` support.
+
+Validation:
+
+- `ACORE_ACTION_BAR_CAST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed with `button=73`, `spell_id=78`, `opcode=0x131`, and `accepted=true`.
+- Local `qwen-agent` advisory review found no concrete blockers for the bounded action-button cast slice.

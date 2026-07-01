@@ -4,10 +4,17 @@ const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
 
 const TEST_CHARACTER_NAME := "Codexstage"
 const SLOT_COUNT := 144
+const DEFAULT_TARGETED_SPELL_ID := 78
+const DEFAULT_TARGET_ENTRY := 721
+const DEFAULT_TARGET_NAME := "Nearby Creature"
 
 var status_label: Label
+var target_entry_input: SpinBox
+var target_name_input: LineEdit
 var slot_grid: GridContainer
 var detail_log: TextEdit
+var last_buttons: Array = []
+var last_cast_result := {}
 var self_test_finished := false
 
 
@@ -52,6 +59,28 @@ func _build_view() -> void:
 	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(status_label)
 
+	var target_controls := HBoxContainer.new()
+	target_controls.add_theme_constant_override("separation", 10)
+	stack.add_child(target_controls)
+
+	var target_label := Label.new()
+	target_label.text = "Target"
+	target_label.custom_minimum_size = Vector2(72, 34)
+	target_controls.add_child(target_label)
+
+	target_entry_input = SpinBox.new()
+	target_entry_input.min_value = 1
+	target_entry_input.max_value = 9999999
+	target_entry_input.step = 1
+	target_entry_input.value = DEFAULT_TARGET_ENTRY
+	target_entry_input.custom_minimum_size = Vector2(130, 34)
+	target_controls.add_child(target_entry_input)
+
+	target_name_input = LineEdit.new()
+	target_name_input.text = DEFAULT_TARGET_NAME
+	target_name_input.custom_minimum_size = Vector2(180, 34)
+	target_controls.add_child(target_name_input)
+
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.custom_minimum_size = Vector2(0, 300)
@@ -80,6 +109,7 @@ func _load_action_buttons() -> void:
 		return
 
 	var buttons: Array = result.get("buttons", [])
+	last_buttons = buttons
 	var populated_count := int(result.get("populated_count", _count_populated(buttons)))
 	status_label.text = "Slots: " + str(result.get("slot_count", SLOT_COUNT)) + "  Used: " + str(populated_count)
 	_render_slots(buttons)
@@ -89,7 +119,10 @@ func _load_action_buttons() -> void:
 		str(populated_count),
 		str(result.get("state", 0)),
 	])
-	_finish_self_test(true, result)
+	if OS.get_environment("ACORE_ACTION_BAR_CAST_SELF_TEST") == "1":
+		call_deferred("_cast_default_action_button")
+	else:
+		_finish_self_test(true, result)
 
 
 func _render_slots(buttons: Array) -> void:
@@ -101,21 +134,19 @@ func _render_slots(buttons: Array) -> void:
 		if typeof(button) == TYPE_DICTIONARY:
 			by_slot[int(button.get("button", -1))] = button
 
-	for slot in range(0, min(SLOT_COUNT, 48)):
+	for slot in range(0, SLOT_COUNT):
 		var button: Dictionary = by_slot.get(slot, {})
-		var panel := PanelContainer.new()
-		panel.custom_minimum_size = Vector2(92, 54)
-		slot_grid.add_child(panel)
-
-		var label := Label.new()
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var slot_button := Button.new()
+		slot_button.custom_minimum_size = Vector2(92, 54)
 		if button.is_empty() or not bool(button.get("populated", true)):
-			label.text = str(slot) + "\nempty"
+			slot_button.text = str(slot) + "\nempty"
+			slot_button.disabled = true
 		else:
-			label.text = str(slot) + "\n" + _action_type_name(int(button.get("type", 0))) + " " + str(button.get("action", 0))
-		panel.add_child(label)
+			slot_button.text = str(slot) + "\n" + _action_type_name(int(button.get("type", 0))) + " " + str(button.get("action", 0))
+			slot_button.disabled = int(button.get("type", -1)) != 0
+			if not slot_button.disabled:
+				slot_button.pressed.connect(_cast_action_button.bind(button))
+		slot_grid.add_child(slot_button)
 
 
 func _render_details(result: Dictionary, buttons: Array) -> void:
@@ -143,7 +174,79 @@ func _render_details(result: Dictionary, buttons: Array) -> void:
 			break
 	if shown == 0:
 		lines.append("No populated action slots were reported by the server.")
+	if not last_cast_result.is_empty():
+		lines.append("")
+		lines.append("Last action-button cast")
+		lines.append("Button: " + str(last_cast_result.get("button", "?")))
+		lines.append("Spell id: " + str(last_cast_result.get("spell_id", 0)))
+		lines.append("Targeted: " + str(last_cast_result.get("targeted", false)))
+		lines.append("Target found: " + str(last_cast_result.get("live_target_found", false)))
+		lines.append("Accepted: " + str(last_cast_result.get("accepted", false)))
+		lines.append("Response opcode: 0x" + ("%03x" % int(last_cast_result.get("response_opcode", 0))))
+		lines.append("Response spell id: " + str(last_cast_result.get("response_spell_id", 0)))
+		lines.append("Spell start: " + str(last_cast_result.get("spell_start", false)))
+		lines.append("Spell go: " + str(last_cast_result.get("spell_go", false)))
 	detail_log.text = "\n".join(lines)
+
+
+func _cast_default_action_button() -> void:
+	for button in last_buttons:
+		if typeof(button) != TYPE_DICTIONARY:
+			continue
+		if not bool(button.get("populated", true)):
+			continue
+		if int(button.get("type", -1)) == 0 and int(button.get("action", 0)) == DEFAULT_TARGETED_SPELL_ID:
+			_cast_action_button(button)
+			return
+
+	_finish_self_test(false, {
+		"error": "No populated spell action button for spell " + str(DEFAULT_TARGETED_SPELL_ID),
+	})
+
+
+func _cast_action_button(action_button: Dictionary) -> void:
+	var spell_id := int(action_button.get("action", 0))
+	var slot := int(action_button.get("button", -1))
+	if spell_id <= 0:
+		last_cast_result = {
+			"button": slot,
+			"spell_id": spell_id,
+			"accepted": false,
+			"error": "Action button does not contain a spell id",
+		}
+		_render_details({"action_buttons_seen": true}, last_buttons)
+		_finish_self_test(false, last_cast_result)
+		return
+
+	status_label.text = "Casting slot " + str(slot)
+	var bridge := ProtocolClientBridge.new()
+	var targeted := spell_id == DEFAULT_TARGETED_SPELL_ID
+	var result: Dictionary
+	if targeted:
+		result = bridge.cast_spell_at_target(
+			TEST_CHARACTER_NAME,
+			spell_id,
+			int(target_entry_input.value),
+			target_name_input.text.strip_edges())
+	else:
+		result = bridge.cast_spell(TEST_CHARACTER_NAME, spell_id)
+
+	result["button"] = slot
+	result["spell_id"] = spell_id
+	result["targeted"] = targeted
+	last_cast_result = result
+	status_label.text = "Cast accepted" if bool(result.get("ok", false)) else "Cast failed"
+	_render_details({"action_buttons_seen": true}, last_buttons)
+
+	if bool(result.get("ok", false)):
+		print("ACTION_BAR_CAST_READY button=%s spell_id=%s opcode=0x%s accepted=true" % [
+			str(slot),
+			str(spell_id),
+			"%03x" % int(result.get("response_opcode", 0)),
+		])
+		_finish_self_test(true, result)
+	else:
+		_finish_self_test(false, result)
 
 
 func _count_populated(buttons: Array) -> int:
@@ -173,18 +276,28 @@ func _action_type_name(action_type: int) -> String:
 
 
 func _finish_self_test(ok: bool, result: Dictionary) -> void:
-	if OS.get_environment("ACORE_ACTION_BAR_SELF_TEST") != "1":
+	var load_self_test := OS.get_environment("ACORE_ACTION_BAR_SELF_TEST") == "1"
+	var cast_self_test := OS.get_environment("ACORE_ACTION_BAR_CAST_SELF_TEST") == "1"
+	if not load_self_test and not cast_self_test:
 		return
 	if self_test_finished:
 		return
 	self_test_finished = true
 
 	if ok:
-		print("ACTION_BAR_SELF_TEST_OK slots=%s populated=%s state=%s" % [
-			str(result.get("slot_count", 0)),
-			str(result.get("populated_count", 0)),
-			str(result.get("state", 0)),
-		])
+		if cast_self_test:
+			print("ACTION_BAR_CAST_SELF_TEST_OK button=%s spell_id=%s opcode=0x%s accepted=%s" % [
+				str(result.get("button", "?")),
+				str(result.get("spell_id", DEFAULT_TARGETED_SPELL_ID)),
+				"%03x" % int(result.get("response_opcode", 0)),
+				str(result.get("accepted", false)),
+			])
+		else:
+			print("ACTION_BAR_SELF_TEST_OK slots=%s populated=%s state=%s" % [
+				str(result.get("slot_count", 0)),
+				str(result.get("populated_count", 0)),
+				str(result.get("state", 0)),
+			])
 		get_tree().quit(0)
 	else:
 		push_error("ACTION_BAR_SELF_TEST_FAILED: " + str(result.get("error", result.get("output", "unknown"))))

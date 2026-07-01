@@ -484,12 +484,13 @@ Observed Stage 16 result:
 - The live packet contained `144` slots, state `1`, and `3` populated slots.
 - Observed populated slots were button `72` action `6603` type `0`, button `73` action `78` type `0`, and button `83` action `117` type `128`.
 - Godot scene `scenes/stage16_action_bar_view.tscn` passed with `ACTION_BAR_SELF_TEST_OK slots=144 populated=3 state=1`.
+- Godot scene `scenes/stage16_action_bar_view.tscn` rendered all 144 slots and passed `ACORE_ACTION_BAR_CAST_SELF_TEST=1` by casting button `73` spell `78` through the unit-target spell-cast path, receiving `ACTION_BAR_CAST_SELF_TEST_OK button=73 spell_id=78 opcode=0x131 accepted=true`.
 
 Remaining action-button packet work:
 
 - Build and validate `CMSG_SET_ACTION_BUTTON` for controlled local edits.
 - Confirm persistence by re-reading `SMSG_ACTION_BUTTONS` after logout/login.
-- Connect action buttons to spell casting, item use, macros, equipment sets, paging, and keybinds.
+- Connect action buttons to item use, macros, equipment sets, paging, and keybinds.
 
 ## Stage 11 First World Target
 
