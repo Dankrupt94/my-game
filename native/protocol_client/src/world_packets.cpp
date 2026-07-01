@@ -6,6 +6,7 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <memory>
 #include <stdexcept>
@@ -25,6 +26,12 @@ void append_u32_le(std::vector<std::uint8_t>& bytes, std::uint32_t value)
     bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFF));
     bytes.push_back(static_cast<std::uint8_t>((value >> 16) & 0xFF));
     bytes.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFF));
+}
+
+void append_u16_le(std::vector<std::uint8_t>& bytes, std::uint16_t value)
+{
+    bytes.push_back(static_cast<std::uint8_t>(value & 0xFF));
+    bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFF));
 }
 
 void append_u64_le(std::vector<std::uint8_t>& bytes, std::uint64_t value)
@@ -89,6 +96,18 @@ std::uint32_t read_u32_le(std::span<const std::uint8_t> bytes, std::size_t& offs
     return value;
 }
 
+std::uint16_t read_u16_le(std::span<const std::uint8_t> bytes, std::size_t& offset)
+{
+    if (offset + 2 > bytes.size())
+    {
+        throw std::runtime_error("not enough bytes for uint16");
+    }
+    std::uint16_t value = static_cast<std::uint16_t>(bytes[offset])
+        | static_cast<std::uint16_t>(bytes[offset + 1] << 8);
+    offset += 2;
+    return value;
+}
+
 std::uint64_t read_u64_le(std::span<const std::uint8_t> bytes, std::size_t& offset)
 {
     if (offset + 8 > bytes.size())
@@ -132,6 +151,17 @@ void skip_bytes(std::span<const std::uint8_t> bytes, std::size_t& offset, std::s
         throw std::runtime_error("not enough bytes to skip field");
     }
     offset += count;
+}
+
+std::uint32_t count_mask_bits(std::uint32_t value)
+{
+    std::uint32_t count = 0;
+    while (value != 0)
+    {
+        count += value & 1U;
+        value >>= 1;
+    }
+    return count;
 }
 
 std::string read_c_string(std::span<const std::uint8_t> bytes, std::size_t& offset)
@@ -228,6 +258,230 @@ std::vector<std::uint8_t> inflate_update_payload(std::span<const std::uint8_t> p
     }
     return inflated;
 }
+
+std::uint16_t high_guid(std::uint64_t guid)
+{
+    return static_cast<std::uint16_t>((guid >> 48) & 0xFFFF);
+}
+
+bool high_guid_has_entry(std::uint16_t high)
+{
+    switch (high)
+    {
+        case 0xF100:
+        case 0xF101:
+        case 0xF110:
+        case 0xF120:
+        case 0xF130:
+        case 0xF140:
+        case 0xF150:
+            return true;
+        default:
+            return false;
+    }
+}
+
+std::uint32_t guid_entry(std::uint64_t guid)
+{
+    std::uint16_t const high = high_guid(guid);
+    if (!high_guid_has_entry(high))
+    {
+        return 0;
+    }
+    return static_cast<std::uint32_t>((guid >> 24) & 0x00FFFFFFu);
+}
+
+std::uint32_t guid_counter(std::uint64_t guid)
+{
+    if (high_guid_has_entry(high_guid(guid)))
+    {
+        return static_cast<std::uint32_t>(guid & 0x00FFFFFFu);
+    }
+    return static_cast<std::uint32_t>(guid & 0xFFFFFFFFu);
+}
+
+void skip_values_update(std::span<const std::uint8_t> body, std::size_t& offset)
+{
+    std::uint8_t const block_count = read_u8(body, offset);
+    std::uint32_t value_count = 0;
+    for (std::uint8_t i = 0; i < block_count; ++i)
+    {
+        value_count += count_mask_bits(read_u32_le(body, offset));
+    }
+    skip_bytes(body, offset, static_cast<std::size_t>(value_count) * 4);
+}
+
+struct ParsedMovementUpdate
+{
+    std::uint16_t update_flags = 0;
+    std::uint32_t movement_flags = 0;
+    std::uint16_t movement_flags2 = 0;
+    bool has_position = false;
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float orientation = 0;
+};
+
+ParsedMovementUpdate parse_movement_update(std::span<const std::uint8_t> body, std::size_t& offset)
+{
+    constexpr std::uint16_t UPDATEFLAG_TRANSPORT = 0x0002;
+    constexpr std::uint16_t UPDATEFLAG_HAS_TARGET = 0x0004;
+    constexpr std::uint16_t UPDATEFLAG_UNKNOWN = 0x0008;
+    constexpr std::uint16_t UPDATEFLAG_LOWGUID = 0x0010;
+    constexpr std::uint16_t UPDATEFLAG_LIVING = 0x0020;
+    constexpr std::uint16_t UPDATEFLAG_STATIONARY_POSITION = 0x0040;
+    constexpr std::uint16_t UPDATEFLAG_VEHICLE = 0x0080;
+    constexpr std::uint16_t UPDATEFLAG_POSITION = 0x0100;
+    constexpr std::uint16_t UPDATEFLAG_ROTATION = 0x0200;
+
+    constexpr std::uint32_t MOVEMENTFLAG_ONTRANSPORT = 0x00000200;
+    constexpr std::uint32_t MOVEMENTFLAG_FALLING = 0x00001000;
+    constexpr std::uint32_t MOVEMENTFLAG_SWIMMING = 0x00200000;
+    constexpr std::uint32_t MOVEMENTFLAG_FLYING = 0x02000000;
+    constexpr std::uint32_t MOVEMENTFLAG_SPLINE_ELEVATION = 0x04000000;
+    constexpr std::uint32_t MOVEMENTFLAG_SPLINE_ENABLED = 0x08000000;
+    constexpr std::uint16_t MOVEMENTFLAG2_ALWAYS_ALLOW_PITCHING = 0x0020;
+    constexpr std::uint16_t MOVEMENTFLAG2_INTERPOLATED_MOVEMENT = 0x0400;
+    constexpr std::uint32_t SPLINEFLAG_FINAL_POINT = 0x00008000;
+    constexpr std::uint32_t SPLINEFLAG_FINAL_TARGET = 0x00010000;
+    constexpr std::uint32_t SPLINEFLAG_FINAL_ANGLE = 0x00020000;
+
+    ParsedMovementUpdate movement;
+    movement.update_flags = read_u16_le(body, offset);
+
+    if ((movement.update_flags & UPDATEFLAG_LIVING) != 0)
+    {
+        movement.movement_flags = read_u32_le(body, offset);
+        movement.movement_flags2 = read_u16_le(body, offset);
+        skip_bytes(body, offset, 4); // server movement time
+        movement.x = read_float_le(body, offset);
+        movement.y = read_float_le(body, offset);
+        movement.z = read_float_le(body, offset);
+        movement.orientation = read_float_le(body, offset);
+        movement.has_position = true;
+
+        if ((movement.movement_flags & MOVEMENTFLAG_ONTRANSPORT) != 0)
+        {
+            (void)read_packed_guid(body, offset);
+            skip_bytes(body, offset, 4 * 4 + 4 + 1);
+            if ((movement.movement_flags2 & MOVEMENTFLAG2_INTERPOLATED_MOVEMENT) != 0)
+            {
+                skip_bytes(body, offset, 4);
+            }
+        }
+
+        if ((movement.movement_flags & (MOVEMENTFLAG_SWIMMING | MOVEMENTFLAG_FLYING)) != 0
+            || (movement.movement_flags2 & MOVEMENTFLAG2_ALWAYS_ALLOW_PITCHING) != 0)
+        {
+            skip_bytes(body, offset, 4);
+        }
+
+        skip_bytes(body, offset, 4); // fall time
+        if ((movement.movement_flags & MOVEMENTFLAG_FALLING) != 0)
+        {
+            skip_bytes(body, offset, 4 * 4);
+        }
+        if ((movement.movement_flags & MOVEMENTFLAG_SPLINE_ELEVATION) != 0)
+        {
+            skip_bytes(body, offset, 4);
+        }
+
+        skip_bytes(body, offset, 9 * 4); // movement speeds
+        if ((movement.movement_flags & MOVEMENTFLAG_SPLINE_ENABLED) != 0)
+        {
+            std::uint32_t const spline_flags = read_u32_le(body, offset);
+            if ((spline_flags & SPLINEFLAG_FINAL_ANGLE) != 0)
+            {
+                skip_bytes(body, offset, 4);
+            }
+            else if ((spline_flags & SPLINEFLAG_FINAL_TARGET) != 0)
+            {
+                skip_bytes(body, offset, 8);
+            }
+            else if ((spline_flags & SPLINEFLAG_FINAL_POINT) != 0)
+            {
+                skip_bytes(body, offset, 3 * 4);
+            }
+
+            skip_bytes(body, offset, 4 + 4 + 4); // time passed, duration, spline id
+            skip_bytes(body, offset, 4 + 4 + 4 + 4); // duration mods, vertical acceleration, effect start time
+            std::uint32_t const nodes = read_u32_le(body, offset);
+            skip_bytes(body, offset, static_cast<std::size_t>(nodes) * 3 * 4);
+            skip_bytes(body, offset, 1 + 3 * 4); // mode and final destination
+        }
+    }
+    else if ((movement.update_flags & UPDATEFLAG_POSITION) != 0)
+    {
+        (void)read_packed_guid(body, offset);
+        movement.x = read_float_le(body, offset);
+        movement.y = read_float_le(body, offset);
+        movement.z = read_float_le(body, offset);
+        skip_bytes(body, offset, 3 * 4);
+        movement.orientation = read_float_le(body, offset);
+        skip_bytes(body, offset, 4);
+        movement.has_position = true;
+    }
+    else if ((movement.update_flags & UPDATEFLAG_STATIONARY_POSITION) != 0)
+    {
+        movement.x = read_float_le(body, offset);
+        movement.y = read_float_le(body, offset);
+        movement.z = read_float_le(body, offset);
+        movement.orientation = read_float_le(body, offset);
+        movement.has_position = true;
+    }
+
+    if ((movement.update_flags & UPDATEFLAG_UNKNOWN) != 0)
+    {
+        skip_bytes(body, offset, 4);
+    }
+    if ((movement.update_flags & UPDATEFLAG_LOWGUID) != 0)
+    {
+        skip_bytes(body, offset, 4);
+    }
+    if ((movement.update_flags & UPDATEFLAG_HAS_TARGET) != 0)
+    {
+        (void)read_packed_guid(body, offset);
+    }
+    if ((movement.update_flags & UPDATEFLAG_TRANSPORT) != 0)
+    {
+        skip_bytes(body, offset, 4);
+    }
+    if ((movement.update_flags & UPDATEFLAG_VEHICLE) != 0)
+    {
+        skip_bytes(body, offset, 8);
+    }
+    if ((movement.update_flags & UPDATEFLAG_ROTATION) != 0)
+    {
+        skip_bytes(body, offset, 8);
+    }
+
+    return movement;
+}
+
+VisibleObjectSummary make_visible_object(
+    std::uint8_t update_type,
+    std::uint64_t guid,
+    std::uint8_t object_type,
+    ParsedMovementUpdate const& movement)
+{
+    VisibleObjectSummary object;
+    object.guid = guid;
+    object.high_guid = high_guid(guid);
+    object.entry = guid_entry(guid);
+    object.counter = guid_counter(guid);
+    object.update_type = update_type;
+    object.object_type = object_type;
+    object.update_flags = movement.update_flags;
+    object.movement_flags = movement.movement_flags;
+    object.movement_flags2 = movement.movement_flags2;
+    object.has_position = movement.has_position;
+    object.x = movement.x;
+    object.y = movement.y;
+    object.z = movement.z;
+    object.orientation = movement.orientation;
+    return object;
+}
 }
 
 std::vector<std::uint8_t> build_empty_addon_info()
@@ -310,6 +564,13 @@ std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_gui
 {
     std::vector<std::uint8_t> payload;
     append_u64_le(payload, character_guid);
+    return payload;
+}
+
+std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, raw_guid);
     return payload;
 }
 
@@ -420,14 +681,67 @@ UpdateObjectSummary parse_update_object_summary(
     summary.block_count = read_u32_le(body, offset);
     if (summary.block_count == 0 || offset >= body.size())
     {
+        summary.visible_parse_complete = true;
         return summary;
     }
 
-    summary.first_update_type = read_u8(body, offset);
-    if (summary.first_update_type == 2 || summary.first_update_type == 3 || summary.first_update_type == 0 || summary.first_update_type == 1)
+    try
     {
-        summary.first_guid = read_packed_guid(body, offset);
-        summary.contains_player_guid = summary.first_guid == player_guid;
+        for (std::uint32_t block = 0; block < summary.block_count && offset < body.size(); ++block)
+        {
+            std::uint8_t const update_type = read_u8(body, offset);
+            if (block == 0)
+            {
+                summary.first_update_type = update_type;
+            }
+
+            if (update_type == 4)
+            {
+                std::uint32_t const out_of_range_count = read_u32_le(body, offset);
+                for (std::uint32_t i = 0; i < out_of_range_count; ++i)
+                {
+                    (void)read_packed_guid(body, offset);
+                }
+                continue;
+            }
+
+            std::uint64_t const guid = read_packed_guid(body, offset);
+            if (summary.first_guid == 0)
+            {
+                summary.first_guid = guid;
+            }
+            if (guid == player_guid)
+            {
+                summary.contains_player_guid = true;
+            }
+
+            if (update_type == 0)
+            {
+                skip_values_update(body, offset);
+                continue;
+            }
+
+            if (update_type == 1)
+            {
+                (void)parse_movement_update(body, offset);
+                continue;
+            }
+
+            if (update_type == 2 || update_type == 3)
+            {
+                std::uint8_t const object_type = read_u8(body, offset);
+                ParsedMovementUpdate movement = parse_movement_update(body, offset);
+                skip_values_update(body, offset);
+                summary.visible_objects.push_back(make_visible_object(update_type, guid, object_type, movement));
+                continue;
+            }
+        }
+        summary.visible_parse_complete = offset <= body.size();
+    }
+    catch (std::exception const& exc)
+    {
+        summary.visible_parse_complete = false;
+        summary.visible_parse_error = exc.what();
     }
     return summary;
 }
@@ -504,11 +818,39 @@ bool world_packet_self_test()
         rejected_truncation = true;
     }
 
+    std::vector<std::uint8_t> update_payload;
+    append_u32_le(update_payload, 1);
+    append_u8(update_payload, 2); // create object
+    append_packed_guid(update_payload, 0xF13000033700000BULL);
+    append_u8(update_payload, 3); // unit object type
+    append_u16_le(update_payload, 0x0060); // living and stationary flags
+    append_u32_le(update_payload, 0); // movement flags
+    append_u16_le(update_payload, 0); // movement flags 2
+    append_u32_le(update_payload, 123);
+    append_float_le(update_payload, -8946.3f);
+    append_float_le(update_payload, -132.4f);
+    append_float_le(update_payload, 83.5f);
+    append_float_le(update_payload, 0.1f);
+    append_u32_le(update_payload, 0); // fall time
+    for (int i = 0; i < 9; ++i)
+    {
+        append_float_le(update_payload, 1.0f);
+    }
+    append_u8(update_payload, 0); // empty value update mask
+    auto update = parse_update_object_summary(update_payload, false, 0x1234);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
         && characters[0].name == "SafeTest"
         && characters[0].level == 80
         && characters[0].zone == 12
-        && characters[0].map == 0;
+        && characters[0].map == 0
+        && update.visible_parse_complete
+        && update.visible_objects.size() == 1
+        && update.visible_objects[0].guid == 0xF13000033700000BULL
+        && update.visible_objects[0].entry == 823
+        && update.visible_objects[0].object_type == 3
+        && update.visible_objects[0].has_position
+        && update.visible_objects[0].x < -8946.0f;
 }

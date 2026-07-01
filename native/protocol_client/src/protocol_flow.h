@@ -84,6 +84,38 @@ struct MovementHeartbeatResult
     float saved_drift = 0;
 };
 
+struct InteractionResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    bool live_target_found = false;
+    bool selection_sent = false;
+    bool gossip_sent = false;
+    bool gossip_response_seen = false;
+    std::uint16_t response_opcode = 0;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
+struct CombatProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    bool live_target_found = false;
+    bool selection_sent = false;
+    bool attack_sent = false;
+    bool combat_response_seen = false;
+    std::uint16_t response_opcode = 0;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -139,5 +171,25 @@ MovementHeartbeatResult move_heartbeat(
     float delta_x,
     float delta_y,
     float delta_orientation,
+    FlowOptions options = {});
+
+InteractionResult interact_with_npc(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options = {});
+
+CombatProbeResult combat_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
     FlowOptions options = {});
 }

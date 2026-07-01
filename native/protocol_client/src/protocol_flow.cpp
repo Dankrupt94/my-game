@@ -607,6 +607,97 @@ float position_distance(LoginVerifyWorld const& login, MovementSample const& mov
     return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
+float position_distance(LoginVerifyWorld const& login, VisibleObjectSummary const& object)
+{
+    float const dx = login.x - object.x;
+    float const dy = login.y - object.y;
+    float const dz = login.z - object.z;
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+std::uint16_t selector_high_guid(std::uint64_t selector)
+{
+    return static_cast<std::uint16_t>((selector >> 48) & 0xFFFF);
+}
+
+std::uint32_t target_entry_from_selector(std::uint64_t selector)
+{
+    if (selector <= 0x00FFFFFFu)
+    {
+        return static_cast<std::uint32_t>(selector);
+    }
+
+    std::uint16_t const high = selector_high_guid(selector);
+    if (high == 0xF130 || high == 0xF140 || high == 0xF150 || high == 0xF110)
+    {
+        return static_cast<std::uint32_t>((selector >> 24) & 0x00FFFFFFu);
+    }
+    return 0;
+}
+
+bool selector_prefers_exact_guid(std::uint64_t selector)
+{
+    return selector > 0xFFFFFFFFu;
+}
+
+std::optional<VisibleObjectSummary> choose_visible_target(
+    std::vector<VisibleObjectSummary> const& visible_objects,
+    std::uint64_t selector,
+    LoginVerifyWorld const& login)
+{
+    if (selector_prefers_exact_guid(selector))
+    {
+        for (VisibleObjectSummary const& object : visible_objects)
+        {
+            if (object.guid == selector)
+            {
+                return object;
+            }
+        }
+    }
+
+    std::uint32_t const target_entry = target_entry_from_selector(selector);
+    if (target_entry == 0)
+    {
+        return std::nullopt;
+    }
+
+    std::optional<VisibleObjectSummary> best;
+    float best_distance = 0;
+    for (VisibleObjectSummary const& object : visible_objects)
+    {
+        if (object.object_type != 3 || object.entry != target_entry || !object.has_position)
+        {
+            continue;
+        }
+
+        float const distance = position_distance(login, object);
+        if (!best || distance < best_distance)
+        {
+            best = object;
+            best_distance = distance;
+        }
+    }
+    return best;
+}
+
+bool is_combat_response_opcode(std::uint16_t opcode)
+{
+    switch (opcode)
+    {
+        case SMSG_ATTACKSTART:
+        case SMSG_ATTACKSTOP:
+        case SMSG_ATTACKSWING_NOTINRANGE:
+        case SMSG_ATTACKSWING_BADFACING:
+        case SMSG_ATTACKSWING_DEADTARGET:
+        case SMSG_ATTACKSWING_CANT_ATTACK:
+        case SMSG_ATTACKERSTATEUPDATE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 LoginVerifyWorld login_selected_character(
     AuthenticatedWorldSession& session,
     CharacterSummary const& selected,
@@ -991,6 +1082,261 @@ MovementHeartbeatResult move_heartbeat(
     result.saved_position_changed = saved_position_changed;
     result.live_drift = live_drift;
     result.saved_drift = saved_drift;
+    return result;
+}
+
+InteractionResult interact_with_npc(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options)
+{
+    if (target_guid == 0)
+    {
+        throw std::runtime_error("target guid or entry must be non-zero");
+    }
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+
+    InteractionResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.target_entry = target_entry_from_selector(target_guid);
+    result.target_name = target_name;
+
+    bool logged_in_world = false;
+    for (int i = 0; i < 160; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            result.visible_objects.insert(
+                result.visible_objects.end(),
+                update.visible_objects.begin(),
+                update.visible_objects.end());
+
+            if (!result.live_target_found)
+            {
+                std::optional<VisibleObjectSummary> target = choose_visible_target(result.visible_objects, target_guid, login);
+                if (target)
+                {
+                    result.target_guid = target->guid;
+                    result.target_entry = target->entry;
+                    result.live_target_found = true;
+                }
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            logged_in_world = true;
+            if (result.live_target_found)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before interaction");
+    }
+    if (!result.live_target_found)
+    {
+        (void)request_graceful_logout(*session, options);
+        return result;
+    }
+
+    write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.selection_sent = true;
+    write_world_packet(session->socket.get(), CMSG_GOSSIP_HELLO, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.gossip_sent = true;
+
+    for (int i = 0; i < 60; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (packet->opcode == SMSG_GOSSIP_MESSAGE)
+        {
+            result.gossip_response_seen = true;
+            result.response_opcode = packet->opcode;
+            break;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+CombatProbeResult combat_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options)
+{
+    if (target_guid == 0)
+    {
+        throw std::runtime_error("combat target guid or entry must be non-zero");
+    }
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+
+    CombatProbeResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.target_entry = target_entry_from_selector(target_guid);
+    result.target_name = target_name;
+
+    bool logged_in_world = false;
+    for (int i = 0; i < 180; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            result.visible_objects.insert(
+                result.visible_objects.end(),
+                update.visible_objects.begin(),
+                update.visible_objects.end());
+
+            if (!result.live_target_found)
+            {
+                std::optional<VisibleObjectSummary> target = choose_visible_target(result.visible_objects, target_guid, login);
+                if (target)
+                {
+                    result.target_guid = target->guid;
+                    result.target_entry = target->entry;
+                    result.live_target_found = true;
+                }
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            logged_in_world = true;
+            if (result.live_target_found)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before combat probe");
+    }
+    if (!result.live_target_found)
+    {
+        (void)request_graceful_logout(*session, options);
+        return result;
+    }
+
+    write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.selection_sent = true;
+    write_world_packet(session->socket.get(), CMSG_ATTACKSWING, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.attack_sent = true;
+
+    for (int i = 0; i < 80; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (is_combat_response_opcode(packet->opcode))
+        {
+            result.combat_response_seen = true;
+            result.response_opcode = packet->opcode;
+            break;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    write_world_packet(session->socket.get(), CMSG_ATTACKSTOP, {}, &session->crypt);
+    (void)request_graceful_logout(*session, options);
     return result;
 }
 }

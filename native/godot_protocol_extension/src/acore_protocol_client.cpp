@@ -107,6 +107,36 @@ Dictionary login_verify_dictionary(LoginVerifyWorld const& login)
     return value;
 }
 
+Dictionary visible_object_dictionary(VisibleObjectSummary const& object)
+{
+    Dictionary value;
+    value["guid"] = guid_to_hex(object.guid);
+    value["high_guid"] = static_cast<int>(object.high_guid);
+    value["entry"] = static_cast<int>(object.entry);
+    value["counter"] = static_cast<int>(object.counter);
+    value["update_type"] = static_cast<int>(object.update_type);
+    value["object_type"] = static_cast<int>(object.object_type);
+    value["update_flags"] = static_cast<int>(object.update_flags);
+    value["movement_flags"] = static_cast<int>(object.movement_flags);
+    value["movement_flags2"] = static_cast<int>(object.movement_flags2);
+    value["has_position"] = object.has_position;
+    value["x"] = object.x;
+    value["y"] = object.y;
+    value["z"] = object.z;
+    value["orientation"] = object.orientation;
+    return value;
+}
+
+Array visible_object_array(std::vector<VisibleObjectSummary> const& objects)
+{
+    Array values;
+    for (VisibleObjectSummary const& object : objects)
+    {
+        values.append(visible_object_dictionary(object));
+    }
+    return values;
+}
+
 Dictionary update_dictionary(UpdateObjectSummary const& update)
 {
     Dictionary value;
@@ -118,6 +148,10 @@ Dictionary update_dictionary(UpdateObjectSummary const& update)
     value["first_guid"] = guid_to_hex(update.first_guid);
     value["contains_player_guid"] = update.contains_player_guid;
     value["payload_size"] = static_cast<int>(update.payload_size);
+    value["visible_parse_complete"] = update.visible_parse_complete;
+    value["visible_parse_error"] = String(update.visible_parse_error.c_str());
+    value["visible_objects"] = visible_object_array(update.visible_objects);
+    value["visible_object_count"] = static_cast<int>(update.visible_objects.size());
     return value;
 }
 
@@ -162,6 +196,12 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("move_heartbeat", "host", "port", "account", "password", "character_name", "delta_x", "delta_y", "delta_orientation"),
         &AcoreProtocolClient::move_heartbeat);
+    ClassDB::bind_method(
+        D_METHOD("interact_with_npc", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
+        &AcoreProtocolClient::interact_with_npc);
+    ClassDB::bind_method(
+        D_METHOD("combat_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
+        &AcoreProtocolClient::combat_probe);
 }
 
 Dictionary AcoreProtocolClient::self_test()
@@ -223,6 +263,106 @@ Dictionary AcoreProtocolClient::move_heartbeat(
         result["target"] = movement_dictionary(flow.target);
         result["live"] = live_position_dictionary(flow.live);
         result["after"] = character_dictionary(flow.after);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::interact_with_npc(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    String const& target_name)
+{
+    try
+    {
+        if (target_entry <= 0)
+        {
+            return failure("target entry must be positive");
+        }
+
+        acore_protocol::InteractionResult flow = acore_protocol::interact_with_npc(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<std::uint64_t>(target_entry),
+            to_std_string(target_name));
+
+        Dictionary result;
+        result["ok"] = flow.live_target_found && flow.selection_sent && flow.gossip_sent && flow.gossip_response_seen;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["live_target_found"] = flow.live_target_found;
+        result["selection_sent"] = flow.selection_sent;
+        result["gossip_sent"] = flow.gossip_sent;
+        result["gossip_response_seen"] = flow.gossip_response_seen;
+        result["response_opcode"] = static_cast<int>(flow.response_opcode);
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::combat_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    String const& target_name)
+{
+    try
+    {
+        if (target_entry <= 0)
+        {
+            return failure("combat target entry must be positive");
+        }
+
+        acore_protocol::CombatProbeResult flow = acore_protocol::combat_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<std::uint64_t>(target_entry),
+            to_std_string(target_name));
+
+        Dictionary result;
+        result["ok"] = flow.live_target_found && flow.attack_sent && flow.combat_response_seen;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["live_target_found"] = flow.live_target_found;
+        result["selection_sent"] = flow.selection_sent;
+        result["attack_sent"] = flow.attack_sent;
+        result["combat_response_seen"] = flow.combat_response_seen;
+        result["response_opcode"] = static_cast<int>(flow.response_opcode);
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
         return result;
     }
     catch (std::exception const& exc)

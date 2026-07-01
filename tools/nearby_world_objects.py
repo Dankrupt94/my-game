@@ -56,6 +56,10 @@ def numeric(value: str, fallback: float = 0.0) -> float:
 
 
 def normalize_row(kind: str, row: dict[str, str], center_x: float, center_y: float) -> dict[str, Any]:
+    counter = int(numeric(row.get("guid", "0")))
+    entry = int(numeric(row.get("entry", "0")))
+    high_guid = 0xF110 if kind == "gameobject" else 0xF130
+    raw_guid = (high_guid << 48) | (entry << 24) | counter
     x = numeric(row.get("x", "0"))
     y = numeric(row.get("y", "0"))
     z = numeric(row.get("z", "0"))
@@ -63,6 +67,8 @@ def normalize_row(kind: str, row: dict[str, str], center_x: float, center_y: flo
     return {
         "kind": kind,
         "guid": row.get("guid", ""),
+        "raw_guid": raw_guid,
+        "raw_guid_hex": f"0x{raw_guid:x}",
         "entry": row.get("entry", ""),
         "name": row.get("name", "") or f"{kind} {row.get('entry', '')}",
         "map": int(numeric(row.get("map", "0"))),
@@ -76,6 +82,7 @@ def normalize_row(kind: str, row: dict[str, str], center_x: float, center_y: flo
         "level": row.get("level", ""),
         "faction": row.get("faction", ""),
         "type": row.get("type", ""),
+        "npcflag": row.get("npcflag", ""),
     }
 
 
@@ -93,20 +100,34 @@ def build_nearby(map_id: int, x: float, y: float, radius: float, limit: int, tim
     creature_limit = max(1, limit // 2)
     gameobject_limit = max(1, limit - creature_limit)
     distance_expr = f"((c.position_x-({x}))*(c.position_x-({x}))+(c.position_y-({y}))*(c.position_y-({y})))"
-    creature_columns = ["guid", "entry", "name", "map", "x", "y", "z", "orientation", "distance", "level", "faction", "type"]
+    creature_columns = [
+        "guid",
+        "entry",
+        "name",
+        "map",
+        "x",
+        "y",
+        "z",
+        "orientation",
+        "distance",
+        "level",
+        "faction",
+        "type",
+        "npcflag",
+    ]
     creature_query = (
         "SELECT c.guid, c.id1, ct.name, c.map, c.position_x, c.position_y, c.position_z, c.orientation, "
-        f"SQRT({distance_expr}), ct.minlevel, ct.faction, ct.type "
+        f"SQRT({distance_expr}), ct.minlevel, ct.faction, ct.type, (c.npcflag | ct.npcflag) "
         "FROM creature c LEFT JOIN creature_template ct ON ct.entry = c.id1 "
         f"WHERE c.map = {map_id} AND {distance_expr} <= {radius_sq} "
         f"ORDER BY {distance_expr}, c.guid LIMIT {creature_limit};"
     )
 
     go_distance_expr = f"((g.position_x-({x}))*(g.position_x-({x}))+(g.position_y-({y}))*(g.position_y-({y})))"
-    gameobject_columns = ["guid", "entry", "name", "map", "x", "y", "z", "orientation", "distance", "level", "faction", "type"]
+    gameobject_columns = ["guid", "entry", "name", "map", "x", "y", "z", "orientation", "distance", "level", "faction", "type", "npcflag"]
     gameobject_query = (
         "SELECT g.guid, g.id, gt.name, g.map, g.position_x, g.position_y, g.position_z, g.orientation, "
-        f"SQRT({go_distance_expr}), '', '', gt.type "
+        f"SQRT({go_distance_expr}), '', '', gt.type, '' "
         "FROM gameobject g LEFT JOIN gameobject_template gt ON gt.entry = g.id "
         f"WHERE g.map = {map_id} AND {go_distance_expr} <= {radius_sq} "
         f"ORDER BY {go_distance_expr}, g.guid LIMIT {gameobject_limit};"

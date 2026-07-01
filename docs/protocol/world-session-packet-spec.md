@@ -230,7 +230,16 @@ Uncompressed update payload begins with:
 | update type | 1 | First update block type |
 | packed guid | variable | Present for the create/values/movement update types handled by the Stage 12 summary parser |
 
-Stage 12 intentionally stops at a summary parser. Full value-bitmask and movement-block parsing should be handled in the next packet-layer stage, after a reproducible live `SMSG_UPDATE_OBJECT` sample is available from the local server.
+Stage 12 intentionally stopped at a summary parser. Stage 15 extends this into a minimal live-object parser:
+
+- Inflates `SMSG_COMPRESSED_UPDATE_OBJECT`.
+- Reads update block count and create/update block type.
+- Reads packed GUIDs.
+- Recovers live object type, high GUID, entry id, counter, position, orientation, movement flags, and update flags from create blocks.
+- Skips movement speed and spline-create payloads enough to keep walking later blocks.
+- Skips value-update masks generically by counting mask bits and advancing `4` bytes per populated value.
+
+Important Stage 15 correction: database spawn GUIDs are not live packet GUIDs. AzerothCore creates runtime object counters when the map instantiates creatures/gameobjects. Client actions must target the live `ObjectGuid` from the update stream.
 
 ## Movement Start/Stop Slice
 
@@ -263,6 +272,32 @@ Live Stage 13 result:
 - Waiting for `SMSG_TIME_SYNC_REQ`, then sending `MSG_MOVE_START_FORWARD` followed by `MSG_MOVE_STOP`, advances the live AzerothCore player position.
 - The Stage 13 probe now records both the live login-world position and the saved character-list position. Live movement is the pass condition; saved persistence is reported separately because logout/session cleanup timing can lag behind the fast probe.
 - Latest native result for `Codexstage`: before `(-8946.9, -132.493, 83.5312)`, target `(-8946.7, -132.493, 83.5312)`, live `(-8946.7, -132.493, 83.5312)`, live drift `0`, saved drift `0.200195`.
+
+## Interaction And Combat Slice
+
+Stage 15 uses live object GUIDs recovered from the update stream.
+
+| Opcode | Value | Stage 15 use |
+| --- | ---: | --- |
+| `CMSG_SET_SELECTION` | `0x13D` | Selects the live target GUID before interaction or combat |
+| `CMSG_GOSSIP_HELLO` | `0x17B` | Starts a basic NPC interaction |
+| `SMSG_GOSSIP_MESSAGE` | `0x17D` | Confirms the server accepted the NPC interaction |
+| `CMSG_ATTACKSWING` | `0x141` | Sends a basic attack swing at a live creature GUID |
+| `CMSG_ATTACKSTOP` | `0x142` | Clears attack state after the probe |
+| `SMSG_ATTACKSTART` | `0x143` | Confirms the server accepted the attack start |
+| `SMSG_ATTACKSTOP` | `0x144` | Combat stop/validation feedback |
+| `SMSG_ATTACKSWING_NOTINRANGE` | `0x145` | Combat validation feedback |
+| `SMSG_ATTACKSWING_BADFACING` | `0x146` | Combat validation feedback |
+| `SMSG_ATTACKSWING_DEADTARGET` | `0x148` | Combat validation feedback |
+| `SMSG_ATTACKSWING_CANT_ATTACK` | `0x149` | Combat validation feedback |
+| `SMSG_ATTACKERSTATEUPDATE` | `0x14A` | Damage/combat-state update, to be parsed more fully during Stage 16 |
+
+Stage 15 native evidence:
+
+- NPC interaction against entry `823` resolved live GUID `0xf130000337000cea` and received `SMSG_GOSSIP_MESSAGE` (`0x17D`).
+- Combat probe against entry `721` resolved live GUID `0xf1300002d1000cef` and received `SMSG_ATTACKSTART` (`0x143`).
+
+Stage 16 should parse gossip menu payloads, attack-state update fields, health updates, spell casts, threat/death state, and target frame deltas instead of treating response opcodes as the final state surface.
 
 ## Stage 11 First World Target
 

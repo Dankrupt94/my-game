@@ -5,6 +5,7 @@
 #include "world_packets.h"
 
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <span>
@@ -194,7 +195,25 @@ int enter_world(std::string const& host, std::string const& port, std::string co
               << " first_type=" << static_cast<int>(result.update.first_update_type)
               << " first_guid=0x" << std::hex << result.update.first_guid << std::dec
               << " contains_player=" << (result.update.contains_player_guid ? 1 : 0)
+              << " visible_parse_complete=" << (result.update.visible_parse_complete ? 1 : 0)
+              << " visible_objects=" << result.update.visible_objects.size()
               << "\n";
+    std::size_t printed = 0;
+    for (VisibleObjectSummary const& object : result.update.visible_objects)
+    {
+        if (printed >= 8)
+        {
+            break;
+        }
+        std::cout << "VISIBLE_OBJECT"
+                  << " guid=0x" << std::hex << object.guid << std::dec
+                  << " entry=" << object.entry
+                  << " type=" << static_cast<int>(object.object_type)
+                  << " has_position=" << (object.has_position ? 1 : 0)
+                  << " pos=(" << object.x << "," << object.y << "," << object.z << ")"
+                  << "\n";
+        ++printed;
+    }
     return 0;
 }
 
@@ -238,6 +257,126 @@ int move_heartbeat(
     return result.live_position_accepted ? 0 : 1;
 }
 
+std::uint64_t parse_guid_arg(std::string const& value)
+{
+    std::size_t parsed = 0;
+    int const base = value.rfind("0x", 0) == 0 || value.rfind("0X", 0) == 0 ? 16 : 10;
+    std::uint64_t guid = std::stoull(value, &parsed, base);
+    if (parsed != value.size())
+    {
+        throw std::runtime_error("target guid or entry contains trailing characters");
+    }
+    return guid;
+}
+
+int npc_interaction(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_guid,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::InteractionResult result = acore_protocol::interact_with_npc(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_guid),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "NPC_INTERACTION_SENT"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " target_name=\"" << result.target_name << "\""
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " visible_objects=" << result.visible_objects.size()
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " gossip_sent=" << (result.gossip_sent ? 1 : 0)
+              << " gossip_response_seen=" << (result.gossip_response_seen ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    std::size_t printed = 0;
+    std::size_t unit_count = 0;
+    for (VisibleObjectSummary const& object : result.visible_objects)
+    {
+        if (object.object_type == 3)
+        {
+            ++unit_count;
+        }
+    }
+    std::cout << "VISIBLE_OBJECT_SUMMARY"
+              << " total=" << result.visible_objects.size()
+              << " units=" << unit_count
+              << "\n";
+    for (VisibleObjectSummary const& object : result.visible_objects)
+    {
+        if (printed >= 12)
+        {
+            break;
+        }
+        if (object.object_type != 3)
+        {
+            continue;
+        }
+        std::cout << "VISIBLE_OBJECT"
+                  << " guid=0x" << std::hex << object.guid << std::dec
+                  << " entry=" << object.entry
+                  << " type=" << static_cast<int>(object.object_type)
+                  << " has_position=" << (object.has_position ? 1 : 0)
+                  << " pos=(" << object.x << "," << object.y << "," << object.z << ")"
+                  << "\n";
+        ++printed;
+    }
+    return result.selection_sent && result.gossip_sent && result.gossip_response_seen ? 0 : 1;
+}
+
+int combat_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_guid,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::CombatProbeResult result = acore_protocol::combat_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_guid),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "COMBAT_PROBE_SENT"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " target_name=\"" << result.target_name << "\""
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " visible_objects=" << result.visible_objects.size()
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " attack_sent=" << (result.attack_sent ? 1 : 0)
+              << " combat_response_seen=" << (result.combat_response_seen ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    return result.live_target_found && result.attack_sent && result.combat_response_seen ? 0 : 1;
+}
+
 int world_challenge(std::string const& host, std::string const& port)
 {
     acore_protocol::WorldChallengeSummary summary = acore_protocol::probe_world_challenge(host, port);
@@ -259,6 +398,8 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --create-character <host> <port> <account> <name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --enter-world <host> <port> <account> [character-name]\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --move-heartbeat <host> <port> <account> <character-name> <delta-x> <delta-y> <delta-orientation>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --npc-interaction <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  acore_protocol_client --world-challenge <host> <port>\n";
 }
 }
@@ -305,6 +446,16 @@ int main(int argc, char** argv)
         if (argc == 9 && std::strcmp(argv[1], "--move-heartbeat") == 0)
         {
             return move_heartbeat(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
+        }
+
+        if (argc == 8 && std::strcmp(argv[1], "--npc-interaction") == 0)
+        {
+            return npc_interaction(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+        }
+
+        if (argc == 8 && std::strcmp(argv[1], "--combat-probe") == 0)
+        {
+            return combat_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
         }
 
         usage();

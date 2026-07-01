@@ -146,6 +146,94 @@ func move_heartbeat(
 	return parsed
 
 
+func interact_with_npc(
+	character_name: String = "Codexstage",
+	target_entry: int = 823,
+	target_name: String = "Nearby NPC",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_interact_with_npc(character_name, target_entry, target_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--npc-interaction",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			str(target_entry),
+			target_name,
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_npc_interaction_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("gossip_response_seen", false))
+	return parsed
+
+
+func combat_probe(
+	character_name: String = "Codexstage",
+	target_entry: int = 721,
+	target_name: String = "Nearby Creature",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_combat_probe(character_name, target_entry, target_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--combat-probe",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			str(target_entry),
+			target_name,
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_combat_probe_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("combat_response_seen", false))
+	return parsed
+
+
 func run_self_test() -> Dictionary:
 	var helper := _helper_path()
 	if not FileAccess.file_exists(helper):
@@ -276,6 +364,72 @@ func _run_native_move_heartbeat(
 		delta_orientation)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected movement result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
+func _run_native_interact_with_npc(
+	character_name: String,
+	target_entry: int,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("interact_with_npc"):
+		return {}
+
+	var result = client.call(
+		"interact_with_npc",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		target_entry,
+		target_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected interaction result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
+func _run_native_combat_probe(
+	character_name: String,
+	target_entry: int,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("combat_probe"):
+		return {}
+
+	var result = client.call(
+		"combat_probe",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		target_entry,
+		target_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected combat result")
 
 	var parsed: Dictionary = result
 	parsed["source"] = "Godot native extension"
@@ -492,6 +646,70 @@ func _parse_move_heartbeat_output(output: String) -> Dictionary:
 			result["saved_drift"] = _extract_float_field(line, "saved_drift=")
 			result["live_position_accepted"] = _extract_int_field(line, "live_position_accepted=") == 1
 			result["saved_position_changed"] = _extract_int_field(line, "saved_position_changed=") == 1
+	return result
+
+
+func _parse_npc_interaction_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"live_target_found": false,
+		"selection_sent": false,
+		"gossip_sent": false,
+		"gossip_response_seen": false,
+		"target_guid": "0x0",
+		"target_entry": 0,
+		"target_name": "",
+		"visible_object_count": 0,
+		"response_opcode": 0,
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("NPC_INTERACTION_SENT"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["target_guid"] = _extract_token_after(line, "target_guid=")
+			result["target_entry"] = _extract_int_field(line, "target_entry=")
+			result["target_name"] = _extract_quoted_field(line, "target_name=\"")
+			result["live_target_found"] = _extract_int_field(line, "live_target_found=") == 1
+			result["visible_object_count"] = _extract_int_field(line, "visible_objects=")
+			result["selection_sent"] = _extract_int_field(line, "selection_sent=") == 1
+			result["gossip_sent"] = _extract_int_field(line, "gossip_sent=") == 1
+			result["gossip_response_seen"] = _extract_int_field(line, "gossip_response_seen=") == 1
+			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
+	return result
+
+
+func _parse_combat_probe_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"live_target_found": false,
+		"selection_sent": false,
+		"attack_sent": false,
+		"combat_response_seen": false,
+		"target_guid": "0x0",
+		"target_entry": 0,
+		"target_name": "",
+		"visible_object_count": 0,
+		"response_opcode": 0,
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("COMBAT_PROBE_SENT"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["target_guid"] = _extract_token_after(line, "target_guid=")
+			result["target_entry"] = _extract_int_field(line, "target_entry=")
+			result["target_name"] = _extract_quoted_field(line, "target_name=\"")
+			result["live_target_found"] = _extract_int_field(line, "live_target_found=") == 1
+			result["visible_object_count"] = _extract_int_field(line, "visible_objects=")
+			result["selection_sent"] = _extract_int_field(line, "selection_sent=") == 1
+			result["attack_sent"] = _extract_int_field(line, "attack_sent=") == 1
+			result["combat_response_seen"] = _extract_int_field(line, "combat_response_seen=") == 1
+			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
 	return result
 
 

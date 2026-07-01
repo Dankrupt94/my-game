@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://b1h3kcutdms6m"]
+
+[ext_resource type="Script" path="res://scripts/interaction_combat_view.gd" id="1"]
+
+[node name="InteractionCombatView" type="Node3D"]
+script = ExtResource("1")

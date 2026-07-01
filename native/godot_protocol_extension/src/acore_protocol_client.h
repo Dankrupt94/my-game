@@ -39,4 +39,20 @@ public:
         double delta_x,
         double delta_y,
         double delta_orientation);
+    godot::Dictionary interact_with_npc(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        int64_t target_entry,
+        godot::String const& target_name);
+    godot::Dictionary combat_probe(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        int64_t target_entry,
+        godot::String const& target_name);
 };

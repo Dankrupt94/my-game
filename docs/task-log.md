@@ -768,3 +768,35 @@ Result:
 - Validated bridge `data` calls against the live local stack.
 - Validated Godot 4.7 loads the dashboard scene headlessly.
 - Pausing here before Stage 04 per user instruction.
+
+## 2026-07-01 - Complete Stage 15 Combat And Interaction Slice
+
+Goal: prove Godot can target live AzerothCore world objects and send real interaction/combat packets without using the original client.
+
+Plan:
+
+- Parse live object GUIDs from `SMSG_UPDATE_OBJECT` and `SMSG_COMPRESSED_UPDATE_OBJECT`.
+- Use live object GUIDs, not database spawn GUIDs, for targeting.
+- Add an NPC interaction probe.
+- Add a combat probe.
+- Expose both probes to Godot and add a Stage 15 scene.
+- Validate native and Godot paths against the live local stack.
+
+Result:
+
+- Added a minimal update-object create-block parser that recovers live object GUID, entry, type, position, orientation, and movement flags.
+- Added spline-create skipping so the parser continues through larger live update packets.
+- Added native `--npc-interaction` and `--combat-probe` commands.
+- Added Godot native extension and script bridge methods for NPC interaction and combat probing.
+- Added `scenes/interaction_combat_view.tscn` and the dashboard `Interact` action.
+- Documented the live-GUID targeting correction in the Stage 15 and packet-spec docs.
+
+Validation:
+
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native NPC interaction passed with `response_opcode=0x17d`.
+- Native combat probe passed with `response_opcode=0x143`.
+- `ACORE_ENTER_WORLD_SELF_TEST=1 godot-4 --headless --path . res://scenes/enter_world_view.tscn` passed.
+- `ACORE_MOVEMENT_SELF_TEST=1 godot-4 --headless --path . res://scenes/movement_reconciliation_view.tscn` passed.
+- `ACORE_OBJECT_VISIBILITY_SELF_TEST=1 godot-4 --headless --path . res://scenes/object_visibility_view.tscn` passed.
+- `ACORE_INTERACTION_COMBAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/interaction_combat_view.tscn` passed with `gossip_opcode=0x17d` and `combat_opcode=0x143`.
