@@ -1,5 +1,18 @@
 # Task Log
 
+## 2026-07-01 - Stage 13 Movement And Reconciliation Started
+
+Goal: continue from the Stage 12 live enter-world proof into a safe movement/reconciliation vertical slice without causing avoidable worldserver disconnect loops.
+
+Plan:
+
+- Preserve this before-task note.
+- Start with packet/documentation research and movement telemetry scaffolding.
+- Prefer passive/reconciliation-safe helpers before attempting active server-authoritative WASD movement.
+- Add Godot-side visualization and test scaffolding that can prove coordinate transforms and drift handling without proprietary assets.
+- Keep credentials, packet captures, runtime logs, and proprietary files out of Git.
+- Validate native self-tests, Godot bridge checks, and asset boundaries before committing the stage result.
+
 ## 2026-07-01 - Stage 12 Enter World Prototype Started
 
 Goal: create a disposable local test character for the ignored protocol account and complete the Stage 12 enter-world prototype as far as the current local server and protocol parser allow.
