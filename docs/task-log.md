@@ -907,3 +907,36 @@ Validation:
 - `./tools/build_godot_protocol_extension_compat.sh` passed.
 - `ACORE_SPELLBOOK_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spellbook_view.tscn` passed with `spells=48`.
 - `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` still passed.
+
+## 2026-07-01 - Add Stage 16 Initial Action-Bar Slice
+
+Goal: prove Godot can receive and display AzerothCore's server-provided initial action buttons during login.
+
+Plan:
+
+- Parse `SMSG_ACTION_BUTTONS`.
+- Add a native action-button probe.
+- Expose action-button data through the Godot extension and script bridge.
+- Add a Godot action-bar scene with a headless self-test.
+- Keep the slice read-only; do not edit action buttons or cast from them yet.
+
+Result:
+
+- Added `ActionButtonsSummary` and `parse_action_buttons_summary`.
+- Added `acore_protocol::read_action_buttons` and the `--action-buttons` helper command.
+- Added `AcoreProtocolClient.action_buttons(...)`.
+- Added `ProtocolClientBridge.action_buttons(...)`.
+- Added `scenes/stage16_action_bar_view.tscn` and `scripts/stage16_action_bar_view.gd`.
+- Added the dashboard `Action Bar` action.
+- Updated the Stage 16 matrix and packet spec.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--action-buttons` passed with `action_buttons_seen=1`, `logged_in_world=1`, `state=1`, `slot_count=144`, and `populated_count=3`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_ACTION_BAR_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed with `slots=144`, `populated=3`, and `state=1`.
+- `ACORE_SPELLBOOK_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_spellbook_view.tscn` still passed with `spells=48`.
+- `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` still passed with say and self-whisper responses.
+- Local `qwen-agent` advisory review found no concrete blockers for the bounded action-bar slice.

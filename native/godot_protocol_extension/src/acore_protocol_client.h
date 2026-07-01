@@ -75,4 +75,10 @@ public:
         godot::String const& account,
         godot::String const& password,
         godot::String const& character_name);
+    godot::Dictionary action_buttons(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name);
 };

@@ -757,6 +757,42 @@ InitialSpellsSummary parse_initial_spells_summary(std::span<const std::uint8_t> 
     return summary;
 }
 
+ActionButtonsSummary parse_action_buttons_summary(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    ActionButtonsSummary summary;
+    summary.seen = true;
+    summary.state = read_u8(payload, offset);
+    summary.buttons.reserve(MaxActionButtons);
+
+    std::size_t const expected_size = 1 + (MaxActionButtons * 4);
+    if (summary.state != 2 && payload.size() != expected_size)
+    {
+        throw std::runtime_error("action buttons payload has unexpected size");
+    }
+    if (summary.state == 2 && payload.size() != 1 && payload.size() != expected_size)
+    {
+        throw std::runtime_error("action buttons clear payload has unexpected size");
+    }
+
+    for (std::size_t button = 0; button < MaxActionButtons && offset < payload.size(); ++button)
+    {
+        std::uint32_t const packed = read_u32_le(payload, offset);
+        ActionButtonSummary action_button;
+        action_button.button = static_cast<std::uint8_t>(button);
+        action_button.packed = packed;
+        action_button.action = packed & 0x00FFFFFFu;
+        action_button.type = static_cast<std::uint8_t>((packed & 0xFF000000u) >> 24);
+        action_button.populated = packed != 0;
+        if (action_button.populated)
+        {
+            ++summary.populated_count;
+        }
+        summary.buttons.push_back(action_button);
+    }
+    return summary;
+}
+
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,
@@ -983,6 +1019,23 @@ bool world_packet_self_test()
     append_u16_le(initial_spells_payload, 0);
     InitialSpellsSummary spellbook = parse_initial_spells_summary(initial_spells_payload);
 
+    std::vector<std::uint8_t> action_buttons_payload;
+    append_u8(action_buttons_payload, 1);
+    for (std::size_t button = 0; button < MaxActionButtons; ++button)
+    {
+        std::uint32_t packed = 0;
+        if (button == 0)
+        {
+            packed = 78;
+        }
+        if (button == 1)
+        {
+            packed = 6948 | (0x80u << 24);
+        }
+        append_u32_le(action_buttons_payload, packed);
+    }
+    ActionButtonsSummary action_buttons = parse_action_buttons_summary(action_buttons_payload);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -1011,5 +1064,13 @@ bool world_packet_self_test()
         && spellbook.spells.size() == 2
         && spellbook.spells[0].spell_id == 78
         && spellbook.spells[1].spell_id == 6603
-        && spellbook.cooldown_count == 0;
+        && spellbook.cooldown_count == 0
+        && action_buttons.seen
+        && action_buttons.state == 1
+        && action_buttons.buttons.size() == MaxActionButtons
+        && action_buttons.populated_count == 2
+        && action_buttons.buttons[0].action == 78
+        && action_buttons.buttons[0].type == 0
+        && action_buttons.buttons[1].action == 6948
+        && action_buttons.buttons[1].type == 0x80;
 }

@@ -387,6 +387,55 @@ Remaining spell packet work:
 - Build and validate `CMSG_CAST_SPELL` with target flags.
 - Parse cast success/failure, interrupt, aura, and combat-result packets.
 
+## Initial Action Buttons Slice
+
+Stage 16 now parses the first server-provided action-bar packet.
+
+Relevant opcodes:
+
+| Opcode | Value | Stage 16 support |
+| --- | ---: | --- |
+| `SMSG_ACTION_BUTTONS` | `0x129` | Parses all initial action slots from the login stream |
+| `CMSG_SET_ACTION_BUTTON` | `0x128` | Documented from AzerothCore source; not sent yet in Stage 16 |
+
+Payload from `Player::SendActionButtons`:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| state | 1 | AzerothCore sends `1` for normal initial action-button data. State `2` clears client-side bars. |
+| packed action button | 4 per slot | Repeated for 144 slots when state is not `2` |
+
+Packed action-button layout:
+
+| Bits | Meaning |
+| --- | --- |
+| low 24 bits | action id, usually spell id, item id, macro id, or equipment-set id depending on type |
+| high 8 bits | action button type |
+
+Known action button types from AzerothCore:
+
+| Type | Meaning |
+| ---: | --- |
+| `0` | spell |
+| `1` | click/custom click action |
+| `32` | equipment set |
+| `64` | macro |
+| `65` | character macro |
+| `128` | item |
+
+Observed Stage 16 result:
+
+- Native helper command `--action-buttons` observed `SMSG_ACTION_BUTTONS` for `Codexstage`.
+- The live packet contained `144` slots, state `1`, and `3` populated slots.
+- Observed populated slots were button `72` action `6603` type `0`, button `73` action `78` type `0`, and button `83` action `117` type `128`.
+- Godot scene `scenes/stage16_action_bar_view.tscn` passed with `ACTION_BAR_SELF_TEST_OK slots=144 populated=3 state=1`.
+
+Remaining action-button packet work:
+
+- Build and validate `CMSG_SET_ACTION_BUTTON` for controlled local edits.
+- Confirm persistence by re-reading `SMSG_ACTION_BUTTONS` after logout/login.
+- Connect action buttons to spell casting, item use, macros, equipment sets, paging, and keybinds.
+
 ## Stage 11 First World Target
 
 Stage 11 should connect to worldserver, parse `SMSG_AUTH_CHALLENGE`, send `CMSG_AUTH_SESSION`, initialize header crypto, parse `SMSG_AUTH_RESPONSE`, send `CMSG_CHAR_ENUM`, and parse at least names/guid/race/class/level/map/position from `SMSG_CHAR_ENUM`.

@@ -497,6 +497,56 @@ int spellbook(
     return result.initial_spells_seen && !result.spellbook.spells.empty() ? 0 : 1;
 }
 
+int action_buttons(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::ActionButtonsResult result = acore_protocol::read_action_buttons(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "ACTION_BUTTONS_SEEN"
+              << " character=\"" << result.character.name << "\""
+              << " action_buttons_seen=" << (result.action_buttons_seen ? 1 : 0)
+              << " logged_in_world=" << (result.logged_in_world ? 1 : 0)
+              << " state=" << static_cast<int>(result.action_buttons.state)
+              << " slot_count=" << result.action_buttons.buttons.size()
+              << " populated_count=" << result.action_buttons.populated_count
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+
+    std::size_t printed = 0;
+    for (ActionButtonSummary const& button : result.action_buttons.buttons)
+    {
+        if (!button.populated)
+        {
+            continue;
+        }
+        if (printed >= 36)
+        {
+            break;
+        }
+        std::cout << "ACTION_BUTTON"
+                  << " button=" << static_cast<int>(button.button)
+                  << " action=" << button.action
+                  << " type=" << static_cast<int>(button.type)
+                  << " packed=0x" << std::hex << button.packed << std::dec
+                  << "\n";
+        ++printed;
+    }
+    return result.action_buttons_seen && result.action_buttons.buttons.size() == MaxActionButtons ? 0 : 1;
+}
+
 int world_challenge(std::string const& host, std::string const& port)
 {
     acore_protocol::WorldChallengeSummary summary = acore_protocol::probe_world_challenge(host, port);
@@ -523,6 +573,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-say <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-whisper-self <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --spellbook <host> <port> <account> <character-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --action-buttons <host> <port> <account> <character-name>\n"
               << "  acore_protocol_client --world-challenge <host> <port>\n";
 }
 }
@@ -594,6 +645,11 @@ int main(int argc, char** argv)
         if (argc == 6 && std::strcmp(argv[1], "--spellbook") == 0)
         {
             return spellbook(argv[2], argv[3], argv[4], argv[5]);
+        }
+
+        if (argc == 6 && std::strcmp(argv[1], "--action-buttons") == 0)
+        {
+            return action_buttons(argv[2], argv[3], argv[4], argv[5]);
         }
 
         usage();

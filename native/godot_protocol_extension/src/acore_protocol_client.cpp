@@ -150,6 +150,22 @@ Array spell_array(std::vector<InitialSpellSummary> const& spells)
     return values;
 }
 
+Array action_button_array(std::vector<ActionButtonSummary> const& buttons)
+{
+    Array values;
+    for (ActionButtonSummary const& button : buttons)
+    {
+        Dictionary value;
+        value["button"] = static_cast<int>(button.button);
+        value["action"] = static_cast<int>(button.action);
+        value["type"] = static_cast<int>(button.type);
+        value["packed"] = static_cast<int64_t>(button.packed);
+        value["populated"] = button.populated;
+        values.append(value);
+    }
+    return values;
+}
+
 Dictionary update_dictionary(UpdateObjectSummary const& update)
 {
     Dictionary value;
@@ -224,6 +240,9 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("spellbook", "host", "port", "account", "password", "character_name"),
         &AcoreProtocolClient::spellbook);
+    ClassDB::bind_method(
+        D_METHOD("action_buttons", "host", "port", "account", "password", "character_name"),
+        &AcoreProtocolClient::action_buttons);
 }
 
 Dictionary AcoreProtocolClient::self_test()
@@ -508,6 +527,43 @@ Dictionary AcoreProtocolClient::spellbook(
         result["spell_count"] = static_cast<int>(flow.spellbook.spells.size());
         result["cooldown_count"] = static_cast<int>(flow.spellbook.cooldown_count);
         result["spells"] = spell_array(flow.spellbook.spells);
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::action_buttons(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name)
+{
+    try
+    {
+        acore_protocol::ActionButtonsResult flow = acore_protocol::read_action_buttons(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name));
+
+        Dictionary result;
+        result["ok"] = flow.action_buttons_seen && flow.action_buttons.buttons.size() == MaxActionButtons;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["action_buttons_seen"] = flow.action_buttons_seen;
+        result["logged_in_world"] = flow.logged_in_world;
+        result["state"] = static_cast<int>(flow.action_buttons.state);
+        result["slot_count"] = static_cast<int>(flow.action_buttons.buttons.size());
+        result["populated_count"] = static_cast<int>(flow.action_buttons.populated_count);
+        result["buttons"] = action_button_array(flow.action_buttons.buttons);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

@@ -10,7 +10,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 
 ## Feature Areas
 
-- Chat. Current first slice: local say-message send/receive probe.
+- Chat. Working expanded slice: local say-message and self-whisper send/receive probes.
 - Inventory.
 - Equipment.
 - Loot.
@@ -18,6 +18,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 - Quests.
 - Trainers.
 - Spells.
+- Action bars.
 - Auras.
 - Groups.
 - Guilds.
@@ -51,6 +52,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 - 2026-07-01: First chat slice is working. Godot sends a local say-message through `CMSG_MESSAGECHAT` and receives the AzerothCore echo through `SMSG_MESSAGECHAT` opcode `0x096`.
 - 2026-07-01: Chat slice expanded to self-whisper. Godot now sends a whisper packet addressed to the local test character and receives both whisper and whisper-inform responses.
 - 2026-07-01: First spellbook slice is working. Godot parses `SMSG_INITIAL_SPELLS` and displays the server-provided initial spell IDs.
+- 2026-07-01: First action-bar slice is working. Godot parses `SMSG_ACTION_BUTTONS`, unpacks the 144 server-provided action slots, and displays populated slots in a read-only action-bar scene.
 
 ## Active Slice: Chat
 
@@ -84,3 +86,20 @@ Remaining spell parity work:
 - Add action bars and keybind-driven spell placement.
 - Build `CMSG_CAST_SPELL` support with target flags and cast-count handling.
 - Parse cooldown, cast-fail, interrupt, aura, and combat-result packets.
+
+## Active Slice: Action Bars
+
+Completed first target:
+
+- [x] Parse `SMSG_ACTION_BUTTONS`.
+- [x] Unpack all 144 action slots as `action = packed & 0x00FFFFFF` and `type = packed >> 24`.
+- [x] Expose action-button data through the native helper and Godot extension.
+- [x] Add a Godot action-bar scene with a headless self-test.
+
+Remaining action-bar parity work:
+
+- Resolve spell/item/macro/equipment-set actions to display names and local-only icons.
+- Add drag/drop placement, remove-slot behavior, paging, and keybinds.
+- Build and validate `CMSG_SET_ACTION_BUTTON` against a controlled local character.
+- Add spell casting from action buttons after `CMSG_CAST_SPELL` support lands.
+- Preserve exact server persistence behavior and document any Godot UI compatibility tweaks.

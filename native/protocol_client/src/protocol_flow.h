@@ -145,6 +145,16 @@ struct SpellbookResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct ActionButtonsResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    ActionButtonsSummary action_buttons;
+    bool action_buttons_seen = false;
+    bool logged_in_world = false;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -241,6 +251,14 @@ ChatSayResult chat_whisper_self(
     FlowOptions options = {});
 
 SpellbookResult read_initial_spellbook(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    FlowOptions options = {});
+
+ActionButtonsResult read_action_buttons(
     std::string const& host,
     std::string const& port,
     std::string const& account,

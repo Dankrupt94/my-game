@@ -29,6 +29,7 @@ constexpr std::uint16_t SMSG_LOGOUT_RESPONSE = 0x04C;
 constexpr std::uint16_t SMSG_LOGOUT_COMPLETE = 0x04D;
 constexpr std::uint16_t SMSG_MESSAGECHAT = 0x096;
 constexpr std::uint16_t SMSG_UPDATE_OBJECT = 0x0A9;
+constexpr std::uint16_t SMSG_ACTION_BUTTONS = 0x129;
 constexpr std::uint16_t SMSG_INITIAL_SPELLS = 0x12A;
 constexpr std::uint16_t SMSG_ATTACKSTART = 0x143;
 constexpr std::uint16_t SMSG_ATTACKSTOP = 0x144;
@@ -49,6 +50,7 @@ constexpr std::uint32_t LANG_UNIVERSAL = 0;
 constexpr std::uint32_t LANG_ORCISH = 1;
 constexpr std::uint32_t LANG_COMMON = 7;
 constexpr std::size_t CharEnumEquipmentSlots = 23;
+constexpr std::size_t MaxActionButtons = 144;
 
 struct CharacterSummary
 {
@@ -145,6 +147,23 @@ struct InitialSpellsSummary
     std::vector<InitialSpellSummary> spells;
 };
 
+struct ActionButtonSummary
+{
+    std::uint8_t button = 0;
+    std::uint32_t action = 0;
+    std::uint8_t type = 0;
+    std::uint32_t packed = 0;
+    bool populated = false;
+};
+
+struct ActionButtonsSummary
+{
+    bool seen = false;
+    std::uint8_t state = 0;
+    std::size_t populated_count = 0;
+    std::vector<ActionButtonSummary> buttons;
+};
+
 std::vector<std::uint8_t> build_empty_addon_info();
 std::vector<std::uint8_t> build_auth_session_payload(
     std::string const& account,
@@ -167,6 +186,7 @@ std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payl
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);
 ChatMessageSummary parse_chat_message_summary(std::span<const std::uint8_t> payload, bool gm_message);
 InitialSpellsSummary parse_initial_spells_summary(std::span<const std::uint8_t> payload);
+ActionButtonsSummary parse_action_buttons_summary(std::span<const std::uint8_t> payload);
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,
