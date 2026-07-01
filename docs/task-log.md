@@ -11,6 +11,16 @@ Plan:
 - Validate self-tests, safe probes, guarded password behavior, and live `CODEXPROTO` character flow.
 - Keep local credentials, packet captures, and proprietary files out of Git.
 
+Result:
+
+- Added `native/protocol_client/src/protocol_flow.h` and `native/protocol_client/src/protocol_flow.cpp` as the reusable protocol flow layer for auth challenge, SRP6 proof, realm parsing, world auth, and character enum.
+- Replaced the large CLI-only implementation in `main.cpp` with a thin command wrapper around the reusable flow layer.
+- Kept the existing CLI command names and milestone output stable so Godot's current helper bridge keeps working while the true native integration is prepared.
+- Added the new flow implementation to the CMake target.
+- Validated the CMake build, self-test, public auth challenge probe, public world challenge probe, missing-password guards, live ignored `CODEXPROTO` character flow, and Godot headless main scene startup.
+- Used local `qwen-agent` as a narrow advisory reviewer for the refactor; final acceptance came from the local build and live protocol checks.
+- Confirmed no credentials, packet captures, local runtime files, or proprietary client files were added to Git.
+
 ## 2026-06-30 - Stage 11 World Packet Parser Checkpoint Started
 
 Goal: continue Stage 11 by adding world-auth packet construction and character-list parsing without requiring account credentials.

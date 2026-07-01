@@ -55,10 +55,15 @@ The first implementation checkpoint should be a safe local smoke harness that ca
 - Documented and applied a local AzerothCore smoke profile with Warden and random bot autologin disabled for protocol validation. Warden support remains a later compatibility task.
 - Added `scripts/protocol_client_bridge.gd` as the first Godot-side wrapper around the native helper.
 - Added a dashboard `Check Protocol` action that runs the live character-flow smoke test through the ignored local protocol account and reports the parsed milestones in Godot.
+- Extracted the validated auth, realm, world-auth, and character-enum flow into reusable C++ files:
+  - `native/protocol_client/src/protocol_flow.h`
+  - `native/protocol_client/src/protocol_flow.cpp`
+- Reduced `native/protocol_client/src/main.cpp` to a thin CLI wrapper around the reusable flow layer while preserving the existing commands and output.
+- Added the reusable flow implementation to the CMake target so it can be linked by a future Godot-native extension/module.
+- The Godot dashboard still uses the helper-process bridge for this checkpoint; the next port-relevant step is replacing that bridge with a true native Godot integration.
 
 ## Next Checkpoint
 
-- Extract the validated CLI-only protocol flow into reusable C++ files that can be linked by a future GDExtension/native Godot module.
 - Replace the blocking helper process bridge with a true asynchronous GDExtension or native Godot TCP module.
 - Track Warden handling separately before claiming full default-server compatibility.
 - Decide when to restore random bot autologin for gameplay-load testing after protocol smoke tests are stable.
@@ -78,6 +83,12 @@ Completed on 2026-06-30:
 - `godot-4 --headless --path . --quit` succeeded.
 - `godot-4 --headless --path . --scene res://main.tscn --quit-after 1` succeeded with the protocol dashboard action wired.
 - `cmake --build native/protocol_client/build` completed without warnings after the character-flow checkpoint.
+- `cmake --build native/protocol_client/build` completed after extracting the reusable protocol flow layer.
+- `native/protocol_client/build/acore_protocol_client --self-test` still printed `PROTOCOL_CLIENT_SELF_TEST_OK`, `SRP6_SELF_TEST_OK`, and `WORLD_PACKET_SELF_TEST_OK` after the reusable-flow refactor.
+- Public auth challenge and world challenge probes still passed after the reusable-flow refactor.
+- Missing-password guards still failed safely after the reusable-flow refactor.
+- Live ignored `CODEXPROTO` character flow still printed `AUTH_FLOW_OK`, `WORLD_AUTH_OK`, and `CHAR_ENUM_OK count=0` after the reusable-flow refactor.
+- `godot-4 --headless --path . --scene res://main.tscn --quit-after 1` still succeeded after the reusable-flow refactor.
 - No account credentials, session keys, packet captures, proprietary client files, or local runtime files were committed.
 
 ## Done Criteria

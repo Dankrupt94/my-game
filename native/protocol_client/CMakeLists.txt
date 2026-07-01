@@ -14,6 +14,7 @@ add_executable(acore_protocol_client
     src/auth_crypt.cpp
     src/main.cpp
     src/protocol_bytes.cpp
+    src/protocol_flow.cpp
     src/srp6.cpp
     src/world_packets.cpp
 )
