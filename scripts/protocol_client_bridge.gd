@@ -279,6 +279,54 @@ func loot_open_probe(
 	return parsed
 
 
+func corpse_loot_probe(
+	character_name: String = "Codexstage",
+	target_entry: int = 299,
+	target_name: String = "Nearby Creature",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_corpse_loot_probe(character_name, target_entry, target_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--corpse-loot-probe",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			str(target_entry),
+			target_name,
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_corpse_loot_probe_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	var money_ok := int(parsed.get("gold", 0)) == 0 or bool(parsed.get("loot_money_notify_seen", false))
+	var item_ok := int(parsed.get("item_count", 0)) == 0 or int(parsed.get("loot_item_removed_count", 0)) > 0
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("target_dead_seen", false)) \
+		and bool(parsed.get("loot_response_seen", false)) and not bool(parsed.get("loot_error", false)) \
+		and money_ok and item_ok and bool(parsed.get("loot_release_response_seen", false))
+	return parsed
+
+
 func chat_say(
 	character_name: String = "Codexstage",
 	message: String = "Codex Stage16 chat probe",
@@ -952,6 +1000,39 @@ func _run_native_loot_open_probe(
 	return parsed
 
 
+func _run_native_corpse_loot_probe(
+	character_name: String,
+	target_entry: int,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("corpse_loot_probe"):
+		return {}
+
+	var result = client.call(
+		"corpse_loot_probe",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		target_entry,
+		target_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected corpse loot result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
 func _run_native_chat_say(
 	character_name: String,
 	message: String,
@@ -1375,6 +1456,13 @@ func _byte_hex(value: int) -> String:
 func _redacted_result(result: Dictionary) -> Dictionary:
 	var redacted := result.duplicate(true)
 	redacted.erase("output")
+	redacted.erase("visible_objects")
+	redacted.erase("skipped_opcodes")
+	if typeof(redacted.get("items", null)) == TYPE_ARRAY:
+		var items: Array = redacted["items"]
+		if items.size() > 8:
+			redacted["items"] = items.slice(0, 8)
+			redacted["truncated_item_count"] = items.size() - 8
 	return redacted
 
 
@@ -1633,6 +1721,116 @@ func _parse_loot_open_probe_output(output: String) -> Dictionary:
 			result["gold"] = _extract_int_field(line, "gold=")
 			result["item_count"] = _extract_int_field(line, "item_count=")
 		elif line.begins_with("LOOT_ITEM"):
+			result["items"].append({
+				"slot": _extract_int_field(line, "slot="),
+				"item_id": _extract_int_field(line, "item_id="),
+				"count": _extract_int_field(line, "count="),
+				"display_id": _extract_int_field(line, "display_id="),
+				"random_suffix": _extract_int_field(line, "random_suffix="),
+				"random_property_id": _extract_int_field(line, "random_property_id="),
+				"slot_type": _extract_int_field(line, "slot_type="),
+			})
+	result["loot"] = {
+		"parsed": result["loot_parsed"],
+		"error": result["loot_error"],
+		"error_code": result["loot_error_code"],
+		"loot_type": result["loot_type"],
+		"gold": result["gold"],
+		"item_count": result["item_count"],
+		"items": result["items"],
+	}
+	return result
+
+
+func _parse_corpse_loot_probe_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"live_target_found": false,
+		"selection_sent": false,
+		"attack_sent": false,
+		"attack_stop_sent": false,
+		"target_dead_seen": false,
+		"target_lootable_seen": false,
+		"target_guid": "0x0",
+		"target_entry": 0,
+		"target_name": "",
+		"target_has_position": false,
+		"target_health_seen": false,
+		"target_health": 0,
+		"target_max_health_seen": false,
+		"target_max_health": 0,
+		"target_dynamic_flags_seen": false,
+		"target_dynamic_flags": 0,
+		"approach_movement_sent": false,
+		"return_movement_sent": false,
+		"attacker_state_updates": 0,
+		"total_damage": 0,
+		"visible_object_count": 0,
+		"response_opcode": 0,
+		"loot_open_sent": false,
+		"loot_response_seen": false,
+		"loot_money_sent": false,
+		"loot_money_notify_seen": false,
+		"loot_money_amount": 0,
+		"loot_item_pickup_sent_count": 0,
+		"loot_item_removed_count": 0,
+		"loot_release_sent": false,
+		"loot_release_response_seen": false,
+		"loot_release_success": false,
+		"loot_parsed": false,
+		"loot_error": false,
+		"loot_error_code": 0,
+		"loot_type": 0,
+		"gold": 0,
+		"item_count": 0,
+		"items": [],
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("CORPSE_LOOT_PROBE"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["target_guid"] = _extract_token_after(line, "target_guid=")
+			result["target_entry"] = _extract_int_field(line, "target_entry=")
+			result["target_name"] = _extract_quoted_field(line, "target_name=\"")
+			result["live_target_found"] = _extract_int_field(line, "live_target_found=") == 1
+			result["target_has_position"] = _extract_int_field(line, "target_has_position=") == 1
+			result["target_health_seen"] = _extract_int_field(line, "target_health_seen=") == 1
+			result["target_health"] = _extract_int_field(line, "target_health=")
+			result["target_max_health_seen"] = _extract_int_field(line, "target_max_health_seen=") == 1
+			result["target_max_health"] = _extract_int_field(line, "target_max_health=")
+			result["target_dynamic_flags_seen"] = _extract_int_field(line, "target_dynamic_flags_seen=") == 1
+			result["target_dynamic_flags"] = _extract_hex_field(line, "target_dynamic_flags=0x")
+			result["target_dead_seen"] = _extract_int_field(line, "target_dead_seen=") == 1
+			result["target_lootable_seen"] = _extract_int_field(line, "target_lootable_seen=") == 1
+			result["visible_object_count"] = _extract_int_field(line, "visible_objects=")
+			result["approach_movement_sent"] = _extract_int_field(line, "approach_movement_sent=") == 1
+			result["return_movement_sent"] = _extract_int_field(line, "return_movement_sent=") == 1
+			result["selection_sent"] = _extract_int_field(line, "selection_sent=") == 1
+			result["attack_sent"] = _extract_int_field(line, "attack_sent=") == 1
+			result["attack_stop_sent"] = _extract_int_field(line, "attack_stop_sent=") == 1
+			result["attacker_state_updates"] = _extract_int_field(line, "attacker_state_updates=")
+			result["total_damage"] = _extract_int_field(line, "total_damage=")
+			result["loot_open_sent"] = _extract_int_field(line, "loot_open_sent=") == 1
+			result["loot_response_seen"] = _extract_int_field(line, "loot_response_seen=") == 1
+			result["loot_money_sent"] = _extract_int_field(line, "loot_money_sent=") == 1
+			result["loot_money_notify_seen"] = _extract_int_field(line, "loot_money_notify_seen=") == 1
+			result["loot_money_amount"] = _extract_int_field(line, "loot_money_amount=")
+			result["loot_item_pickup_sent_count"] = _extract_int_field(line, "loot_item_pickup_sent_count=")
+			result["loot_item_removed_count"] = _extract_int_field(line, "loot_item_removed_count=")
+			result["loot_release_sent"] = _extract_int_field(line, "loot_release_sent=") == 1
+			result["loot_release_response_seen"] = _extract_int_field(line, "loot_release_response_seen=") == 1
+			result["loot_release_success"] = _extract_int_field(line, "loot_release_success=") == 1
+			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
+			result["loot_parsed"] = _extract_int_field(line, "loot_parsed=") == 1
+			result["loot_error"] = _extract_int_field(line, "loot_error=") == 1
+			result["loot_error_code"] = _extract_int_field(line, "loot_error_code=")
+			result["loot_type"] = _extract_int_field(line, "loot_type=")
+			result["gold"] = _extract_int_field(line, "gold=")
+			result["item_count"] = _extract_int_field(line, "item_count=")
+		elif line.begins_with("CORPSE_LOOT_ITEM"):
 			result["items"].append({
 				"slot": _extract_int_field(line, "slot="),
 				"item_id": _extract_int_field(line, "item_id="),

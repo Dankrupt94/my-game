@@ -256,6 +256,15 @@ Stage 17 now also reads item object value fields for inventory item GUIDs:
 | `ITEM_FIELD_DURABILITY` | `OBJECT_END + 0x0036` | 1 x `uint32` | Current durability when present |
 | `ITEM_FIELD_MAXDURABILITY` | `OBJECT_END + 0x0037` | 1 x `uint32` | Maximum durability when present |
 
+Stage 17 corpse-loot work also reads unit state from creature value updates:
+
+| Field | AzerothCore index | Size | Stage 17 use |
+| --- | ---: | ---: | --- |
+| `UNIT_FIELD_HEALTH` | `OBJECT_END + 0x0012` | 1 x `uint32` | Detect server-confirmed target death when health becomes `0` |
+| `UNIT_FIELD_MAXHEALTH` | `OBJECT_END + 0x001A` | 1 x `uint32` | Report target max health for validation and future unit frames |
+| `UNIT_FIELD_FLAGS` | `OBJECT_END + 0x0035` | 1 x `uint32` | Preserve server unit flags for future combat/interaction rules |
+| `UNIT_DYNAMIC_FLAGS` | `OBJECT_END + 0x0049` | 1 x `uint32` | Detect `UNIT_DYNFLAG_LOOTABLE` (`0x0001`) before opening corpse loot |
+
 Item template query:
 
 | Direction | Opcode | Payload | Stage 17 use |
@@ -375,18 +384,20 @@ Observed Stage 16 result:
 - Native `--combat-probe` against hostile entry `69` reached a live target, sent movement approach/facing, selected the target, sent `CMSG_ATTACKSWING`, and parsed `SMSG_ATTACKERSTATEUPDATE` opcode `0x14A`.
 - Godot scene `scenes/interaction_combat_view.tscn` uses hostile entry `38` for a stable stationary self-test and passed with `INTERACTION_COMBAT_SELF_TEST_OK gossip_opcode=0x17d combat_opcode=0x14a damage=2 attacker_state=true`.
 
-## Loot Open Slice
+## Loot Slice
 
-Stage 17 adds the first loot protocol surface. This does not yet loot an item or money; it opens or attempts to open loot against a live server target and parses the server answer.
+Stage 17 adds the first loot gameplay path. The initial quick probe attempts to open loot on a live nearby target and expects the server to close/deny it. The expanded corpse-loot probe fights a live target until AzerothCore reports death or `UNIT_DYNFLAG_LOOTABLE`, opens the corpse loot window, picks up item slots, optionally requests money loot, and releases the loot window.
 
 | Opcode | Value | Stage 17 use |
 | --- | ---: | --- |
-| `CMSG_AUTOSTORE_LOOT_ITEM` | `0x108` | Builder support for future item pickup; payload is `uint8 loot_slot` |
+| `CMSG_AUTOSTORE_LOOT_ITEM` | `0x108` | Picks up a specific loot slot; payload is `uint8 loot_slot` |
 | `CMSG_LOOT` | `0x15D` | Opens loot for a creature GUID; payload is the raw 8-byte GUID |
-| `CMSG_LOOT_MONEY` | `0x15E` | Reserved for the next money pickup slice; payload is empty |
+| `CMSG_LOOT_MONEY` | `0x15E` | Requests copper pickup from an open loot window; payload is empty |
 | `CMSG_LOOT_RELEASE` | `0x15F` | Closes an accepted loot window; payload is the raw 8-byte GUID |
 | `SMSG_LOOT_RESPONSE` | `0x160` | Parsed as either a loot error or a loot window |
 | `SMSG_LOOT_RELEASE_RESPONSE` | `0x161` | Parsed as raw GUID plus success byte |
+| `SMSG_LOOT_REMOVED` | `0x165` | Confirms a loot slot was removed after pickup |
+| `SMSG_LOOT_MONEY_NOTIFY` | `0x164` | Confirms money pickup; current live corpse tests had `gold=0`, so this path is implemented but not yet observed with nonzero copper |
 
 `SMSG_LOOT_RESPONSE` error payload:
 
@@ -412,11 +423,24 @@ Stage 17 adds the first loot protocol surface. This does not yet loot an item or
 | random property id | 4 each | Random property id |
 | slot type | 1 each | `0` allow loot, `1` roll ongoing, `2` master, `3` locked, `4` owner |
 
-Observed Stage 17 loot-open result:
+Observed Stage 17 quick loot-open result:
 
 - Native `--loot-open-probe` against nearby creature entry `38` resolved live GUID `0xf130000026000db9`, sent `CMSG_LOOT`, and received `SMSG_LOOT_RELEASE_RESPONSE` (`0x161`) with success byte `1`.
 - Godot `ACORE_LOOT_OPEN_SELF_TEST=1` passed through `scenes/stage17_loot_view.tscn` with release response opcode `0x161`.
-- The release response is expected for this first probe because the target was alive/not lootable. The next loot milestone must connect combat death/corpse state to a real `SMSG_LOOT_RESPONSE` success path, then add `CMSG_LOOT_MONEY` and `CMSG_AUTOSTORE_LOOT_ITEM`.
+- The release response is expected for this probe because the target is alive/not lootable.
+
+Observed Stage 17 corpse-loot result:
+
+- Native and Godot corpse-loot probes use nearby creature entry `299`, move into range with stepped movement packets, select the live target GUID, attack until update fields report death/lootable state, and then send `CMSG_LOOT`.
+- Godot `ACORE_CORPSE_LOOT_SELF_TEST=1` passed through `scenes/stage17_loot_view.tscn` with `dead=true`, `lootable=true`, `loot_response_seen=true`, `item_removed=2`, `release_response=true`, and response opcode `0x160`.
+- The latest Godot corpse-loot run observed `gold=0`, so `CMSG_LOOT_MONEY` / `SMSG_LOOT_MONEY_NOTIFY` remain implemented but still need a nonzero-money loot case for live evidence.
+
+Remaining loot packet work:
+
+- Replace the bounded `Fight + Loot` probe with normal player-controlled interaction, target frames, corpse-click behavior, and loot-window UX.
+- Confirm inventory placement and full-bag failure handling after pickup.
+- Parse and surface loot errors, bind prompts, quest item rules, group loot settings, rolls, master loot, and permission edge cases.
+- Add long-session persistence checks for looted money/items.
 
 ## Chat Say Slice
 

@@ -1295,3 +1295,48 @@ Validation:
 - `ACORE_EQUIPMENT_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `swap_confirmed=true` and `restore_confirmed=true`.
 - `godot-4 --headless --path . --quit` passed.
 - Local `qwen-agent` advisory review returned only checklist reminders; no actionable blocker was confirmed after the native and Godot validations.
+
+## 2026-07-01 - Add Stage 17 Corpse Loot Pickup Slice
+
+Goal: extend the Stage 17 loot work from a not-yet-lootable open probe into a real kill-to-corpse loot pickup path through the Godot client stack.
+
+Plan:
+
+- Parse enough unit value fields to know when the server reports target death and lootable state.
+- Add a bounded native flow that logs in, resolves a nearby live creature, moves into range, attacks until death/lootability, opens corpse loot, picks up loot slots, and releases the loot window.
+- Expose the same flow through the Godot extension and script bridge.
+- Add a `Fight + Loot` control and headless corpse-loot self-test to the Stage 17 loot scene.
+- Keep the previous quick loot-open probe working as a regression guard.
+- Document the new packet/update-field behavior and the remaining full-playable-client gaps.
+
+Result:
+
+- Added unit health, max-health, unit-flags, and dynamic-flags parsing to visible object summaries.
+- Added value-only update handling for visible creature updates so target health/dynamic flag changes can be observed after initial spawn.
+- Added `CorpseLootProbeResult` and native `--corpse-loot-probe`.
+- Added stepped approach movement for the fight-to-loot path, while restoring the older quick loot-open movement path.
+- Added `AcoreProtocolClient.corpse_loot_probe(...)` and `ProtocolClientBridge.corpse_loot_probe(...)`.
+- Added `Fight + Loot` and `ACORE_CORPSE_LOOT_SELF_TEST=1` support to `scenes/stage17_loot_view.tscn`.
+- Trimmed large internal arrays from Godot probe failure summaries so a failed loot self-test reports useful facts instead of flooding the editor output.
+- Local test character `Codexstage` was leveled locally to make repeated combat validation reliable; no proprietary assets or secrets were committed.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `cmake --build native/godot_protocol_extension/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- `git diff --check` passed.
+- `./tools/build_godot_protocol_extension_compat.sh` passed and refreshed the Godot-loadable extension plus compatibility helper.
+- `native/protocol_client/build-compat/acore_protocol_client --self-test` passed.
+- `godot-4 --headless --path . --quit` passed after the compatibility rebuild.
+- `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with release response opcode `0x161`, proving the previous quick loot checkpoint still works.
+- `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `dead=true`, `lootable=true`, `loot_response=true`, `item_removed=2`, `release_response=true`, and response opcode `0x160`.
+- The latest corpse-loot run had `gold=0`, so the money-loot packet path is implemented but still needs a nonzero-copper live validation case.
+- Local `qwen-agent` advisory review returned `no blocker`.
+
+Remaining work:
+
+- Replace the bounded test button with normal player-controlled combat, target frames, corpse-click interaction, and loot-window UX.
+- Confirm inventory placement after item pickup and handle full bags, locked items, bind prompts, and loot failures.
+- Collect nonzero-money loot evidence for `CMSG_LOOT_MONEY` / `SMSG_LOOT_MONEY_NOTIFY`.
+- Add group loot, roll, master-loot, quest-loot, and long-session persistence checks.

@@ -3,7 +3,8 @@ extends Control
 const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
 
 const TEST_CHARACTER_NAME := "Codexstage"
-const LOOT_TARGET_ENTRY := 38
+const LOOT_OPEN_TARGET_ENTRY := 38
+const CORPSE_LOOT_TARGET_ENTRY := 299
 
 var status_label: Label
 var target_label: Label
@@ -14,7 +15,10 @@ var self_test_finished := false
 
 func _ready() -> void:
 	_build_view()
-	call_deferred("_run_loot_probe")
+	if OS.get_environment("ACORE_CORPSE_LOOT_SELF_TEST") == "1":
+		call_deferred("_run_corpse_loot_probe")
+	else:
+		call_deferred("_run_loot_probe")
 
 
 func _build_view() -> void:
@@ -67,6 +71,11 @@ func _build_view() -> void:
 	refresh_button.pressed.connect(_run_loot_probe)
 	action_row.add_child(refresh_button)
 
+	var corpse_button := Button.new()
+	corpse_button.text = "Fight + Loot"
+	corpse_button.pressed.connect(_run_corpse_loot_probe)
+	action_row.add_child(corpse_button)
+
 	loot_label = Label.new()
 	loot_label.text = "Loot: idle"
 	loot_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -82,23 +91,23 @@ func _run_loot_probe() -> void:
 	loot_label.text = "Loot: opening"
 	item_list.clear()
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.loot_open_probe(TEST_CHARACTER_NAME, LOOT_TARGET_ENTRY, "Nearby Creature")
+	var result := bridge.loot_open_probe(TEST_CHARACTER_NAME, LOOT_OPEN_TARGET_ENTRY, "Nearby Creature")
 	var ok := bool(result.get("ok", false))
 	if not ok:
 		status_label.text = "Failed"
-		target_label.text = str(result.get("error", result.get("output", "Loot probe failed")))
+		target_label.text = _failure_summary("Loot probe failed", result)
 		_finish_self_test(false, result)
 		return
 
 	status_label.text = "Ready"
 	target_label.text = "Target %s entry %s, response opcode 0x%s." % [
 		str(result.get("target_guid", "0x0")),
-		str(result.get("target_entry", LOOT_TARGET_ENTRY)),
+		str(result.get("target_entry", LOOT_OPEN_TARGET_ENTRY)),
 		_opcode_hex(int(result.get("response_opcode", 0))),
 	]
 	_render_loot(result)
 	print("LOOT_OPEN_SELF_TEST_READY target_entry=%s loot_response_seen=%s release_response_seen=%s loot_error=%s gold=%s item_count=%s opcode=0x%s" % [
-		str(result.get("target_entry", LOOT_TARGET_ENTRY)),
+		str(result.get("target_entry", LOOT_OPEN_TARGET_ENTRY)),
 		str(result.get("loot_response_seen", false)),
 		str(result.get("loot_release_response_seen", false)),
 		str(result.get("loot_error", false)),
@@ -107,6 +116,41 @@ func _run_loot_probe() -> void:
 		_opcode_hex(int(result.get("response_opcode", 0))),
 	])
 	_finish_self_test(true, result)
+
+
+func _run_corpse_loot_probe() -> void:
+	status_label.text = "Running"
+	loot_label.text = "Loot: fighting"
+	item_list.clear()
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.corpse_loot_probe(TEST_CHARACTER_NAME, CORPSE_LOOT_TARGET_ENTRY, "Nearby Creature")
+	var ok := bool(result.get("ok", false))
+	if not ok:
+		status_label.text = "Failed"
+		target_label.text = _failure_summary("Corpse loot probe failed", result)
+		_finish_corpse_self_test(false, result)
+		return
+
+	status_label.text = "Ready"
+	target_label.text = "Target %s died with lootable=%s, response opcode 0x%s." % [
+		str(result.get("target_guid", "0x0")),
+		str(result.get("target_lootable_seen", false)),
+		_opcode_hex(int(result.get("response_opcode", 0))),
+	]
+	_render_loot(result)
+	print("CORPSE_LOOT_SELF_TEST_READY target_entry=%s dead=%s lootable=%s loot_response_seen=%s money_notify=%s item_removed=%s release_response=%s gold=%s item_count=%s opcode=0x%s" % [
+		str(result.get("target_entry", CORPSE_LOOT_TARGET_ENTRY)),
+		str(result.get("target_dead_seen", false)),
+		str(result.get("target_lootable_seen", false)),
+		str(result.get("loot_response_seen", false)),
+		str(result.get("loot_money_notify_seen", false)),
+		str(result.get("loot_item_removed_count", 0)),
+		str(result.get("loot_release_response_seen", false)),
+		str(result.get("gold", 0)),
+		str(result.get("item_count", 0)),
+		_opcode_hex(int(result.get("response_opcode", 0))),
+	])
+	_finish_corpse_self_test(true, result)
 
 
 func _render_loot(result: Dictionary) -> void:
@@ -150,6 +194,24 @@ func _opcode_hex(value: int) -> String:
 	return "%03x" % [value & 0xFFFF]
 
 
+func _failure_summary(prefix: String, result: Dictionary) -> String:
+	var details: Array[String] = [
+		"target_entry=" + str(result.get("target_entry", "?")),
+		"live_target=" + str(result.get("live_target_found", false)),
+		"dead=" + str(result.get("target_dead_seen", false)),
+		"lootable=" + str(result.get("target_lootable_seen", false)),
+		"loot_response=" + str(result.get("loot_response_seen", false)),
+		"release_response=" + str(result.get("loot_release_response_seen", false)),
+		"opcode=0x" + _opcode_hex(int(result.get("response_opcode", 0))),
+	]
+	var error_text := str(result.get("error", ""))
+	if error_text.is_empty():
+		error_text = str(result.get("output", ""))
+	if not error_text.is_empty():
+		details.append("error=" + error_text.left(180))
+	return prefix + ": " + ", ".join(details)
+
+
 func _finish_self_test(ok: bool, result: Dictionary) -> void:
 	if OS.get_environment("ACORE_LOOT_OPEN_SELF_TEST") != "1":
 		return
@@ -165,5 +227,27 @@ func _finish_self_test(ok: bool, result: Dictionary) -> void:
 		])
 		get_tree().quit(0)
 	else:
-		push_error("LOOT_OPEN_SELF_TEST_FAILED: " + str(result.get("error", result.get("output", "unknown"))))
+		push_error("LOOT_OPEN_SELF_TEST_FAILED: " + _failure_summary("Loot probe failed", result))
+		get_tree().quit(1)
+
+
+func _finish_corpse_self_test(ok: bool, result: Dictionary) -> void:
+	if OS.get_environment("ACORE_CORPSE_LOOT_SELF_TEST") != "1":
+		return
+	if self_test_finished:
+		return
+	self_test_finished = true
+
+	if ok:
+		print("CORPSE_LOOT_SELF_TEST_OK response_opcode=0x%s dead=%s loot_response=%s money_notify=%s item_removed=%s release_response=%s" % [
+			_opcode_hex(int(result.get("response_opcode", 0))),
+			str(result.get("target_dead_seen", false)),
+			str(result.get("loot_response_seen", false)),
+			str(result.get("loot_money_notify_seen", false)),
+			str(result.get("loot_item_removed_count", 0)),
+			str(result.get("loot_release_response_seen", false)),
+		])
+		get_tree().quit(0)
+	else:
+		push_error("CORPSE_LOOT_SELF_TEST_FAILED: " + _failure_summary("Corpse loot probe failed", result))
 		get_tree().quit(1)

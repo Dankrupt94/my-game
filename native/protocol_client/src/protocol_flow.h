@@ -291,6 +291,51 @@ struct LootOpenProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct CorpseLootProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    bool live_target_found = false;
+    bool target_has_position = false;
+    float target_x = 0;
+    float target_y = 0;
+    float target_z = 0;
+    bool target_health_seen = false;
+    std::uint32_t target_health = 0;
+    bool target_max_health_seen = false;
+    std::uint32_t target_max_health = 0;
+    bool target_dynamic_flags_seen = false;
+    std::uint32_t target_dynamic_flags = 0;
+    bool target_dead_seen = false;
+    bool target_lootable_seen = false;
+    bool approach_movement_sent = false;
+    bool return_movement_sent = false;
+    bool selection_sent = false;
+    bool attack_sent = false;
+    bool attack_stop_sent = false;
+    std::size_t attacker_state_update_count = 0;
+    AttackerStateUpdateSummary attacker_state_update;
+    std::uint32_t total_damage = 0;
+    bool loot_open_sent = false;
+    bool loot_response_seen = false;
+    bool loot_money_sent = false;
+    bool loot_money_notify_seen = false;
+    std::uint32_t loot_money_amount = 0;
+    std::uint8_t loot_money_display_type = 0;
+    std::size_t loot_item_pickup_sent_count = 0;
+    std::size_t loot_item_removed_count = 0;
+    bool loot_release_sent = false;
+    bool loot_release_response_seen = false;
+    bool loot_release_success = false;
+    std::uint16_t response_opcode = 0;
+    LootResponseSummary loot;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -463,6 +508,16 @@ TargetedSpellCastProbeResult cast_spell_at_target_probe(
     FlowOptions options = {});
 
 LootOpenProbeResult loot_open_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options = {});
+
+CorpseLootProbeResult corpse_loot_probe(
     std::string const& host,
     std::string const& port,
     std::string const& account,

@@ -161,6 +161,10 @@ struct UpdateFieldValue
 
 constexpr std::uint32_t UnitEndField = 0x0006 + 0x008E;
 constexpr std::uint32_t ObjectFieldEntry = 0x0003;
+constexpr std::uint32_t UnitFieldHealth = 0x0006 + 0x0012;
+constexpr std::uint32_t UnitFieldMaxHealth = 0x0006 + 0x001A;
+constexpr std::uint32_t UnitFieldFlags = 0x0006 + 0x0035;
+constexpr std::uint32_t UnitDynamicFlags = 0x0006 + 0x0049;
 constexpr std::uint32_t ItemFieldStackCount = 0x0006 + 0x0008;
 constexpr std::uint32_t ItemFieldDurability = 0x0006 + 0x0036;
 constexpr std::uint32_t ItemFieldMaxDurability = 0x0006 + 0x0037;
@@ -665,7 +669,8 @@ VisibleObjectSummary make_visible_object(
     std::uint8_t update_type,
     std::uint64_t guid,
     std::uint8_t object_type,
-    ParsedMovementUpdate const& movement)
+    ParsedMovementUpdate const& movement,
+    std::vector<UpdateFieldValue> const& values)
 {
     VisibleObjectSummary object;
     object.guid = guid;
@@ -682,6 +687,10 @@ VisibleObjectSummary make_visible_object(
     object.y = movement.y;
     object.z = movement.z;
     object.orientation = movement.orientation;
+    object.health_seen = update_value_at(values, UnitFieldHealth, object.health);
+    object.max_health_seen = update_value_at(values, UnitFieldMaxHealth, object.max_health);
+    object.unit_flags_seen = update_value_at(values, UnitFieldFlags, object.unit_flags);
+    object.dynamic_flags_seen = update_value_at(values, UnitDynamicFlags, object.dynamic_flags);
     return object;
 }
 }
@@ -1351,6 +1360,10 @@ UpdateObjectSummary parse_update_object_summary(
                 {
                     apply_player_inventory_values(summary.inventory, guid, values);
                 }
+                if (high_guid_has_entry(high_guid(guid)) && !high_guid_is_item(high_guid(guid)))
+                {
+                    summary.visible_objects.push_back(make_visible_object(update_type, guid, 0, {}, values));
+                }
                 continue;
             }
 
@@ -1376,7 +1389,7 @@ UpdateObjectSummary parse_update_object_summary(
                 }
                 if (!item_object)
                 {
-                    summary.visible_objects.push_back(make_visible_object(update_type, guid, object_type, movement));
+                    summary.visible_objects.push_back(make_visible_object(update_type, guid, object_type, movement, values));
                 }
                 continue;
             }

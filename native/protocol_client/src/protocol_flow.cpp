@@ -652,6 +652,72 @@ float facing_angle(float from_x, float from_y, float to_x, float to_y)
     return angle;
 }
 
+void send_stepped_approach(
+    AuthenticatedWorldSession& session,
+    std::uint64_t player_guid,
+    float start_x,
+    float start_y,
+    float start_z,
+    float target_x,
+    float target_y,
+    float target_z,
+    float stop_distance)
+{
+    float dx = target_x - start_x;
+    float dy = target_y - start_y;
+    float distance = std::sqrt(dx * dx + dy * dy);
+    if (distance < 0.01f)
+    {
+        return;
+    }
+
+    float const travel = std::max(0.0f, distance - stop_distance);
+    if (travel < 0.01f)
+    {
+        return;
+    }
+
+    float const direction_x = dx / distance;
+    float const direction_y = dy / distance;
+    float const orientation = facing_angle(start_x, start_y, target_x, target_y);
+    float travelled = 0.0f;
+    bool started = false;
+    constexpr float StepDistance = 4.0f;
+
+    while (travelled < travel)
+    {
+        travelled = std::min(travel, travelled + StepDistance);
+
+        MovementSample movement;
+        movement.flags = travelled < travel ? 0x00000001 : 0;
+        movement.flags2 = 0;
+        movement.time = movement_timestamp_ms();
+        movement.x = start_x + direction_x * travelled;
+        movement.y = start_y + direction_y * travelled;
+        movement.z = target_z;
+        movement.orientation = orientation;
+        movement.fall_time = 0;
+
+        if (!started)
+        {
+            MovementSample start = movement;
+            start.flags = 0x00000001;
+            start.x = start_x;
+            start.y = start_y;
+            start.z = start_z;
+            write_world_packet(session.socket.get(), MSG_MOVE_START_FORWARD, build_movement_payload(player_guid, start), &session.crypt);
+            started = true;
+        }
+
+        write_world_packet(
+            session.socket.get(),
+            movement.flags == 0 ? MSG_MOVE_STOP : MSG_MOVE_HEARTBEAT,
+            build_movement_payload(player_guid, movement),
+            &session.crypt);
+        std::this_thread::sleep_for(std::chrono::milliseconds(450));
+    }
+}
+
 std::uint16_t selector_high_guid(std::uint64_t selector)
 {
     return static_cast<std::uint16_t>((selector >> 48) & 0xFFFF);
@@ -780,6 +846,62 @@ bool parse_loot_release_response(
     }
     success = payload[8] != 0;
     return true;
+}
+
+bool parse_loot_money_notify(
+    std::span<const std::uint8_t> payload,
+    std::uint32_t& amount,
+    std::uint8_t& display_type)
+{
+    if (payload.size() < 5)
+    {
+        return false;
+    }
+    amount = read_le_u32(payload, 0);
+    display_type = payload[4];
+    return true;
+}
+
+void apply_corpse_target_update(CorpseLootProbeResult& result, VisibleObjectSummary const& object)
+{
+    if (object.guid != result.target_guid)
+    {
+        return;
+    }
+
+    if (object.has_position)
+    {
+        result.target_has_position = true;
+        result.target_x = object.x;
+        result.target_y = object.y;
+        result.target_z = object.z;
+    }
+    if (object.health_seen)
+    {
+        result.target_health_seen = true;
+        result.target_health = object.health;
+        if (object.health == 0)
+        {
+            result.target_dead_seen = true;
+        }
+    }
+    if (object.max_health_seen)
+    {
+        result.target_max_health_seen = true;
+        result.target_max_health = object.max_health;
+    }
+    if (object.dynamic_flags_seen)
+    {
+        constexpr std::uint32_t UnitDynflagLootable = 0x0001;
+        constexpr std::uint32_t UnitDynflagDead = 0x0020;
+        result.target_dynamic_flags_seen = true;
+        result.target_dynamic_flags = object.dynamic_flags;
+        result.target_lootable_seen = (object.dynamic_flags & UnitDynflagLootable) != 0;
+        if ((object.dynamic_flags & UnitDynflagDead) != 0)
+        {
+            result.target_dead_seen = true;
+        }
+    }
 }
 
 ActionButtonSummary action_button_at(ActionButtonsSummary const& summary, std::uint8_t button)
@@ -3150,6 +3272,361 @@ LootOpenProbeResult loot_open_probe(
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
 
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+CorpseLootProbeResult corpse_loot_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options)
+{
+    if (target_guid == 0)
+    {
+        throw std::runtime_error("corpse loot target guid or entry must be non-zero");
+    }
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+
+    CorpseLootProbeResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.target_entry = target_entry_from_selector(target_guid);
+    result.target_name = target_name;
+
+    bool logged_in_world = false;
+    for (int i = 0; i < 180; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            result.visible_objects.insert(
+                result.visible_objects.end(),
+                update.visible_objects.begin(),
+                update.visible_objects.end());
+
+            if (!result.live_target_found)
+            {
+                std::optional<VisibleObjectSummary> target = choose_visible_target(result.visible_objects, target_guid, login);
+                if (target)
+                {
+                    result.target_guid = target->guid;
+                    result.target_entry = target->entry;
+                    result.target_name = target_name;
+                    result.live_target_found = true;
+                    apply_corpse_target_update(result, *target);
+                }
+            }
+            for (VisibleObjectSummary const& object : update.visible_objects)
+            {
+                apply_corpse_target_update(result, object);
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            logged_in_world = true;
+            if (result.live_target_found)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    auto stop_and_return = [&]()
+    {
+        if (result.attack_sent && !result.attack_stop_sent)
+        {
+            write_world_packet(session->socket.get(), CMSG_ATTACKSTOP, {}, &session->crypt);
+            result.attack_stop_sent = true;
+        }
+
+        if (result.approach_movement_sent && !result.return_movement_sent)
+        {
+            MovementSample back;
+            back.flags = 0;
+            back.flags2 = 0;
+            back.time = movement_timestamp_ms();
+            back.x = login.x;
+            back.y = login.y;
+            back.z = login.z;
+            back.orientation = login.orientation;
+            back.fall_time = 0;
+            write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, back), &session->crypt);
+            result.return_movement_sent = true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        }
+    };
+
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before corpse loot probe");
+    }
+    if (!result.live_target_found)
+    {
+        (void)request_graceful_logout(*session, options);
+        return result;
+    }
+
+    float current_x = login.x;
+    float current_y = login.y;
+    float current_z = login.z;
+    auto update_current_stop_point = [&]()
+    {
+        float dx = current_x - result.target_x;
+        float dy = current_y - result.target_y;
+        float distance = std::sqrt(dx * dx + dy * dy);
+        if (distance < 0.01f)
+        {
+            dx = 1.0f;
+            dy = 0.0f;
+            distance = 1.0f;
+        }
+        current_x = result.target_x + (dx / distance) * 1.5f;
+        current_y = result.target_y + (dy / distance) * 1.5f;
+        current_z = result.target_z;
+    };
+
+    if (result.target_has_position)
+    {
+        send_stepped_approach(
+            *session,
+            selected.guid,
+            login.x,
+            login.y,
+            login.z,
+            result.target_x,
+            result.target_y,
+            result.target_z,
+            1.5f);
+        update_current_stop_point();
+        result.approach_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+
+    write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.selection_sent = true;
+    write_world_packet(session->socket.get(), CMSG_ATTACKSWING, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.attack_sent = true;
+
+    auto last_attack_sent = std::chrono::steady_clock::now();
+    auto last_approach_sent = last_attack_sent;
+    auto const combat_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+    auto maintain_combat = [&]()
+    {
+        auto const now = std::chrono::steady_clock::now();
+        if (result.loot_open_sent || result.target_dead_seen)
+        {
+            return;
+        }
+        if (result.target_has_position && now - last_approach_sent > std::chrono::seconds(6))
+        {
+            send_stepped_approach(
+                *session,
+                selected.guid,
+                current_x,
+                current_y,
+                current_z,
+                result.target_x,
+                result.target_y,
+                result.target_z,
+                1.5f);
+            update_current_stop_point();
+            last_approach_sent = std::chrono::steady_clock::now();
+        }
+        if (now - last_attack_sent > std::chrono::seconds(3))
+        {
+            write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.target_guid), &session->crypt);
+            write_world_packet(session->socket.get(), CMSG_ATTACKSWING, build_raw_guid_payload(result.target_guid), &session->crypt);
+            last_attack_sent = std::chrono::steady_clock::now();
+        }
+    };
+
+    while (std::chrono::steady_clock::now() < combat_deadline)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            maintain_combat();
+            continue;
+        }
+
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            result.visible_objects.insert(
+                result.visible_objects.end(),
+                update.visible_objects.begin(),
+                update.visible_objects.end());
+            for (VisibleObjectSummary const& object : update.visible_objects)
+            {
+                apply_corpse_target_update(result, object);
+            }
+        }
+        else if (packet->opcode == SMSG_ATTACKERSTATEUPDATE)
+        {
+            result.attacker_state_update = parse_attacker_state_update(packet->payload);
+            if (result.attacker_state_update.parsed)
+            {
+                ++result.attacker_state_update_count;
+                result.total_damage += result.attacker_state_update.total_damage;
+                if (result.response_opcode == 0)
+                {
+                    result.response_opcode = packet->opcode;
+                }
+            }
+        }
+        else if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            continue;
+        }
+        else if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        else
+        {
+            result.skipped_opcodes.push_back(packet->opcode);
+        }
+
+        if (!result.loot_open_sent && (result.target_lootable_seen || result.target_dead_seen))
+        {
+            if (!result.attack_stop_sent)
+            {
+                write_world_packet(session->socket.get(), CMSG_ATTACKSTOP, {}, &session->crypt);
+                result.attack_stop_sent = true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            write_world_packet(session->socket.get(), CMSG_LOOT, build_loot_payload(result.target_guid), &session->crypt);
+            result.loot_open_sent = true;
+        }
+
+        maintain_combat();
+
+        if (packet->opcode == SMSG_LOOT_RESPONSE)
+        {
+            result.loot = parse_loot_response(packet->payload);
+            result.loot_response_seen = result.loot.parsed;
+            result.response_opcode = packet->opcode;
+            if (!result.loot_response_seen || result.loot.error)
+            {
+                break;
+            }
+
+            if (result.loot.gold > 0)
+            {
+                write_world_packet(session->socket.get(), CMSG_LOOT_MONEY, {}, &session->crypt);
+                result.loot_money_sent = true;
+            }
+            for (LootItemSummary const& item : result.loot.items)
+            {
+                write_world_packet(
+                    session->socket.get(),
+                    CMSG_AUTOSTORE_LOOT_ITEM,
+                    build_autostore_loot_item_payload(item.slot),
+                    &session->crypt);
+                ++result.loot_item_pickup_sent_count;
+            }
+
+            write_world_packet(session->socket.get(), CMSG_LOOT_RELEASE, build_loot_release_payload(result.target_guid), &session->crypt);
+            result.loot_release_sent = true;
+            auto const loot_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(8);
+            while (std::chrono::steady_clock::now() < loot_deadline)
+            {
+                auto loot_packet = read_world_packet_optional(
+                    session->socket.get(),
+                    &session->crypt,
+                    options.trace_world_packets,
+                    250);
+                if (!loot_packet)
+                {
+                    continue;
+                }
+                if (loot_packet->opcode == SMSG_LOOT_MONEY_NOTIFY)
+                {
+                    result.loot_money_notify_seen = parse_loot_money_notify(
+                        loot_packet->payload,
+                        result.loot_money_amount,
+                        result.loot_money_display_type);
+                    continue;
+                }
+                if (loot_packet->opcode == SMSG_LOOT_REMOVED)
+                {
+                    ++result.loot_item_removed_count;
+                    continue;
+                }
+                if (loot_packet->opcode == SMSG_LOOT_RELEASE_RESPONSE)
+                {
+                    result.loot_release_response_seen = parse_loot_release_response(
+                        loot_packet->payload,
+                        result.target_guid,
+                        result.loot_release_success);
+                    break;
+                }
+                if (loot_packet->opcode == SMSG_TIME_SYNC_REQ)
+                {
+                    answer_time_sync_request(*session, *loot_packet);
+                    continue;
+                }
+                result.skipped_opcodes.push_back(loot_packet->opcode);
+            }
+            break;
+        }
+
+        if (packet->opcode == SMSG_LOOT_RELEASE_RESPONSE)
+        {
+            result.loot_release_response_seen = parse_loot_release_response(
+                packet->payload,
+                result.target_guid,
+                result.loot_release_success);
+            result.response_opcode = packet->opcode;
+            break;
+        }
+    }
+
+    stop_and_return();
     (void)request_graceful_logout(*session, options);
     return result;
 }

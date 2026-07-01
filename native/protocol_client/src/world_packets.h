@@ -116,6 +116,14 @@ struct VisibleObjectSummary
     float y = 0;
     float z = 0;
     float orientation = 0;
+    bool health_seen = false;
+    std::uint32_t health = 0;
+    bool max_health_seen = false;
+    std::uint32_t max_health = 0;
+    bool unit_flags_seen = false;
+    std::uint32_t unit_flags = 0;
+    bool dynamic_flags_seen = false;
+    std::uint32_t dynamic_flags = 0;
 };
 
 struct InventorySlotSummary

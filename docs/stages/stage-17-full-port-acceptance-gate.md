@@ -96,3 +96,14 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Validation: the Ubuntu 22.04 Docker compatibility build refreshed the Godot-loadable extension and compatibility helper.
 - Validation: `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with release response opcode `0x161`.
 - Remaining work: kill-to-corpse combat loop, real loot-window success response, money pickup, item pickup, inventory handoff, loot errors in UI, corpse release after looting, group loot/rolls, and persistence checks over normal play.
+
+### 2026-07-01 - Corpse Loot Pickup Probe
+
+- Extended the loot slice from a not-yet-lootable open request into a bounded kill-to-corpse pickup flow.
+- The visible-object parser now reads unit health, max health, unit flags, and dynamic flags from create/value updates so the client can wait for real server death/lootable state.
+- Added a stepped approach helper for combat positioning, then repeatedly maintains selection/attack until the target reports health `0` or `UNIT_DYNFLAG_LOOTABLE`.
+- The native flow opens corpse loot, sends `CMSG_LOOT_MONEY` when the loot window contains copper, sends `CMSG_AUTOSTORE_LOOT_ITEM` for each loot slot, observes `SMSG_LOOT_REMOVED`, and releases the loot window.
+- `scenes/stage17_loot_view.tscn` now exposes a `Fight + Loot` control and `ACORE_CORPSE_LOOT_SELF_TEST=1`.
+- Validation: `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `dead=true`, `lootable=true`, `loot_response=true`, `item_removed=2`, `release_response=true`, and response opcode `0x160`.
+- Validation: `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` still passed with release response opcode `0x161` after the corpse-loot movement work.
+- Remaining work: turn this from a test button into normal player-controlled combat-to-loot UX, integrate actual inventory slot updates after pickup, collect nonzero-money evidence, handle full bags/loot errors, support group loot and rolls, and add long-session persistence checks.
