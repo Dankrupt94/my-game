@@ -42,7 +42,7 @@ The full Stage 17 engine checklist is [WotLK Client Parity Engine Spec](wotlk_cl
 | Auction house | Planned | Browse/search/bid/buyout/sell packets. | Auction house browser. | Browse auction listings from Godot. | Later-stage high-complexity UI/protocol work. |
 | Maps/minimap | Planned | Map position, zone/area, POIs, discovered areas. | Map and minimap. | Show current map/zone and player marker. | Visual fidelity depends on local-only asset/data pipeline. |
 | Addon-like UI customization | Planned | Saved UI layout/config only; not Lua compatibility initially. | Movable/resizable panels and saved settings. | Persist UI layout across runs. | Full addon API is a separate major effort. |
-| Settings | Planned | Video/audio/input/interface settings. | Options menu. | Persist settings and apply keybindings. | Godot-native implementation with compatibility mapping. |
+| Settings | Working first slice | Window resolution, fullscreen/windowed mode, VSync, master/music/SFX/ambience volume, a few gameplay toggles, keybind persistence, and runtime `InputMap` application. | `scenes/settings_view.tscn` with Video, Audio, Gameplay, and Keybindings tabs, reachable from the dashboard. | `ACORE_SETTINGS_SELF_TEST=1 godot-4 --headless --path . res://scenes/settings_view.tscn` mutates a temporary settings file, reloads it, applies it, verifies the keybind in `InputMap`, and removes the temporary file. | Godot now has a first options menu with saved preferences and runtime keybind application. Remaining settings parity includes mouse/camera options, UI scale, combat text/chat options, broader keybind coverage, per-character/account scoping decisions, and wiring the settings into persistent gameplay scenes. |
 
 ## Compatibility Rules
 

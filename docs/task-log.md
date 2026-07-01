@@ -1656,3 +1656,35 @@ Remaining work:
 
 - Add real spell names/icons/ranks through local-only metadata and asset lookup.
 - Expand disabled-state explanations once more server-state cases are observed.
+
+## 2026-07-01 - Add Stage 17 Settings And Keybindings Slice
+
+Goal: begin the normal-client settings surface required by the Stage 17 parity spec.
+
+Plan:
+
+- Preserve the untracked settings scene work already present in the workspace.
+- Fix parser/runtime issues and prevent the headless self-test from permanently altering normal user settings.
+- Expose the settings scene from the dashboard.
+- Document the first settings slice honestly as working but incomplete.
+
+Result:
+
+- Added `scenes/settings_view.tscn` and `scripts/settings_view.gd`.
+- Added a dashboard `Settings` action.
+- Implemented saved window resolution, fullscreen/windowed mode, VSync, master/music/SFX/ambience volumes, a few gameplay toggles, and keybind persistence.
+- Runtime application now updates window mode, window size, VSync, audio bus volume/mute state, and `InputMap` bindings.
+- The self-test uses `user://settings-self-test.cfg` and cleans it up instead of writing to the normal settings file.
+
+Validation:
+
+- `ACORE_SETTINGS_SELF_TEST=1 godot-4 --headless --path . res://scenes/settings_view.tscn` passed.
+- `godot-4 --headless --path . --scene res://scenes/settings_view.tscn --quit` loaded the scene in normal mode.
+- `godot-4 --headless --path . --quit` passed.
+- Local `qwen-agent` advisory review reported no blockers for the settings scene and dashboard navigation changes.
+
+Remaining work:
+
+- Add mouse/camera sensitivity, UI scale, combat text/chat options, and broader keybind coverage.
+- Decide account-wide versus character-specific settings storage.
+- Wire the saved settings into the persistent gameplay HUD and camera/input systems.

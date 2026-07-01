@@ -218,3 +218,14 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed after the row rendering update.
 - Local `qwen-agent` advisory review reported no blockers for the row rendering update.
 - Remaining work: wire real spell names/icons/ranks from the local-only data/asset pipeline and expand disabled-state explanations.
+
+### 2026-07-01 - Settings And Keybindings First Slice
+
+- Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.
+- Added dashboard navigation to the settings scene.
+- The scene saves preferences to `user://settings.cfg`, applies window mode, window size, VSync, audio bus volume/mute state, and keybindings through `InputMap`.
+- The self-test uses `user://settings-self-test.cfg`, removes it before and after validation, and does not commit or print secrets.
+- Validation: `ACORE_SETTINGS_SELF_TEST=1 godot-4 --headless --path . res://scenes/settings_view.tscn` passed.
+- Validation: `godot-4 --headless --path . --scene res://scenes/settings_view.tscn --quit` loaded the scene outside self-test mode.
+- Local `qwen-agent` advisory review reported no blockers for the settings scene and dashboard navigation changes.
+- Remaining work: add mouse/camera settings, UI scale, more complete keybind coverage, per-character/account scope decisions, and use these settings from the persistent gameplay HUD.
