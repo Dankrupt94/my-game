@@ -558,6 +558,64 @@ int action_buttons(
     return result.action_buttons_seen && result.action_buttons.buttons.size() == MaxActionButtons ? 0 : 1;
 }
 
+char const* inventory_section_name(std::uint8_t section)
+{
+    switch (section)
+    {
+        case 0:
+            return "equipment";
+        case 1:
+            return "bag";
+        case 2:
+            return "backpack";
+        default:
+            return "unknown";
+    }
+}
+
+int inventory_snapshot(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::InventorySnapshotResult result = acore_protocol::read_inventory_snapshot(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "INVENTORY_SNAPSHOT"
+              << " character=\"" << result.character.name << "\""
+              << " inventory_seen=" << (result.inventory_seen ? 1 : 0)
+              << " logged_in_world=" << (result.logged_in_world ? 1 : 0)
+              << " player_guid=0x" << std::hex << result.inventory.player_guid << std::dec
+              << " coinage_seen=" << (result.inventory.coinage_seen ? 1 : 0)
+              << " coinage=" << result.inventory.coinage
+              << " slot_count=" << result.inventory.slots.size()
+              << " populated_count=" << result.inventory.populated_count
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+
+    for (InventorySlotSummary const& slot : result.inventory.slots)
+    {
+        std::cout << "INVENTORY_SLOT"
+                  << " slot=" << static_cast<int>(slot.slot)
+                  << " section=" << inventory_section_name(slot.section)
+                  << " field_seen=" << (slot.field_seen ? 1 : 0)
+                  << " populated=" << (slot.populated ? 1 : 0)
+                  << " item_guid=0x" << std::hex << slot.item_guid << std::dec
+                  << "\n";
+    }
+    return result.inventory_seen && result.inventory.slots.size() == PlayerInventorySnapshotSlots ? 0 : 1;
+}
+
 int set_action_button(
     std::string const& host,
     std::string const& port,
@@ -762,6 +820,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-whisper-self <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --spellbook <host> <port> <account> <character-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --action-buttons <host> <port> <account> <character-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --inventory-snapshot <host> <port> <account> <character-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --set-action-button <host> <port> <account> <character-name> <button> <action> <type>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --cast-spell <host> <port> <account> <character-name> <spell-id>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --cast-spell-target <host> <port> <account> <character-name> <spell-id> <target-guid-or-entry> <target-name>\n"
@@ -841,6 +900,11 @@ int main(int argc, char** argv)
         if (argc == 6 && std::strcmp(argv[1], "--action-buttons") == 0)
         {
             return action_buttons(argv[2], argv[3], argv[4], argv[5]);
+        }
+
+        if (argc == 6 && std::strcmp(argv[1], "--inventory-snapshot") == 0)
+        {
+            return inventory_snapshot(argv[2], argv[3], argv[4], argv[5]);
         }
 
         if (argc == 9 && std::strcmp(argv[1], "--set-action-button") == 0)

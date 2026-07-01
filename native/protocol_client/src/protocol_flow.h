@@ -163,6 +163,16 @@ struct ActionButtonsResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct InventorySnapshotResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    PlayerInventorySummary inventory;
+    bool inventory_seen = false;
+    bool logged_in_world = false;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct SetActionButtonProbeResult
 {
     RealmInfo realm;
@@ -318,6 +328,14 @@ SpellbookResult read_initial_spellbook(
     FlowOptions options = {});
 
 ActionButtonsResult read_action_buttons(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    FlowOptions options = {});
+
+InventorySnapshotResult read_inventory_snapshot(
     std::string const& host,
     std::string const& port,
     std::string const& account,

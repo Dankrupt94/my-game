@@ -81,6 +81,12 @@ public:
         godot::String const& account,
         godot::String const& password,
         godot::String const& character_name);
+    godot::Dictionary inventory_snapshot(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name);
     godot::Dictionary set_action_button(
         godot::String const& host,
         godot::String const& port,

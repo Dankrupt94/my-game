@@ -1,6 +1,6 @@
 # Client Feature Parity Matrix
 
-Status: Active during Stage 16
+Status: Active during Stage 16 and Stage 17 gate work
 
 ## Purpose
 
@@ -24,7 +24,7 @@ The target is not a companion dashboard, a partial client, or a reimagined MMO. 
 | Feature Area | Stage 16 Status | Protocol/Data Targets | Godot Surface | Validation Target | Current Notes |
 | --- | --- | --- | --- | --- | --- |
 | Chat | Working expanded slice | `CMSG_MESSAGECHAT`, `SMSG_MESSAGECHAT`, basic say type, self-whisper type, race language selection, server echo parse. | `scenes/stage16_chat_view.tscn` with chat log, mode selector, input, and send button. | `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` returns say echo and self-whisper/inform responses through opcode `0x096`. | Say and self-whisper round trips work. Remaining chat parity includes true receiver-side whispers, channels, party/guild/raid chat, system filters, tabs, history, and social integration. |
-| Inventory | Planned | Bag inventory lists, item update fields, swap/split/use packets. | Backpack and bag grid. | Load inventory from live character and move/use a safe item. | Needs fuller item update-field parsing. |
+| Inventory | Working first Stage 17 slice | Player private update fields for equipped slots, bag slots, backpack slots, item GUIDs, and coinage field detection. | `scenes/stage17_inventory_view.tscn` with 39-slot equipment/bag/backpack grid. | `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` returns 39 slots and live populated item GUIDs for `Codexstage`. | Read-only inventory slot visibility works through the Godot client path. Remaining inventory parity includes item template lookup, stack counts, item names/icons, durability, bag contents beyond backpack, split/swap/use/destroy packets, loot handoff, and persistence checks after item actions. |
 | Equipment | Planned | Equipment slots, durability, item stats, equip/unequip packets. | Character paper doll. | Equip or unequip a harmless item and confirm server state. | Depends on inventory parsing. |
 | Targeting and combat | Working expanded slice | `CMSG_SET_SELECTION`, `CMSG_ATTACKSWING`, `CMSG_ATTACKSTOP`, `SMSG_ATTACKSTART`, `SMSG_ATTACKSTOP`, `SMSG_ATTACKERSTATEUPDATE`, time-sync response, movement approach/facing. | `scenes/interaction_combat_view.tscn` with live NPC interaction plus parsed combat feedback. | `ACORE_INTERACTION_COMBAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/interaction_combat_view.tscn` receives `SMSG_GOSSIP_MESSAGE` opcode `0x17D` and parsed `SMSG_ATTACKERSTATEUPDATE` opcode `0x14A`. | Godot now parses melee damage state from a live hostile target. Remaining combat parity includes health deltas, threat, death, loot transition, ranged combat, spell combat consequences, swing timers, auto-repeat combat state, and target/unit frames. |
 | Loot | Planned | Loot response packets, loot slots, money, roll flows. | Loot window. | Kill a creature and loot from Godot. | Depends on complete combat loop. |

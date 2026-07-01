@@ -171,6 +171,55 @@ Array action_button_array(std::vector<ActionButtonSummary> const& buttons)
     return values;
 }
 
+String inventory_section_name(std::uint8_t section)
+{
+    switch (section)
+    {
+        case 0:
+            return "equipment";
+        case 1:
+            return "bag";
+        case 2:
+            return "backpack";
+        default:
+            return "unknown";
+    }
+}
+
+Dictionary inventory_slot_dictionary(InventorySlotSummary const& slot)
+{
+    Dictionary value;
+    value["slot"] = static_cast<int>(slot.slot);
+    value["section"] = inventory_section_name(slot.section);
+    value["item_guid"] = guid_to_hex(slot.item_guid);
+    value["field_seen"] = slot.field_seen;
+    value["populated"] = slot.populated;
+    return value;
+}
+
+Array inventory_slot_array(std::vector<InventorySlotSummary> const& slots)
+{
+    Array values;
+    for (InventorySlotSummary const& slot : slots)
+    {
+        values.append(inventory_slot_dictionary(slot));
+    }
+    return values;
+}
+
+Dictionary inventory_dictionary(PlayerInventorySummary const& inventory)
+{
+    Dictionary value;
+    value["seen"] = inventory.seen;
+    value["player_guid"] = guid_to_hex(inventory.player_guid);
+    value["coinage_seen"] = inventory.coinage_seen;
+    value["coinage"] = static_cast<int64_t>(inventory.coinage);
+    value["slot_count"] = static_cast<int>(inventory.slots.size());
+    value["populated_count"] = static_cast<int>(inventory.populated_count);
+    value["slots"] = inventory_slot_array(inventory.slots);
+    return value;
+}
+
 Dictionary spell_cast_response_dictionary(SpellCastResponseSummary const& response)
 {
     Dictionary value;
@@ -289,6 +338,9 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("action_buttons", "host", "port", "account", "password", "character_name"),
         &AcoreProtocolClient::action_buttons);
+    ClassDB::bind_method(
+        D_METHOD("inventory_snapshot", "host", "port", "account", "password", "character_name"),
+        &AcoreProtocolClient::inventory_snapshot);
     ClassDB::bind_method(
         D_METHOD("set_action_button", "host", "port", "account", "password", "character_name", "button", "action", "type"),
         &AcoreProtocolClient::set_action_button);
@@ -633,6 +685,46 @@ Dictionary AcoreProtocolClient::action_buttons(
         result["slot_count"] = static_cast<int>(flow.action_buttons.buttons.size());
         result["populated_count"] = static_cast<int>(flow.action_buttons.populated_count);
         result["buttons"] = action_button_array(flow.action_buttons.buttons);
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::inventory_snapshot(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name)
+{
+    try
+    {
+        acore_protocol::InventorySnapshotResult flow = acore_protocol::read_inventory_snapshot(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name));
+
+        Dictionary result;
+        result["ok"] = flow.inventory_seen && flow.inventory.slots.size() == PlayerInventorySnapshotSlots;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["inventory_seen"] = flow.inventory_seen;
+        result["logged_in_world"] = flow.logged_in_world;
+        result["player_guid"] = guid_to_hex(flow.inventory.player_guid);
+        result["coinage_seen"] = flow.inventory.coinage_seen;
+        result["coinage"] = static_cast<int64_t>(flow.inventory.coinage);
+        result["slot_count"] = static_cast<int>(flow.inventory.slots.size());
+        result["populated_count"] = static_cast<int>(flow.inventory.populated_count);
+        result["slots"] = inventory_slot_array(flow.inventory.slots);
+        result["inventory"] = inventory_dictionary(flow.inventory);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

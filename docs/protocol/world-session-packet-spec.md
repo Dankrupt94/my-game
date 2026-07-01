@@ -239,6 +239,21 @@ Stage 12 intentionally stopped at a summary parser. Stage 15 extends this into a
 - Skips movement speed and spline-create payloads enough to keep walking later blocks.
 - Skips value-update masks generically by counting mask bits and advancing `4` bytes per populated value.
 
+Stage 17 begins reading owner-only player inventory fields from value updates:
+
+| Field | AzerothCore index | Size | Stage 17 use |
+| --- | ---: | ---: | --- |
+| `PLAYER_FIELD_INV_SLOT_HEAD` | `UNIT_END + 0x00B0` | 46 x `uint32` | Equipment slots `0..18` and bag slots `19..22`, two fields per item GUID |
+| `PLAYER_FIELD_PACK_SLOT_1` | `UNIT_END + 0x00DE` | 32 x `uint32` | Backpack item slots `23..38`, two fields per item GUID |
+| `PLAYER_FIELD_COINAGE` | `UNIT_END + 0x03FE` | 1 x `uint32` | Money value when the server includes the field |
+
+Stage 17 inventory snapshot behavior:
+
+- `parse_update_object_summary` now reads value update masks into field/value pairs instead of only skipping them.
+- When the update GUID matches the selected player GUID, the parser reconstructs 64-bit item GUIDs for 39 equipment, bag, and backpack slots.
+- The Godot scene `scenes/stage17_inventory_view.tscn` displays these slots as live read-only server state.
+- Local validation observed 39 slots and 7 populated item GUIDs for `Codexstage`; coinage was `0`, and the zero-valued coinage field was not included in that live update packet.
+
 Important Stage 15 correction: database spawn GUIDs are not live packet GUIDs. AzerothCore creates runtime object counters when the map instantiates creatures/gameobjects. Client actions must target the live `ObjectGuid` from the update stream.
 
 ## Movement Start/Stop Slice

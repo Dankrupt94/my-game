@@ -153,15 +153,31 @@ void skip_bytes(std::span<const std::uint8_t> bytes, std::size_t& offset, std::s
     offset += count;
 }
 
-std::uint32_t count_mask_bits(std::uint32_t value)
+struct UpdateFieldValue
 {
-    std::uint32_t count = 0;
-    while (value != 0)
+    std::uint32_t index = 0;
+    std::uint32_t value = 0;
+};
+
+constexpr std::uint32_t UnitEndField = 0x0006 + 0x008E;
+constexpr std::uint32_t PlayerFieldInvSlotHead = UnitEndField + 0x00B0;
+constexpr std::uint32_t PlayerFieldPackSlot1 = UnitEndField + 0x00DE;
+constexpr std::uint32_t PlayerFieldCoinage = UnitEndField + 0x03FE;
+constexpr std::uint8_t InventorySectionEquipment = 0;
+constexpr std::uint8_t InventorySectionBag = 1;
+constexpr std::uint8_t InventorySectionBackpack = 2;
+
+std::uint8_t inventory_section_for_slot(std::uint8_t slot)
+{
+    if (slot < 19)
     {
-        count += value & 1U;
-        value >>= 1;
+        return InventorySectionEquipment;
     }
-    return count;
+    if (slot < 23)
+    {
+        return InventorySectionBag;
+    }
+    return InventorySectionBackpack;
 }
 
 std::string read_c_string(std::span<const std::uint8_t> bytes, std::size_t& offset)
@@ -319,15 +335,146 @@ std::uint32_t guid_counter(std::uint64_t guid)
     return static_cast<std::uint32_t>(guid & 0xFFFFFFFFu);
 }
 
-void skip_values_update(std::span<const std::uint8_t> body, std::size_t& offset)
+std::vector<UpdateFieldValue> read_values_update(std::span<const std::uint8_t> body, std::size_t& offset)
 {
     std::uint8_t const block_count = read_u8(body, offset);
-    std::uint32_t value_count = 0;
+    std::vector<std::uint32_t> masks;
+    masks.reserve(block_count);
     for (std::uint8_t i = 0; i < block_count; ++i)
     {
-        value_count += count_mask_bits(read_u32_le(body, offset));
+        masks.push_back(read_u32_le(body, offset));
     }
-    skip_bytes(body, offset, static_cast<std::size_t>(value_count) * 4);
+
+    std::vector<UpdateFieldValue> values;
+    for (std::uint32_t block = 0; block < masks.size(); ++block)
+    {
+        std::uint32_t mask = masks[block];
+        for (std::uint32_t bit = 0; bit < 32; ++bit)
+        {
+            if ((mask & (1u << bit)) == 0)
+            {
+                continue;
+            }
+            values.push_back(UpdateFieldValue{
+                .index = block * 32 + bit,
+                .value = read_u32_le(body, offset),
+            });
+        }
+    }
+    return values;
+}
+
+bool update_value_at(std::vector<UpdateFieldValue> const& values, std::uint32_t index, std::uint32_t& value)
+{
+    for (UpdateFieldValue const& field : values)
+    {
+        if (field.index == index)
+        {
+            value = field.value;
+            return true;
+        }
+    }
+    return false;
+}
+
+InventorySlotSummary make_inventory_slot(std::uint8_t slot)
+{
+    InventorySlotSummary summary;
+    summary.slot = slot;
+    summary.section = inventory_section_for_slot(slot);
+    return summary;
+}
+
+InventorySlotSummary& inventory_slot(PlayerInventorySummary& inventory, std::uint8_t slot)
+{
+    for (InventorySlotSummary& summary : inventory.slots)
+    {
+        if (summary.slot == slot)
+        {
+            return summary;
+        }
+    }
+
+    inventory.slots.push_back(make_inventory_slot(slot));
+    return inventory.slots.back();
+}
+
+void ensure_inventory_slots(PlayerInventorySummary& inventory)
+{
+    for (std::uint8_t slot = 0; slot < PlayerInventorySnapshotSlots; ++slot)
+    {
+        (void)inventory_slot(inventory, slot);
+    }
+    std::sort(
+        inventory.slots.begin(),
+        inventory.slots.end(),
+        [](InventorySlotSummary const& left, InventorySlotSummary const& right)
+        {
+            return left.slot < right.slot;
+        });
+}
+
+std::uint32_t inventory_field_index_for_slot(std::uint8_t slot)
+{
+    if (slot < 23)
+    {
+        return PlayerFieldInvSlotHead + static_cast<std::uint32_t>(slot) * 2;
+    }
+    return PlayerFieldPackSlot1 + static_cast<std::uint32_t>(slot - 23) * 2;
+}
+
+void update_populated_count(PlayerInventorySummary& inventory)
+{
+    inventory.populated_count = 0;
+    for (InventorySlotSummary const& slot : inventory.slots)
+    {
+        if (slot.populated)
+        {
+            ++inventory.populated_count;
+        }
+    }
+}
+
+void apply_player_inventory_values(
+    PlayerInventorySummary& inventory,
+    std::uint64_t player_guid,
+    std::vector<UpdateFieldValue> const& values)
+{
+    bool touched = false;
+    inventory.player_guid = player_guid;
+
+    std::uint32_t coinage = 0;
+    if (update_value_at(values, PlayerFieldCoinage, coinage))
+    {
+        inventory.coinage = coinage;
+        inventory.coinage_seen = true;
+        touched = true;
+    }
+
+    for (std::uint8_t slot = 0; slot < PlayerInventorySnapshotSlots; ++slot)
+    {
+        std::uint32_t low = 0;
+        std::uint32_t high = 0;
+        bool const low_seen = update_value_at(values, inventory_field_index_for_slot(slot), low);
+        bool const high_seen = update_value_at(values, inventory_field_index_for_slot(slot) + 1, high);
+        if (!low_seen && !high_seen)
+        {
+            continue;
+        }
+
+        InventorySlotSummary& summary = inventory_slot(inventory, slot);
+        summary.field_seen = true;
+        summary.item_guid = static_cast<std::uint64_t>(low) | (static_cast<std::uint64_t>(high) << 32);
+        summary.populated = summary.item_guid != 0;
+        touched = true;
+    }
+
+    if (touched)
+    {
+        inventory.seen = true;
+        ensure_inventory_slots(inventory);
+        update_populated_count(inventory);
+    }
 }
 
 struct ParsedMovementUpdate
@@ -1033,7 +1180,11 @@ UpdateObjectSummary parse_update_object_summary(
 
             if (update_type == 0)
             {
-                skip_values_update(body, offset);
+                std::vector<UpdateFieldValue> values = read_values_update(body, offset);
+                if (guid == player_guid)
+                {
+                    apply_player_inventory_values(summary.inventory, guid, values);
+                }
                 continue;
             }
 
@@ -1047,7 +1198,11 @@ UpdateObjectSummary parse_update_object_summary(
             {
                 std::uint8_t const object_type = read_u8(body, offset);
                 ParsedMovementUpdate movement = parse_movement_update(body, offset);
-                skip_values_update(body, offset);
+                std::vector<UpdateFieldValue> values = read_values_update(body, offset);
+                if (guid == player_guid)
+                {
+                    apply_player_inventory_values(summary.inventory, guid, values);
+                }
                 summary.visible_objects.push_back(make_visible_object(update_type, guid, object_type, movement));
                 continue;
             }
@@ -1200,8 +1355,19 @@ bool world_packet_self_test()
     {
         append_float_le(update_payload, 1.0f);
     }
-    append_u8(update_payload, 0); // empty value update mask
-    auto update = parse_update_object_summary(update_payload, false, 0x1234);
+    append_u8(update_payload, 37); // value update mask blocks through coinage
+    std::vector<std::uint32_t> update_masks(37, 0);
+    update_masks[PlayerFieldInvSlotHead / 32] |= 1u << (PlayerFieldInvSlotHead % 32);
+    update_masks[(PlayerFieldInvSlotHead + 1) / 32] |= 1u << ((PlayerFieldInvSlotHead + 1) % 32);
+    update_masks[PlayerFieldCoinage / 32] |= 1u << (PlayerFieldCoinage % 32);
+    for (std::uint32_t mask : update_masks)
+    {
+        append_u32_le(update_payload, mask);
+    }
+    append_u32_le(update_payload, 0x5678);
+    append_u32_le(update_payload, 0x1234);
+    append_u32_le(update_payload, 42);
+    auto update = parse_update_object_summary(update_payload, false, 0xF13000033700000BULL);
 
     std::vector<std::uint8_t> chat_response;
     append_u8(chat_response, CHAT_MSG_SAY);
@@ -1295,6 +1461,13 @@ bool world_packet_self_test()
         && update.visible_objects[0].object_type == 3
         && update.visible_objects[0].has_position
         && update.visible_objects[0].x < -8946.0f
+        && update.inventory.seen
+        && update.inventory.player_guid == 0xF13000033700000BULL
+        && update.inventory.coinage_seen
+        && update.inventory.coinage == 42
+        && update.inventory.slots.size() == PlayerInventorySnapshotSlots
+        && update.inventory.slots[0].populated
+        && update.inventory.slots[0].item_guid == 0x123400005678ULL
         && chat.parsed
         && chat.chat_type == CHAT_MSG_SAY
         && chat.language == LANG_COMMON

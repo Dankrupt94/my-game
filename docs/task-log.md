@@ -1103,3 +1103,34 @@ Validation:
 - `ACORE_ACTION_BAR_SET_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed with set/restore confirmation.
 - `godot-4 --headless --path . --quit` passed.
 - Local `qwen-agent` advisory review was checked; no actionable blocker was confirmed for this bounded combat-damage slice.
+
+## 2026-07-01 - Add Stage 17 Read-Only Inventory Snapshot Slice
+
+Goal: begin Stage 17 full-port gate work by exposing real server-owned inventory slot state in Godot.
+
+Plan:
+
+- Extend the update-object parser so it reads value update masks into field/value pairs.
+- Map AzerothCore player private fields for equipment slots, bag slots, backpack slots, and coinage.
+- Add a native inventory snapshot flow and helper command.
+- Expose the snapshot through the Godot extension and script bridge.
+- Add a Godot inventory scene with a 39-slot equipment/bag/backpack grid and a headless self-test.
+- Document the slice honestly as read-only item GUID visibility, not full inventory parity.
+
+Result:
+
+- Added `PlayerInventorySummary` and per-slot inventory summaries.
+- Added `read_inventory_snapshot` and `--inventory-snapshot`.
+- Added `AcoreProtocolClient.inventory_snapshot(...)` and `ProtocolClientBridge.inventory_snapshot(...)`.
+- Added `scenes/stage17_inventory_view.tscn` and `scripts/stage17_inventory_view.gd`.
+- Updated the parity matrix, Stage 17 gate document, and world-session packet spec.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed, including synthetic inventory field parsing.
+- Native `--inventory-snapshot` passed for `Codexstage` with `inventory_seen=1`, `logged_in_world=1`, `slot_count=39`, and `populated_count=7`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `slots=39`, `populated=7`, and `coinage=0`.
+- `godot-4 --headless --path . --quit` passed.
+- Local `qwen-agent` advisory review produced only generic checklist items; no actionable blocker was confirmed after checking parser bounds, field indexing, bridge shape, and self-test coverage.

@@ -1823,6 +1823,76 @@ ActionButtonsResult read_action_buttons(
     return result;
 }
 
+InventorySnapshotResult read_inventory_snapshot(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    FlowOptions options)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    (void)login_selected_character(*session, selected, options);
+
+    InventorySnapshotResult result;
+    result.realm = session->realm;
+    result.character = selected;
+
+    for (int i = 0; i < 180; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (result.inventory_seen && result.logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            if (update.inventory.seen)
+            {
+                result.inventory = update.inventory;
+                result.inventory_seen = true;
+                if (result.logged_in_world)
+                {
+                    break;
+                }
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            result.logged_in_world = true;
+            if (result.inventory_seen)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
 SetActionButtonProbeResult set_action_button_probe(
     std::string const& host,
     std::string const& port,

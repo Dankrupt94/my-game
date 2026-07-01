@@ -59,6 +59,7 @@ constexpr std::uint32_t LANG_ORCISH = 1;
 constexpr std::uint32_t LANG_COMMON = 7;
 constexpr std::size_t CharEnumEquipmentSlots = 23;
 constexpr std::size_t MaxActionButtons = 144;
+constexpr std::size_t PlayerInventorySnapshotSlots = 39;
 
 struct CharacterSummary
 {
@@ -102,6 +103,25 @@ struct VisibleObjectSummary
     float orientation = 0;
 };
 
+struct InventorySlotSummary
+{
+    std::uint8_t slot = 0;
+    std::uint8_t section = 0;
+    std::uint64_t item_guid = 0;
+    bool field_seen = false;
+    bool populated = false;
+};
+
+struct PlayerInventorySummary
+{
+    bool seen = false;
+    std::uint64_t player_guid = 0;
+    bool coinage_seen = false;
+    std::uint32_t coinage = 0;
+    std::size_t populated_count = 0;
+    std::vector<InventorySlotSummary> slots;
+};
+
 struct UpdateObjectSummary
 {
     bool seen = false;
@@ -115,6 +135,7 @@ struct UpdateObjectSummary
     bool visible_parse_complete = false;
     std::string visible_parse_error;
     std::vector<VisibleObjectSummary> visible_objects;
+    PlayerInventorySummary inventory;
 };
 
 struct MovementSample
