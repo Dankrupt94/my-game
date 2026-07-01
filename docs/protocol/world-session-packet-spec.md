@@ -232,6 +232,38 @@ Uncompressed update payload begins with:
 
 Stage 12 intentionally stops at a summary parser. Full value-bitmask and movement-block parsing should be handled in the next packet-layer stage, after a reproducible live `SMSG_UPDATE_OBJECT` sample is available from the local server.
 
+## Movement Start/Stop Slice
+
+Stage 13 uses the shared movement opcodes handled by `WorldSession::HandleMovementOpcodes`.
+
+| Opcode | Value | Stage 13 use |
+| --- | ---: | --- |
+| `MSG_MOVE_START_FORWARD` | `0x0B5` | Sent at the current server login coordinate with `MOVEMENTFLAG_FORWARD` |
+| `MSG_MOVE_STOP` | `0x0B7` | Sent at the target coordinate with no movement flags |
+| `MSG_MOVE_HEARTBEAT` | `0x0EE` | Packet builder support exists, but bare heartbeat did not reliably persist a changed coordinate in the Stage 13 test |
+| `SMSG_TIME_SYNC_REQ` | `0x390` | Used as the post-map-add signal before movement packets are sent |
+| `CMSG_LOGOUT_REQUEST` | `0x04B` | Sent after movement so AzerothCore follows the normal save/logout path |
+
+Client movement body, after the packed mover GUID:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| movement flags | 4 | `0x00000001` for forward movement |
+| extra movement flags | 2 | `0` in the Stage 13 ground movement test |
+| movement time | 4 | Client tick; server resynchronizes when needed |
+| x | 4 | Float |
+| y | 4 | Float |
+| z | 4 | Float |
+| orientation | 4 | Float |
+| fall time | 4 | `0` for the grounded movement test |
+
+Live Stage 13 result:
+
+- Sending movement immediately after `SMSG_LOGIN_VERIFY_WORLD` was too early.
+- Waiting for `SMSG_TIME_SYNC_REQ`, then sending `MSG_MOVE_START_FORWARD` followed by `MSG_MOVE_STOP`, advances the live AzerothCore player position.
+- The Stage 13 probe now records both the live login-world position and the saved character-list position. Live movement is the pass condition; saved persistence is reported separately because logout/session cleanup timing can lag behind the fast probe.
+- Latest native result for `Codexstage`: before `(-8946.9, -132.493, 83.5312)`, target `(-8946.7, -132.493, 83.5312)`, live `(-8946.7, -132.493, 83.5312)`, live drift `0`, saved drift `0.200195`.
+
 ## Stage 11 First World Target
 
 Stage 11 should connect to worldserver, parse `SMSG_AUTH_CHALLENGE`, send `CMSG_AUTH_SESSION`, initialize header crypto, parse `SMSG_AUTH_RESPONSE`, send `CMSG_CHAR_ENUM`, and parse at least names/guid/race/class/level/map/position from `SMSG_CHAR_ENUM`.

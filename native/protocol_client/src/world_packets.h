@@ -12,12 +12,20 @@ constexpr std::uint32_t CMSG_AUTH_SESSION = 0x1ED;
 constexpr std::uint32_t CMSG_CHAR_CREATE = 0x036;
 constexpr std::uint32_t CMSG_CHAR_ENUM = 0x037;
 constexpr std::uint32_t CMSG_PLAYER_LOGIN = 0x03D;
+constexpr std::uint32_t CMSG_LOGOUT_REQUEST = 0x04B;
+constexpr std::uint32_t MSG_MOVE_START_FORWARD = 0x0B5;
+constexpr std::uint32_t MSG_MOVE_STOP = 0x0B7;
+constexpr std::uint32_t MSG_MOVE_JUMP = 0x0BB;
+constexpr std::uint32_t MSG_MOVE_HEARTBEAT = 0x0EE;
 constexpr std::uint16_t SMSG_CHAR_CREATE = 0x03A;
 constexpr std::uint16_t SMSG_CHAR_ENUM = 0x03B;
 constexpr std::uint16_t SMSG_CHARACTER_LOGIN_FAILED = 0x041;
+constexpr std::uint16_t SMSG_LOGOUT_RESPONSE = 0x04C;
+constexpr std::uint16_t SMSG_LOGOUT_COMPLETE = 0x04D;
 constexpr std::uint16_t SMSG_UPDATE_OBJECT = 0x0A9;
 constexpr std::uint16_t SMSG_COMPRESSED_UPDATE_OBJECT = 0x1F6;
 constexpr std::uint16_t SMSG_LOGIN_VERIFY_WORLD = 0x236;
+constexpr std::uint16_t SMSG_TIME_SYNC_REQ = 0x390;
 constexpr std::size_t CharEnumEquipmentSlots = 23;
 
 struct CharacterSummary
@@ -56,6 +64,18 @@ struct UpdateObjectSummary
     std::size_t payload_size = 0;
 };
 
+struct MovementSample
+{
+    std::uint32_t flags = 0;
+    std::uint16_t flags2 = 0;
+    std::uint32_t time = 0;
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float orientation = 0;
+    std::uint32_t fall_time = 0;
+};
+
 std::vector<std::uint8_t> build_empty_addon_info();
 std::vector<std::uint8_t> build_auth_session_payload(
     std::string const& account,
@@ -66,6 +86,7 @@ std::vector<std::uint8_t> build_auth_session_payload(
     std::span<const std::uint8_t> addon_info);
 std::vector<std::uint8_t> build_character_create_payload(std::string const& name);
 std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_guid);
+std::vector<std::uint8_t> build_movement_payload(std::uint64_t character_guid, MovementSample const& movement);
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload);
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);

@@ -13,6 +13,21 @@ Plan:
 - Keep credentials, packet captures, runtime logs, and proprietary files out of Git.
 - Validate native self-tests, Godot bridge checks, and asset boundaries before committing the stage result.
 
+Result:
+
+- Added movement packet construction for the WotLK/AzerothCore `MSG_MOVE_*` body format.
+- Added live movement sequencing in the native protocol flow: enter world, wait for `SMSG_TIME_SYNC_REQ`, send `MSG_MOVE_START_FORWARD`, send `MSG_MOVE_STOP`, request logout/session cleanup, reconnect into the world, and compare the live position against the target.
+- Confirmed that movement sent too early after `SMSG_LOGIN_VERIFY_WORLD` does not persist reliably.
+- Confirmed that a bare heartbeat is insufficient for the Stage 13 persistence check.
+- Split reconciliation into live world position and saved character-list position because fast logout/session cleanup can lag.
+- Verified a successful live movement step for `Codexstage`: before `(-8946.9, -132.493, 83.5312)`, target `(-8946.7, -132.493, 83.5312)`, live `(-8946.7, -132.493, 83.5312)`, live drift `0`, saved drift `0.200195`.
+- Verified Godot movement bridge smoke with `live_position_accepted=true` and `live_drift=0`.
+- Verified the movement scene self-test with `MOVEMENT_RECONCILIATION_SELF_TEST_OK live_drift=0.000 saved_drift=0.200`.
+- Added Godot native extension and bridge wrappers for the movement probe.
+- Added a Movement Test dashboard action, `scenes/movement_reconciliation_view.tscn`, `scripts/movement_reconciliation_view.gd`, and `tools/movement_bridge_smoke.gd`.
+- Used local `qwen-agent` as a narrow advisory reviewer; it flagged only known Stage 13 scope limits around continuous WASD, movement edge cases, and saved-position drift reliability.
+- Left continuous WASD prediction, passive official-client mimicry, and spectator-client smoothness validation for later movement hardening.
+
 ## 2026-07-01 - Stage 12 Enter World Prototype Started
 
 Goal: create a disposable local test character for the ignored protocol account and complete the Stage 12 enter-world prototype as far as the current local server and protocol parser allow.

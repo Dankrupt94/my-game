@@ -71,6 +71,19 @@ struct EnterWorldResult
     std::vector<std::uint16_t> skipped_login_opcodes;
 };
 
+struct MovementHeartbeatResult
+{
+    RealmInfo realm;
+    CharacterSummary before;
+    MovementSample target;
+    LoginVerifyWorld live;
+    CharacterSummary after;
+    bool live_position_accepted = false;
+    bool saved_position_changed = false;
+    float live_drift = 0;
+    float saved_drift = 0;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -115,5 +128,16 @@ EnterWorldResult enter_world(
     std::string const& account,
     std::string const& password,
     std::string const& character_name,
+    FlowOptions options = {});
+
+MovementHeartbeatResult move_heartbeat(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    float delta_x,
+    float delta_y,
+    float delta_orientation,
     FlowOptions options = {});
 }

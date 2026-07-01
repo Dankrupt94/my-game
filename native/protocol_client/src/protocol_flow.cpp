@@ -14,12 +14,16 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
+#include <cmath>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace acore_protocol
@@ -424,6 +428,40 @@ WorldPacketData read_world_packet(int fd, AuthCrypt* crypt, bool trace)
     };
 }
 
+bool wait_for_socket_readable(int fd, int timeout_ms)
+{
+    while (true)
+    {
+        fd_set read_set;
+        FD_ZERO(&read_set);
+        FD_SET(fd, &read_set);
+
+        timeval timeout{};
+        timeout.tv_sec = timeout_ms / 1000;
+        timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+        int const rc = select(fd + 1, &read_set, nullptr, nullptr, &timeout);
+        if (rc < 0 && errno == EINTR)
+        {
+            continue;
+        }
+        if (rc < 0)
+        {
+            throw std::runtime_error("socket select failed");
+        }
+        return rc > 0;
+    }
+}
+
+std::optional<WorldPacketData> read_world_packet_optional(int fd, AuthCrypt* crypt, bool trace, int timeout_ms)
+{
+    if (!wait_for_socket_readable(fd, timeout_ms))
+    {
+        return std::nullopt;
+    }
+    return read_world_packet(fd, crypt, trace);
+}
+
 void write_world_packet(int fd, std::uint32_t opcode, std::span<const std::uint8_t> payload, AuthCrypt* crypt)
 {
     auto packet = build_client_packet(opcode, payload);
@@ -545,6 +583,106 @@ CharacterSummary select_character(std::vector<CharacterSummary> const& character
     }
 
     throw std::runtime_error("character not found: " + character_name);
+}
+
+std::uint32_t movement_timestamp_ms()
+{
+    auto now = std::chrono::steady_clock::now().time_since_epoch();
+    return static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now).count() & 0xFFFFFFFFu);
+}
+
+float position_distance(CharacterSummary const& character, MovementSample const& movement)
+{
+    float const dx = character.x - movement.x;
+    float const dy = character.y - movement.y;
+    float const dz = character.z - movement.z;
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+float position_distance(LoginVerifyWorld const& login, MovementSample const& movement)
+{
+    float const dx = login.x - movement.x;
+    float const dy = login.y - movement.y;
+    float const dz = login.z - movement.z;
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+LoginVerifyWorld login_selected_character(
+    AuthenticatedWorldSession& session,
+    CharacterSummary const& selected,
+    FlowOptions options)
+{
+    write_world_packet(session.socket.get(), CMSG_PLAYER_LOGIN, build_player_login_payload(selected.guid), &session.crypt);
+    for (int i = 0; i < 80; ++i)
+    {
+        WorldPacketData packet = read_world_packet(session.socket.get(), &session.crypt, options.trace_world_packets);
+        if (packet.opcode == SMSG_LOGIN_VERIFY_WORLD)
+        {
+            return parse_login_verify_world(packet.payload);
+        }
+        if (packet.opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet.payload));
+        }
+    }
+
+    throw std::runtime_error("did not receive SMSG_LOGIN_VERIFY_WORLD");
+}
+
+bool wait_for_logged_in_world(
+    AuthenticatedWorldSession& session,
+    FlowOptions options,
+    int timeout_ms)
+{
+    for (int i = 0; i < 160; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session.socket.get(),
+            &session.crypt,
+            options.trace_world_packets,
+            timeout_ms);
+        if (!packet)
+        {
+            return false;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            return true;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+    }
+    return false;
+}
+
+bool request_graceful_logout(AuthenticatedWorldSession& session, FlowOptions options)
+{
+    write_world_packet(session.socket.get(), CMSG_LOGOUT_REQUEST, {}, &session.crypt);
+    bool logout_allowed = false;
+    for (int i = 0; i < 40; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session.socket.get(),
+            &session.crypt,
+            options.trace_world_packets,
+            750);
+        if (!packet)
+        {
+            continue;
+        }
+        if (packet->opcode == SMSG_LOGOUT_RESPONSE)
+        {
+            logout_allowed = packet->payload.size() >= 5 && packet->payload[0] == 0;
+            continue;
+        }
+        if (packet->opcode == SMSG_LOGOUT_COMPLETE)
+        {
+            return true;
+        }
+    }
+    return logout_allowed;
 }
 }
 
@@ -771,6 +909,88 @@ EnterWorldResult enter_world(
     {
         throw std::runtime_error("did not receive SMSG_LOGIN_VERIFY_WORLD");
     }
+    return result;
+}
+
+MovementHeartbeatResult move_heartbeat(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    float delta_x,
+    float delta_y,
+    float delta_orientation,
+    FlowOptions options)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+    bool const logged_in_world = wait_for_logged_in_world(*session, options, 650);
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before movement heartbeat");
+    }
+
+    MovementSample target;
+    target.flags = 0;
+    target.flags2 = 0;
+    target.time = movement_timestamp_ms();
+    target.x = login.x + delta_x;
+    target.y = login.y + delta_y;
+    target.z = login.z;
+    target.orientation = login.orientation + delta_orientation;
+    target.fall_time = 0;
+
+    MovementSample start = target;
+    start.flags = 0x00000001; // MOVEMENTFLAG_FORWARD
+    start.time = movement_timestamp_ms();
+    start.x = login.x;
+    start.y = login.y;
+
+    write_world_packet(session->socket.get(), MSG_MOVE_START_FORWARD, build_movement_payload(selected.guid, start), &session->crypt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    target.time = movement_timestamp_ms();
+    write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, target), &session->crypt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(650));
+    (void)request_graceful_logout(*session, options);
+    session.reset();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    EnterWorldResult live_check = enter_world(host, port, account, password, selected.name, options);
+    float live_drift = position_distance(live_check.login, target);
+    bool live_position_accepted = live_drift < 0.5f;
+
+    CharacterFlowResult after_flow;
+    CharacterSummary after;
+    float saved_drift = 999.0f;
+    bool saved_position_changed = false;
+    for (int attempt = 0; attempt < 10; ++attempt)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(attempt == 0 ? 1500 : 750));
+        after_flow = run_character_flow(host, port, account, password, options);
+        after = select_character(after_flow.characters, selected.name);
+        saved_drift = position_distance(after, target);
+        saved_position_changed = std::fabs(after.x - selected.x) > 0.001f
+            || std::fabs(after.y - selected.y) > 0.001f
+            || std::fabs(after.z - selected.z) > 0.001f;
+        if (saved_position_changed && saved_drift < 0.5f)
+        {
+            break;
+        }
+    }
+
+    MovementHeartbeatResult result;
+    result.realm = after_flow.realm;
+    result.before = selected;
+    result.target = target;
+    result.live = live_check.login;
+    result.after = after;
+    result.live_position_accepted = live_position_accepted;
+    result.saved_position_changed = saved_position_changed;
+    result.live_drift = live_drift;
+    result.saved_drift = saved_drift;
     return result;
 }
 }

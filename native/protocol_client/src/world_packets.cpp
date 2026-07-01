@@ -35,6 +35,29 @@ void append_u64_le(std::vector<std::uint8_t>& bytes, std::uint64_t value)
     }
 }
 
+void append_packed_guid(std::vector<std::uint8_t>& bytes, std::uint64_t value)
+{
+    std::uint8_t mask = 0;
+    std::array<std::uint8_t, 8> guid_bytes{};
+    for (int i = 0; i < 8; ++i)
+    {
+        guid_bytes[i] = static_cast<std::uint8_t>((value >> (i * 8)) & 0xFF);
+        if (guid_bytes[i] != 0)
+        {
+            mask |= static_cast<std::uint8_t>(1 << i);
+        }
+    }
+
+    append_u8(bytes, mask);
+    for (int i = 0; i < 8; ++i)
+    {
+        if ((mask & (1 << i)) != 0)
+        {
+            append_u8(bytes, guid_bytes[i]);
+        }
+    }
+}
+
 void append_float_le(std::vector<std::uint8_t>& bytes, float value)
 {
     static_assert(sizeof(float) == sizeof(std::uint32_t));
@@ -290,6 +313,22 @@ std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_gui
     return payload;
 }
 
+std::vector<std::uint8_t> build_movement_payload(std::uint64_t character_guid, MovementSample const& movement)
+{
+    std::vector<std::uint8_t> payload;
+    append_packed_guid(payload, character_guid);
+    append_u32_le(payload, movement.flags);
+    payload.push_back(static_cast<std::uint8_t>(movement.flags2 & 0xFF));
+    payload.push_back(static_cast<std::uint8_t>((movement.flags2 >> 8) & 0xFF));
+    append_u32_le(payload, movement.time);
+    append_float_le(payload, movement.x);
+    append_float_le(payload, movement.y);
+    append_float_le(payload, movement.z);
+    append_float_le(payload, movement.orientation);
+    append_u32_le(payload, movement.fall_time);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload)
 {
     std::vector<std::uint8_t> packet = build_client_header(opcode, payload.size());
@@ -418,6 +457,16 @@ bool world_packet_self_test()
 
     auto login_packet = build_client_packet(CMSG_PLAYER_LOGIN, build_player_login_payload(0x1234));
     if (login_packet.size() != 14 || login_packet[2] != 0x3D)
+    {
+        return false;
+    }
+
+    MovementSample movement;
+    movement.x = -8949.95f;
+    movement.y = -132.493f;
+    movement.z = 83.5312f;
+    auto movement_packet = build_client_packet(MSG_MOVE_HEARTBEAT, build_movement_payload(0x1234, movement));
+    if (movement_packet.size() != 6 + 1 + 2 + 4 + 2 + 4 + 16 + 4 || movement_packet[2] != 0xEE)
     {
         return false;
     }

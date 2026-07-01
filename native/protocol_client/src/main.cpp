@@ -198,6 +198,46 @@ int enter_world(std::string const& host, std::string const& port, std::string co
     return 0;
 }
 
+int move_heartbeat(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& delta_x,
+    std::string const& delta_y,
+    std::string const& delta_orientation)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::MovementHeartbeatResult result = acore_protocol::move_heartbeat(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        std::stof(delta_x),
+        std::stof(delta_y),
+        std::stof(delta_orientation),
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "MOVE_STEP_SENT"
+              << " guid=0x" << std::hex << result.before.guid << std::dec
+              << " name=\"" << result.before.name << "\""
+              << " before=(" << result.before.x << "," << result.before.y << "," << result.before.z << ")"
+              << " target=(" << result.target.x << "," << result.target.y << "," << result.target.z << ")"
+              << " live=(" << result.live.x << "," << result.live.y << "," << result.live.z << ")"
+              << " after=(" << result.after.x << "," << result.after.y << "," << result.after.z << ")"
+              << " drift=" << result.live_drift
+              << " live_drift=" << result.live_drift
+              << " saved_drift=" << result.saved_drift
+              << " live_position_accepted=" << (result.live_position_accepted ? 1 : 0)
+              << " saved_position_changed=" << (result.saved_position_changed ? 1 : 0)
+              << "\n";
+    return result.live_position_accepted ? 0 : 1;
+}
+
 int world_challenge(std::string const& host, std::string const& port)
 {
     acore_protocol::WorldChallengeSummary summary = acore_protocol::probe_world_challenge(host, port);
@@ -218,6 +258,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --character-flow <host> <port> <account>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --create-character <host> <port> <account> <name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --enter-world <host> <port> <account> [character-name]\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --move-heartbeat <host> <port> <account> <character-name> <delta-x> <delta-y> <delta-orientation>\n"
               << "  acore_protocol_client --world-challenge <host> <port>\n";
 }
 }
@@ -259,6 +300,11 @@ int main(int argc, char** argv)
         if ((argc == 5 || argc == 6) && std::strcmp(argv[1], "--enter-world") == 0)
         {
             return enter_world(argv[2], argv[3], argv[4], argc == 6 ? argv[5] : "");
+        }
+
+        if (argc == 9 && std::strcmp(argv[1], "--move-heartbeat") == 0)
+        {
+            return move_heartbeat(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
         }
 
         usage();

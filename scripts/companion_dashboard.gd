@@ -13,6 +13,7 @@ const BRIDGE_TOKEN_PATH := "res://local_runtime/host-bridge-token.txt"
 const SANDBOX_SCENE := "res://scenes/gameplay_sandbox.tscn"
 const MULTIPLAYER_SCENE := "res://scenes/multiplayer_sandbox.tscn"
 const ENTER_WORLD_SCENE := "res://scenes/enter_world_view.tscn"
+const MOVEMENT_SCENE := "res://scenes/movement_reconciliation_view.tscn"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
 const DATA_VIEWS := ["summary", "accounts", "characters", "online", "creatures", "items", "quests", "spells"]
@@ -74,6 +75,10 @@ func _register_command_actions() -> void:
 		"open_enter_world": {
 			"label": "Enter World",
 			"handler": Callable(self, "_action_open_enter_world"),
+		},
+		"open_movement": {
+			"label": "Move Test",
+			"handler": Callable(self, "_action_open_movement"),
 		},
 		"protocol_character_flow": {
 			"label": "Check Protocol",
@@ -147,6 +152,7 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("open_sandbox"))
 	actions.add_child(_action_button("open_multiplayer"))
 	actions.add_child(_action_button("open_enter_world"))
+	actions.add_child(_action_button("open_movement"))
 	actions.add_child(_action_button("protocol_character_flow"))
 	actions.add_child(_action_button("open_logs"))
 	actions.add_child(_action_button("open_reports"))
@@ -373,6 +379,12 @@ func _action_open_enter_world() -> void:
 	var error := get_tree().change_scene_to_file(ENTER_WORLD_SCENE)
 	if error != OK:
 		_append_log("Could not open enter-world scene. Error code: " + str(error))
+
+
+func _action_open_movement() -> void:
+	var error := get_tree().change_scene_to_file(MOVEMENT_SCENE)
+	if error != OK:
+		_append_log("Could not open movement scene. Error code: " + str(error))
 
 
 func _action_launch_client() -> void:

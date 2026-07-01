@@ -1,6 +1,7 @@
 extends RefCounted
 
 const HELPER_PATH := "res://native/protocol_client/build/acore_protocol_client"
+const COMPAT_HELPER_PATH := "res://native/protocol_client/build-compat/acore_protocol_client"
 const LOCAL_ACCOUNT_ENV := "res://local_runtime/protocol-test-account.env"
 const NATIVE_CLIENT_CLASS := "AcoreProtocolClient"
 
@@ -10,7 +11,7 @@ func run_character_flow(host: String = "127.0.0.1", port: String = "3724") -> Di
 	if not native_result.is_empty():
 		return native_result
 
-	var helper := ProjectSettings.globalize_path(HELPER_PATH)
+	var helper := _helper_path()
 	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
 	if not FileAccess.file_exists(helper):
 		return _failure("Native protocol helper is not built yet: " + helper)
@@ -42,7 +43,7 @@ func create_test_character(name: String = "Codexstage", host: String = "127.0.0.
 	if not native_result.is_empty():
 		return native_result
 
-	var helper := ProjectSettings.globalize_path(HELPER_PATH)
+	var helper := _helper_path()
 	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
 	if not FileAccess.file_exists(helper):
 		return _failure("Native protocol helper is not built yet: " + helper)
@@ -73,7 +74,7 @@ func enter_world(character_name: String = "", host: String = "127.0.0.1", port: 
 	if not native_result.is_empty():
 		return native_result
 
-	var helper := ProjectSettings.globalize_path(HELPER_PATH)
+	var helper := _helper_path()
 	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
 	if not FileAccess.file_exists(helper):
 		return _failure("Native protocol helper is not built yet: " + helper)
@@ -99,8 +100,54 @@ func enter_world(character_name: String = "", host: String = "127.0.0.1", port: 
 	return parsed
 
 
+func move_heartbeat(
+	character_name: String = "Codexstage",
+	delta_x: float = 0.05,
+	delta_y: float = 0.0,
+	delta_orientation: float = 0.0,
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_move_heartbeat(character_name, delta_x, delta_y, delta_orientation, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--move-heartbeat",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			str(delta_x),
+			str(delta_y),
+			str(delta_orientation),
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_move_heartbeat_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("live_position_accepted", false))
+	return parsed
+
+
 func run_self_test() -> Dictionary:
-	var helper := ProjectSettings.globalize_path(HELPER_PATH)
+	var helper := _helper_path()
 	if not FileAccess.file_exists(helper):
 		return _failure("Native protocol helper is not built yet: " + helper)
 
@@ -202,6 +249,41 @@ func _run_native_enter_world(character_name: String, host: String, port: String)
 	return parsed
 
 
+func _run_native_move_heartbeat(
+	character_name: String,
+	delta_x: float,
+	delta_y: float,
+	delta_orientation: float,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("move_heartbeat"):
+		return {}
+
+	var result = client.call(
+		"move_heartbeat",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		delta_x,
+		delta_y,
+		delta_orientation)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected movement result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
 func _load_native_credentials() -> Dictionary:
 	if not ClassDB.class_exists(NATIVE_CLIENT_CLASS):
 		return {"available": false, "result": {}}
@@ -243,6 +325,13 @@ func _load_protocol_credentials(env_file: String) -> Dictionary:
 		"account": account,
 		"password": password,
 	}
+
+
+func _helper_path() -> String:
+	var compat_helper := ProjectSettings.globalize_path(COMPAT_HELPER_PATH)
+	if FileAccess.file_exists(compat_helper):
+		return compat_helper
+	return ProjectSettings.globalize_path(HELPER_PATH)
 
 
 func _execute_helper_with_password(helper: String, args: PackedStringArray, password: String, output: Array) -> int:
@@ -372,6 +461,40 @@ func _parse_enter_world_output(output: String) -> Dictionary:
 	return result
 
 
+func _parse_move_heartbeat_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"movement_sent": false,
+		"live_position_accepted": false,
+		"saved_position_changed": false,
+		"drift": 999.0,
+		"live_drift": 999.0,
+		"saved_drift": 999.0,
+		"before": {},
+		"target": {},
+		"live": {},
+		"after": {},
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("MOVE_STEP_SENT"):
+			result["movement_sent"] = true
+			result["character_name"] = _extract_quoted_field(line, "name=\"")
+			result["before"] = _parse_vector_field(line, "before=(")
+			result["target"] = _parse_vector_field(line, "target=(")
+			result["live"] = _parse_vector_field(line, "live=(")
+			result["after"] = _parse_vector_field(line, "after=(")
+			result["drift"] = _extract_float_field(line, "drift=")
+			result["live_drift"] = _extract_float_field(line, "live_drift=")
+			result["saved_drift"] = _extract_float_field(line, "saved_drift=")
+			result["live_position_accepted"] = _extract_int_field(line, "live_position_accepted=") == 1
+			result["saved_position_changed"] = _extract_int_field(line, "saved_position_changed=") == 1
+	return result
+
+
 func _extract_count(line: String) -> int:
 	var marker := "count="
 	var start := line.find(marker)
@@ -418,6 +541,18 @@ func _parse_login_verify_line(line: String) -> Dictionary:
 		login["y"] = float(parts[1])
 		login["z"] = float(parts[2])
 	return login
+
+
+func _parse_vector_field(line: String, marker: String) -> Dictionary:
+	var pos_text := _extract_between(line, marker, ")")
+	var parts := pos_text.split(",")
+	if parts.size() != 3:
+		return {}
+	return {
+		"x": float(parts[0]),
+		"y": float(parts[1]),
+		"z": float(parts[2]),
+	}
 
 
 func _extract_int_field(line: String, marker: String) -> int:

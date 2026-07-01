@@ -30,4 +30,13 @@ public:
         godot::String const& account,
         godot::String const& password,
         godot::String const& character_name);
+    godot::Dictionary move_heartbeat(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        double delta_x,
+        double delta_y,
+        double delta_orientation);
 };

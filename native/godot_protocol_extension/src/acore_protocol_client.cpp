@@ -120,6 +120,31 @@ Dictionary update_dictionary(UpdateObjectSummary const& update)
     value["payload_size"] = static_cast<int>(update.payload_size);
     return value;
 }
+
+Dictionary movement_dictionary(MovementSample const& movement)
+{
+    Dictionary value;
+    value["flags"] = static_cast<int>(movement.flags);
+    value["flags2"] = static_cast<int>(movement.flags2);
+    value["time"] = static_cast<int>(movement.time);
+    value["x"] = movement.x;
+    value["y"] = movement.y;
+    value["z"] = movement.z;
+    value["orientation"] = movement.orientation;
+    value["fall_time"] = static_cast<int>(movement.fall_time);
+    return value;
+}
+
+Dictionary live_position_dictionary(LoginVerifyWorld const& login)
+{
+    Dictionary value;
+    value["map"] = static_cast<int>(login.map);
+    value["x"] = login.x;
+    value["y"] = login.y;
+    value["z"] = login.z;
+    value["orientation"] = login.orientation;
+    return value;
+}
 }
 
 void AcoreProtocolClient::_bind_methods()
@@ -134,6 +159,9 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("enter_world", "host", "port", "account", "password", "character_name"),
         &AcoreProtocolClient::enter_world);
+    ClassDB::bind_method(
+        D_METHOD("move_heartbeat", "host", "port", "account", "password", "character_name", "delta_x", "delta_y", "delta_orientation"),
+        &AcoreProtocolClient::move_heartbeat);
 }
 
 Dictionary AcoreProtocolClient::self_test()
@@ -150,6 +178,51 @@ Dictionary AcoreProtocolClient::self_test()
         result["ok"] = true;
         result["logon_challenge_size"] = 38;
         result["bridge"] = "AcoreProtocolClient";
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::move_heartbeat(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    double delta_x,
+    double delta_y,
+    double delta_orientation)
+{
+    try
+    {
+        acore_protocol::MovementHeartbeatResult flow = acore_protocol::move_heartbeat(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<float>(delta_x),
+            static_cast<float>(delta_y),
+            static_cast<float>(delta_orientation));
+
+        Dictionary result;
+        result["ok"] = flow.live_position_accepted;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["movement_sent"] = true;
+        result["live_position_accepted"] = flow.live_position_accepted;
+        result["saved_position_changed"] = flow.saved_position_changed;
+        result["drift"] = flow.live_drift;
+        result["live_drift"] = flow.live_drift;
+        result["saved_drift"] = flow.saved_drift;
+        result["realm"] = realm_dictionary(flow.realm);
+        result["before"] = character_dictionary(flow.before);
+        result["target"] = movement_dictionary(flow.target);
+        result["live"] = live_position_dictionary(flow.live);
+        result["after"] = character_dictionary(flow.after);
         return result;
     }
     catch (std::exception const& exc)
