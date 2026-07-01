@@ -244,6 +244,17 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `ACORE_VENDOR_BUY_SELL_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with `roundtrip=true`, buy opcode `0x1A4`, bought slot `34`, and roundtrip coinage delta `-26`.
 - Remaining work: turn this fixed proof into normal row-selected vendor buy/sell UI, add quantity controls, item names/icons/tooltips through the local-only data pipeline, stock refresh, repair, failure-code UI, in-world click targeting, and persistent-session integration.
 
+### 2026-07-01 - Vendor Selected Row Buy/Sell UI
+
+- Moved the vendor `Buy + Sell` action from a fixed hidden test item path toward a normal vendor-window interaction.
+- `scenes/stage17_vendor_view.tscn` now stores metadata for each live server-returned vendor row, tracks the selected row, shows selected slot/item/price/stock, and exposes a quantity control.
+- The buy/sell action now sends the selected row's vendor slot, item id, and quantity through the existing server-authoritative buy/sell proof path.
+- The headless self-test first refreshes the live vendor list and selects the known safe local row, so repeat validation still stays bounded while proving the player-facing selected-row path.
+- Validation: `godot-4 --headless --path . --quit` passed.
+- Validation: `ACORE_VENDOR_BUY_SELL_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with selected item id `17184`, bought slot `34`, buy opcode `0x1A4`, `roundtrip=true`, and coinage delta `-26`.
+- Validation: `ACORE_VENDOR_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed after the selected-row UI change.
+- Remaining work: keep inventory visibly refreshed after purchase/sale, add stock refresh and failure-code UI, add repair, wire local-only item names/icons/tooltips, replace scan-list targeting with in-world click targeting, and move into a persistent world session.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

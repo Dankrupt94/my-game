@@ -514,7 +514,7 @@ Remaining trainer packet work:
 
 ## Vendor List And Buy/Sell Slice
 
-Stage 17 now has the first vendor-list and bounded vendor buy/sell paths required by [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md). This still is not full vendor parity: the current proof buys one known local test item, immediately sells that exact bought item GUID back to the same vendor, and verifies inventory/coinage changes. Repair, stock refresh UI, item names, icons, and tooltips remain future work.
+Stage 17 now has the first vendor-list and bounded vendor buy/sell paths required by [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md). This still is not full vendor parity: the current scene lets the user select a server-returned vendor row and quantity, buys that item, immediately sells the exact bought item GUID back to the same vendor, and verifies inventory/coinage changes. Repair, stock refresh UI, item names, icons, and tooltips remain future work.
 
 Relevant opcodes:
 
@@ -578,11 +578,12 @@ Observed Stage 17 result:
 - Native helper command `--vendor-buy-sell` bought local test item id `17184` from vendor slot `8`, observed `SMSG_BUY_ITEM` opcode `0x1A4`, found the new item GUID in backpack slot `34`, sent `CMSG_SELL_ITEM` for that exact GUID, saw no sell error, and confirmed the slot returned to its prior state.
 - The latest live round trip changed coinage from `9965` to `9933` after buy, then `9939` after sell, for deltas `-32`, `+6`, and `-26`. This is expected because vendor buy and sell prices differ.
 - Godot scene `scenes/stage17_vendor_view.tscn` now exposes a `Buy + Sell` control and passed `ACORE_VENDOR_BUY_SELL_SELF_TEST=1` with buy opcode `0x1A4`, bought slot `34`, and `roundtrip=true`.
+- The vendor scene now stores metadata for each server-returned row, shows the selected row in the action area, exposes a quantity control, and routes `Buy + Sell` through the selected row instead of hardcoding the UI path. The self-test still selects the known local cheap item row so repeated validation stays bounded.
 - The scene uses generic labels and item ids only. Committed data does not include proprietary NPC names, item names, icons, or extracted client data.
 
 Remaining vendor packet work:
 
-- Turn the buy/sell proof into a normal player vendor window with chosen rows, quantities, failure-code UI, stock refresh, and visible inventory refresh after purchase/sale.
+- Turn the selected-row buy/sell proof into a normal player vendor window with persistent inventory refresh after purchase/sale, failure-code UI, and stock refresh.
 - Add repair support and repair-cost/failure handling.
 - Resolve item names/icons/tooltips through the local-only data/asset pipeline.
 - Replace the target scan/list picker with normal in-world click targeting and persistent-session flow.

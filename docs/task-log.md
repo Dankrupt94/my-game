@@ -1,5 +1,26 @@
 # Task Log
 
+## 2026-07-01 - Stage 17 Vendor Selected Row Buy/Sell UI Started
+
+Goal: move the vendor buy/sell proof closer to normal player use by making the Godot scene act on the selected server-returned vendor row instead of a hidden fixed row.
+
+Plan:
+
+- Keep the native packet layer unchanged because it already accepts vendor slot, item id, and count.
+- Store metadata for each live vendor list row in the Godot item list.
+- Add selected-item feedback and a quantity control to the vendor scene.
+- Preserve the bounded headless test by defaulting the self-test selection to the known safe local item row.
+
+Result:
+
+- `scenes/stage17_vendor_view.tscn` now tracks a selected vendor row and displays selected slot, item id, price, and stock.
+- The `Buy + Sell` action now sends the selected row's vendor slot, item id, and quantity through `ProtocolClientBridge.vendor_buy_sell_probe_selector(...)`.
+- The self-test refreshes the live vendor list before buying/selling, selects the known safe item id `17184` from vendor slot `8`, and then validates the same server-authoritative round trip.
+- Validation: `godot-4 --headless --path . --quit` passed.
+- Validation: `ACORE_VENDOR_BUY_SELL_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with selected item id `17184`, buy opcode `0x1A4`, bought slot `34`, `roundtrip=true`, and coinage delta `-26`.
+- Validation: `ACORE_VENDOR_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed after the selected-row UI change.
+- Remaining work: refresh the visible inventory and vendor stock after purchase/sale, add repair and failure-code UI, add local-only item names/icons/tooltips, replace scan-list targeting with in-world click targeting, and move the vendor interaction into a persistent session.
+
 ## 2026-07-01 - Stage 17 Vendor Buy/Sell Round Trip Started
 
 Goal: extend the Stage 17 vendor slice from read-only list viewing into a bounded buy/sell proof through the Godot client path.

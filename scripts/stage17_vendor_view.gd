@@ -18,8 +18,11 @@ var vendor_label: Label
 var target_entry_input: SpinBox
 var target_name_input: LineEdit
 var target_picker: ItemList
+var selected_item_label: Label
+var quantity_input: SpinBox
 var item_list: ItemList
 var visible_targets: Array = []
+var selected_vendor_item: Dictionary = {}
 var selected_target_selector := ""
 var applying_scanned_target := false
 
@@ -114,12 +117,6 @@ func _build_view() -> void:
 	refresh_button.pressed.connect(_run_vendor_list_probe)
 	target_row.add_child(refresh_button)
 
-	var buy_sell_button := Button.new()
-	buy_sell_button.text = "Buy + Sell"
-	buy_sell_button.custom_minimum_size = Vector2(112, 34)
-	buy_sell_button.pressed.connect(_run_vendor_buy_sell_probe)
-	target_row.add_child(buy_sell_button)
-
 	target_picker = ItemList.new()
 	target_picker.custom_minimum_size = Vector2(0, 110)
 	target_picker.item_selected.connect(_on_target_selected)
@@ -130,8 +127,38 @@ func _build_view() -> void:
 	vendor_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stack.add_child(vendor_label)
 
+	var item_action_row := HBoxContainer.new()
+	item_action_row.add_theme_constant_override("separation", 10)
+	stack.add_child(item_action_row)
+
+	selected_item_label = Label.new()
+	selected_item_label.text = "Selected item: none"
+	selected_item_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	selected_item_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	item_action_row.add_child(selected_item_label)
+
+	var quantity_caption := Label.new()
+	quantity_caption.text = "Qty"
+	quantity_caption.custom_minimum_size = Vector2(36, 34)
+	item_action_row.add_child(quantity_caption)
+
+	quantity_input = SpinBox.new()
+	quantity_input.min_value = 1
+	quantity_input.max_value = 20
+	quantity_input.step = 1
+	quantity_input.value = VENDOR_BUY_SELL_TEST_COUNT
+	quantity_input.custom_minimum_size = Vector2(84, 34)
+	item_action_row.add_child(quantity_input)
+
+	var buy_sell_button := Button.new()
+	buy_sell_button.text = "Buy + Sell"
+	buy_sell_button.custom_minimum_size = Vector2(112, 34)
+	buy_sell_button.pressed.connect(_run_vendor_buy_sell_probe)
+	item_action_row.add_child(buy_sell_button)
+
 	item_list = ItemList.new()
 	item_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	item_list.item_selected.connect(_on_vendor_item_selected)
 	stack.add_child(item_list)
 
 
@@ -143,10 +170,12 @@ func _run_vendor_list_self_test() -> void:
 	_run_vendor_list_probe()
 
 
-func _run_vendor_list_probe() -> void:
+func _run_vendor_list_probe(finish_self_test := true) -> Dictionary:
 	status_label.text = "Running"
 	vendor_label.text = "Vendor: loading"
 	item_list.clear()
+	selected_vendor_item = {}
+	_update_selected_item_label()
 
 	var bridge := ProtocolClientBridge.new()
 	var result := bridge.vendor_list_probe_selector(TEST_CHARACTER_NAME, _target_selector(), _target_name())
@@ -154,8 +183,9 @@ func _run_vendor_list_probe() -> void:
 	if not ok:
 		status_label.text = "Failed"
 		target_label.text = _failure_summary("Vendor list probe failed", result)
-		_finish_vendor_list_self_test(false, result)
-		return
+		if finish_self_test:
+			_finish_vendor_list_self_test(false, result)
+		return result
 
 	status_label.text = "Ready"
 	target_label.text = "Target %s entry %s, moved close=%s, returned=%s, response opcode 0x%s." % [
@@ -173,7 +203,9 @@ func _run_vendor_list_probe() -> void:
 		str(result.get("item_count", 0)),
 		_opcode_hex(int(result.get("response_opcode", 0))),
 	])
-	_finish_vendor_list_self_test(true, result)
+	if finish_self_test:
+		_finish_vendor_list_self_test(true, result)
+	return result
 
 
 func _run_vendor_buy_sell_self_test() -> void:
@@ -181,13 +213,16 @@ func _run_vendor_buy_sell_self_test() -> void:
 	if not bool(scan_result.get("ok", false)):
 		_finish_vendor_buy_sell_self_test(false, scan_result)
 		return
+	var list_result := _run_vendor_list_probe(false)
+	if not bool(list_result.get("ok", false)):
+		_finish_vendor_buy_sell_self_test(false, list_result)
+		return
 	_run_vendor_buy_sell_probe(true)
 
 
 func _run_vendor_buy_sell_probe(finish_self_test := false) -> void:
 	status_label.text = "Running"
 	vendor_label.text = "Vendor: buying and selling"
-	item_list.clear()
 
 	if selected_target_selector.is_empty():
 		var scan_result := _scan_visible_targets(false)
@@ -197,14 +232,28 @@ func _run_vendor_buy_sell_probe(finish_self_test := false) -> void:
 			_finish_vendor_buy_sell_self_test(false, scan_result)
 			return
 
+	if selected_vendor_item.is_empty():
+		var list_result := _run_vendor_list_probe(false)
+		if not bool(list_result.get("ok", false)):
+			status_label.text = "Failed"
+			target_label.text = _failure_summary("Vendor item list failed", list_result)
+			_finish_vendor_buy_sell_self_test(false, list_result)
+			return
+
+	var vendor_item := _selected_vendor_item()
+	var vendor_slot := int(vendor_item.get("vendor_slot", VENDOR_BUY_SELL_TEST_SLOT))
+	var item_id := int(vendor_item.get("item_id", VENDOR_BUY_SELL_TEST_ITEM_ID))
+	var count := _buy_sell_count()
+	item_list.clear()
+
 	var bridge := ProtocolClientBridge.new()
 	var result := bridge.vendor_buy_sell_probe_selector(
 		TEST_CHARACTER_NAME,
 		_target_selector(),
 		_target_name(),
-		VENDOR_BUY_SELL_TEST_SLOT,
-		VENDOR_BUY_SELL_TEST_ITEM_ID,
-		VENDOR_BUY_SELL_TEST_COUNT)
+		vendor_slot,
+		item_id,
+		count)
 	var ok := bool(result.get("ok", false))
 	if not ok:
 		status_label.text = "Failed"
@@ -216,14 +265,14 @@ func _run_vendor_buy_sell_probe(finish_self_test := false) -> void:
 	status_label.text = "Ready"
 	target_label.text = "Target %s sold item %s after buying it in slot %s; roundtrip=%s." % [
 		str(result.get("target_guid", "0x0")),
-		str(result.get("item_id", VENDOR_BUY_SELL_TEST_ITEM_ID)),
+		str(result.get("item_id", item_id)),
 		str(result.get("bought_slot", 0)),
 		str(result.get("roundtrip_confirmed", false)),
 	]
 	_render_vendor_buy_sell(result)
 	print("VENDOR_BUY_SELL_SELF_TEST_READY target_entry=%s item_id=%s bought_slot=%s buy_opcode=0x%s roundtrip=%s coin_delta=%s" % [
 		str(result.get("target_entry", _target_entry())),
-		str(result.get("item_id", VENDOR_BUY_SELL_TEST_ITEM_ID)),
+		str(result.get("item_id", item_id)),
 		str(result.get("bought_slot", 0)),
 		_opcode_hex(int(result.get("buy_response_opcode", 0))),
 		str(result.get("roundtrip_confirmed", false)),
@@ -336,12 +385,29 @@ func _on_target_selected(index: int) -> void:
 	target_label.text = "Selected " + _target_picker_text(target) + "."
 
 
+func _on_vendor_item_selected(index: int) -> void:
+	if item_list == null or index < 0 or index >= item_list.item_count:
+		return
+	var metadata = item_list.get_item_metadata(index)
+	if typeof(metadata) != TYPE_DICTIONARY:
+		return
+	var item: Dictionary = metadata
+	if not item.has("vendor_slot") or not item.has("item_id"):
+		return
+	_apply_vendor_item(item)
+
+
 func _apply_target(target: Dictionary) -> void:
 	applying_scanned_target = true
 	selected_target_selector = str(target.get("guid", "")).strip_edges()
 	target_entry_input.value = int(target.get("entry", VENDOR_TARGET_ENTRY))
 	target_name_input.text = _target_name_from_visible(target)
 	applying_scanned_target = false
+
+
+func _apply_vendor_item(item: Dictionary) -> void:
+	selected_vendor_item = item.duplicate(true)
+	_update_selected_item_label()
 
 
 func _extract_visible_targets(result: Dictionary) -> Array:
@@ -409,16 +475,31 @@ func _target_name_from_visible(target: Dictionary) -> String:
 func _render_vendor(result: Dictionary) -> void:
 	var item_count := int(result.get("item_count", 0))
 	vendor_label.text = "Vendor returned %s item row(s)." % str(item_count)
+	selected_vendor_item = {}
+	_update_selected_item_label()
 
 	var items: Array = result.get("items", [])
 	if items.is_empty():
 		item_list.add_item("No vendor items returned. Error code %s" % str(result.get("error_code", 0)))
 		return
 
+	var default_index := -1
 	for item in items:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
-		item_list.add_item(_vendor_item_row(item))
+		var index := item_list.add_item(_vendor_item_row(item))
+		item_list.set_item_metadata(index, item)
+		if int(item.get("vendor_slot", 0)) == VENDOR_BUY_SELL_TEST_SLOT \
+				and int(item.get("item_id", 0)) == VENDOR_BUY_SELL_TEST_ITEM_ID:
+			default_index = index
+		elif default_index == -1:
+			default_index = index
+
+	if default_index >= 0:
+		item_list.select(default_index)
+		var selected = item_list.get_item_metadata(default_index)
+		if typeof(selected) == TYPE_DICTIONARY:
+			_apply_vendor_item(selected)
 
 
 func _render_vendor_buy_sell(result: Dictionary) -> void:
@@ -473,6 +554,9 @@ func _finish_vendor_buy_sell_self_test(ok: bool, result: Dictionary) -> void:
 	if OS.get_environment("ACORE_VENDOR_BUY_SELL_SELF_TEST") != "1":
 		return
 	if ok \
+			and int(result.get("vendor_slot", 0)) == VENDOR_BUY_SELL_TEST_SLOT \
+			and int(result.get("item_id", 0)) == VENDOR_BUY_SELL_TEST_ITEM_ID \
+			and int(result.get("count", 0)) == VENDOR_BUY_SELL_TEST_COUNT \
 			and bool(result.get("buy_response_seen", false)) \
 			and bool(result.get("buy_succeeded", false)) \
 			and int(result.get("buy_response_opcode", 0)) == SMSG_BUY_ITEM \
@@ -534,6 +618,38 @@ func _vendor_item_row(item: Dictionary) -> String:
 		str(item.get("max_durability", 0)),
 		str(item.get("extended_cost", 0)),
 	]
+
+
+func _selected_vendor_item() -> Dictionary:
+	if not selected_vendor_item.is_empty():
+		return selected_vendor_item
+	return {
+		"vendor_slot": VENDOR_BUY_SELL_TEST_SLOT,
+		"item_id": VENDOR_BUY_SELL_TEST_ITEM_ID,
+		"buy_price": 0,
+		"buy_count": VENDOR_BUY_SELL_TEST_COUNT,
+		"left_in_stock": INFINITE_STOCK,
+	}
+
+
+func _update_selected_item_label() -> void:
+	if selected_item_label == null:
+		return
+	if selected_vendor_item.is_empty():
+		selected_item_label.text = "Selected item: none"
+		return
+	selected_item_label.text = "Selected slot %s item %s, %s each, stock %s" % [
+		str(selected_vendor_item.get("vendor_slot", 0)),
+		str(selected_vendor_item.get("item_id", 0)),
+		_money_text(int(selected_vendor_item.get("buy_price", 0))),
+		_stock_text(int(selected_vendor_item.get("left_in_stock", 0))),
+	]
+
+
+func _buy_sell_count() -> int:
+	if quantity_input == null:
+		return VENDOR_BUY_SELL_TEST_COUNT
+	return max(1, int(quantity_input.value))
 
 
 func _stock_text(stock: int) -> String:
