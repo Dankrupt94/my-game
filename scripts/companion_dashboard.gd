@@ -27,6 +27,7 @@ const MAILBOX_SCENE := "res://scenes/mailbox_view.tscn"
 const GUILD_SCENE := "res://scenes/guild_view.tscn"
 const AUCTION_HOUSE_SCENE := "res://scenes/auction_house_view.tscn"
 const QUEST_SCENE := "res://scenes/quest_view.tscn"
+const QUESTGIVER_SCENE := "res://scenes/questgiver_view.tscn"
 const GROUP_SCENE := "res://scenes/group_view.tscn"
 const AURA_SCENE := "res://scenes/aura_view.tscn"
 const CHARACTER_SELECT_SCENE := "res://scenes/character_select_view.tscn"
@@ -173,6 +174,10 @@ func _register_command_actions() -> void:
 			"label": "Quest Log",
 			"handler": Callable(self, "_action_open_quest"),
 		},
+		"open_questgiver": {
+			"label": "Questgiver",
+			"handler": Callable(self, "_action_open_questgiver"),
+		},
 		"open_group": {
 			"label": "Party/Group",
 			"handler": Callable(self, "_action_open_group"),
@@ -272,6 +277,7 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("open_vendor"))
 	actions.add_child(_action_button("open_auction_house"))
 	actions.add_child(_action_button("open_quest"))
+	actions.add_child(_action_button("open_questgiver"))
 	actions.add_child(_action_button("open_group"))
 	actions.add_child(_action_button("open_auras"))
 	actions.add_child(_action_button("open_character_select"))
@@ -595,6 +601,12 @@ func _action_open_quest() -> void:
 	var error := get_tree().change_scene_to_file(QUEST_SCENE)
 	if error != OK:
 		_append_log("Could not open quest log scene. Error code: " + str(error))
+
+
+func _action_open_questgiver() -> void:
+	var error := get_tree().change_scene_to_file(QUESTGIVER_SCENE)
+	if error != OK:
+		_append_log("Could not open questgiver scene. Error code: " + str(error))
 
 
 func _action_open_group() -> void:

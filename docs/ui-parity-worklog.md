@@ -23,6 +23,36 @@ lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-01 - Questgiver List Renderer (Codex UI lane)
+
+Context: Claude is handling the native/protocol quest packet work. Codex stayed
+in the UI lane and added a non-`stage17_*` surface that can render the parsed
+questgiver-list shape without touching bridge/live-session code.
+
+Result:
+
+- Added `scenes/questgiver_view.tscn` and `scripts/questgiver_view.gd`.
+- Added dashboard navigation with a `Questgiver` button.
+- The view renders packet-shaped fields for questgiver GUID, greeting, quest
+  count, quest id, icon, level, flags, repeatable state, and title.
+- The accept button stays disabled because live accept/complete behavior belongs
+  to the protocol lane. This prevents the UI from pretending the playable-port
+  quest loop is complete before server-authoritative packet support exists.
+
+Validation:
+
+- `ACORE_QUESTGIVER_UI_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/questgiver_view.tscn` validates the renderer with synthetic
+  packet-shaped dictionaries only.
+
+Remaining work:
+
+- Claude/native lane: expose a live questgiver-list bridge method that returns
+  the same dictionary shape.
+- UI lane: feed the live result into this view, then add the real accept,
+  reward-choice, completion, objective tracker, and quest log sync surfaces as
+  the protocol lane exposes those actions.
+
 ## 2026-07-01 - Bridge accepts login credentials (native/protocol lane)
 
 - `run_character_flow` / `enter_world` gained optional `account`/`password`

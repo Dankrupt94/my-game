@@ -11,6 +11,44 @@ lane can apply it without breaking its own tests.
 
 ---
 
+## REQUEST — Questgiver list bridge result for UI renderer
+
+**Requested by:** Codex UI lane · 2026-07-01
+**Owner:** Claude native/protocol lane
+**Why:** `scenes/questgiver_view.tscn` can now render a player-facing questgiver
+list from parsed `SMSG_QUESTGIVER_QUEST_LIST` data, but it intentionally does
+not call bridge/live-session code. To move from synthetic UI proof to playable
+quest interaction, the UI needs a read-only bridge method that returns the parsed
+quest list for the currently selected questgiver.
+
+**Requested shape (additive, backward-compatible):**
+
+```gdscript
+func questgiver_list_probe_selector(
+        character_name: String,
+        target_selector: String,
+        target_name: String = "Nearby Questgiver",
+        host: String = "127.0.0.1",
+        port: String = "3724") -> Dictionary:
+```
+
+**Return fields consumed by the UI:**
+
+- `ok`
+- `questgiver_guid`
+- `greeting`
+- `emote_delay`
+- `emote_type`
+- `quest_count`
+- `quests`: array of dictionaries with `quest_id`, `quest_icon`,
+  `quest_level`, `quest_flags`, `repeatable`, and `title`
+
+**Scope note:** no quest accept/complete mutation is requested in this step.
+The UI renderer keeps its accept button disabled until a separate
+server-authoritative quest accept action exists.
+
+---
+
 ## APPLIED — Login credentials in bridge auth (commit 3672d9c)
 
 **Applied by:** Claude (now native/protocol lane) · 2026-07-01
