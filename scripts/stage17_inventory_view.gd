@@ -86,15 +86,18 @@ func _load_inventory() -> void:
 		return
 
 	var slots: Array = result.get("slots", [])
-	status_label.text = "Slots: %s  Filled: %s" % [
+	status_label.text = "Slots: %s  Filled: %s  Named: %s" % [
 		str(result.get("slot_count", slots.size())),
 		str(result.get("populated_count", 0)),
+		str(result.get("item_template_count", 0)),
 	]
 	money_label.text = "Money: " + _money_text(int(result.get("coinage", 0)))
 	_render_slots(slots)
-	print("INVENTORY_VIEW_READY slots=%s populated=%s coinage=%s" % [
+	print("INVENTORY_VIEW_READY slots=%s populated=%s details=%s names=%s coinage=%s" % [
 		str(result.get("slot_count", slots.size())),
 		str(result.get("populated_count", 0)),
+		str(result.get("item_detail_count", 0)),
+		str(result.get("item_template_count", 0)),
 		str(result.get("coinage", 0)),
 	])
 	_finish_self_test(slots.size() == 39, result)
@@ -145,6 +148,13 @@ func _slot_name(index: int) -> String:
 
 func _slot_state(slot: Dictionary) -> String:
 	if bool(slot.get("populated", false)):
+		var item_name := str(slot.get("item_name", ""))
+		var stack := int(slot.get("stack_count", 0))
+		if not item_name.is_empty():
+			return item_name + (" x" + str(stack) if stack > 1 else "")
+		var entry := int(slot.get("item_entry", 0))
+		if entry > 0:
+			return "Entry " + str(entry)
 		return "Item " + _short_guid(str(slot.get("item_guid", "0x0")))
 	if bool(slot.get("field_seen", false)):
 		return "Empty"
@@ -152,10 +162,19 @@ func _slot_state(slot: Dictionary) -> String:
 
 
 func _show_slot(slot: Dictionary, index: int) -> void:
-	detail_label.text = "%s  |  %s  |  %s" % [
+	var durability := ""
+	if int(slot.get("max_durability", 0)) > 0:
+		durability = "  |  durability %s/%s" % [
+			str(slot.get("durability", 0)),
+			str(slot.get("max_durability", 0)),
+		]
+	detail_label.text = "%s  |  %s  |  %s  |  entry %s  |  stack %s%s" % [
 		_slot_name(index),
 		str(slot.get("section", _section_for_slot(index))),
 		str(slot.get("item_guid", "0x0")),
+		str(slot.get("item_entry", 0)),
+		str(slot.get("stack_count", 0)),
+		durability,
 	]
 
 
@@ -188,9 +207,11 @@ func _finish_self_test(ok: bool, result: Dictionary) -> void:
 	self_test_finished = true
 
 	if ok:
-		print("INVENTORY_SELF_TEST_OK slots=%s populated=%s coinage=%s" % [
+		print("INVENTORY_SELF_TEST_OK slots=%s populated=%s details=%s names=%s coinage=%s" % [
 			str(result.get("slot_count", 0)),
 			str(result.get("populated_count", 0)),
+			str(result.get("item_detail_count", 0)),
+			str(result.get("item_template_count", 0)),
 			str(result.get("coinage", 0)),
 		])
 		get_tree().quit(0)

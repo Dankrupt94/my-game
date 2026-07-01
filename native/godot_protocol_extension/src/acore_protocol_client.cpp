@@ -192,8 +192,15 @@ Dictionary inventory_slot_dictionary(InventorySlotSummary const& slot)
     value["slot"] = static_cast<int>(slot.slot);
     value["section"] = inventory_section_name(slot.section);
     value["item_guid"] = guid_to_hex(slot.item_guid);
+    value["item_entry"] = static_cast<int64_t>(slot.item_entry);
+    value["item_name"] = String(slot.item_name.c_str());
+    value["stack_count"] = static_cast<int64_t>(slot.stack_count);
+    value["durability"] = static_cast<int64_t>(slot.durability);
+    value["max_durability"] = static_cast<int64_t>(slot.max_durability);
     value["field_seen"] = slot.field_seen;
     value["populated"] = slot.populated;
+    value["item_detail_seen"] = slot.item_detail_seen;
+    value["item_template_seen"] = slot.item_template_seen;
     return value;
 }
 
@@ -216,6 +223,8 @@ Dictionary inventory_dictionary(PlayerInventorySummary const& inventory)
     value["coinage"] = static_cast<int64_t>(inventory.coinage);
     value["slot_count"] = static_cast<int>(inventory.slots.size());
     value["populated_count"] = static_cast<int>(inventory.populated_count);
+    value["item_detail_count"] = static_cast<int>(inventory.item_detail_count);
+    value["item_template_count"] = static_cast<int>(inventory.item_template_count);
     value["slots"] = inventory_slot_array(inventory.slots);
     return value;
 }
@@ -723,6 +732,8 @@ Dictionary AcoreProtocolClient::inventory_snapshot(
         result["coinage"] = static_cast<int64_t>(flow.inventory.coinage);
         result["slot_count"] = static_cast<int>(flow.inventory.slots.size());
         result["populated_count"] = static_cast<int>(flow.inventory.populated_count);
+        result["item_detail_count"] = static_cast<int>(flow.inventory.item_detail_count);
+        result["item_template_count"] = static_cast<int>(flow.inventory.item_template_count);
         result["slots"] = inventory_slot_array(flow.inventory.slots);
         result["inventory"] = inventory_dictionary(flow.inventory);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);

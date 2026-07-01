@@ -247,12 +247,30 @@ Stage 17 begins reading owner-only player inventory fields from value updates:
 | `PLAYER_FIELD_PACK_SLOT_1` | `UNIT_END + 0x00DE` | 32 x `uint32` | Backpack item slots `23..38`, two fields per item GUID |
 | `PLAYER_FIELD_COINAGE` | `UNIT_END + 0x03FE` | 1 x `uint32` | Money value when the server includes the field |
 
+Stage 17 now also reads item object value fields for inventory item GUIDs:
+
+| Field | AzerothCore index | Size | Stage 17 use |
+| --- | ---: | ---: | --- |
+| `OBJECT_FIELD_ENTRY` | `0x0003` | 1 x `uint32` | Item template entry for a slot item GUID |
+| `ITEM_FIELD_STACK_COUNT` | `OBJECT_END + 0x0008` | 1 x `uint32` | Stack count for consumables and stacked items |
+| `ITEM_FIELD_DURABILITY` | `OBJECT_END + 0x0036` | 1 x `uint32` | Current durability when present |
+| `ITEM_FIELD_MAXDURABILITY` | `OBJECT_END + 0x0037` | 1 x `uint32` | Maximum durability when present |
+
+Item template query:
+
+| Direction | Opcode | Payload | Stage 17 use |
+| --- | ---: | --- | --- |
+| Client to server | `CMSG_ITEM_QUERY_SINGLE` (`0x056`) | `uint32 item_entry` | Request display/template metadata for a discovered item entry |
+| Server to client | `SMSG_ITEM_QUERY_SINGLE_RESPONSE` (`0x058`) | Starts with `uint32 item_entry`, class/subclass fields, four name strings, display id, quality, prices, inventory type, allowable masks, item level, and required level | Parses the early stable fields needed for read-only inventory names and future tooltips |
+
 Stage 17 inventory snapshot behavior:
 
 - `parse_update_object_summary` now reads value update masks into field/value pairs instead of only skipping them.
 - When the update GUID matches the selected player GUID, the parser reconstructs 64-bit item GUIDs for 39 equipment, bag, and backpack slots.
-- The Godot scene `scenes/stage17_inventory_view.tscn` displays these slots as live read-only server state.
-- Local validation observed 39 slots and 7 populated item GUIDs for `Codexstage`; coinage was `0`, and the zero-valued coinage field was not included in that live update packet.
+- Item object create/update blocks are routed to inventory item detail parsing instead of the general nearby-object list.
+- After item entries are known, the flow sends bounded item-template queries and applies resolved names back onto matching slots.
+- The Godot scene `scenes/stage17_inventory_view.tscn` displays these slots as live read-only server state with item names, entries, stack counts, and durability where present.
+- Local validation observed 39 slots, 7 populated item GUIDs, 7 item-detail rows, and 7 resolved item names for `Codexstage`; coinage was `0`, and the zero-valued coinage field was not included in that live update packet.
 
 Important Stage 15 correction: database spawn GUIDs are not live packet GUIDs. AzerothCore creates runtime object counters when the map instantiates creatures/gameobjects. Client actions must target the live `ObjectGuid` from the update stream.
 

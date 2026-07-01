@@ -1463,6 +1463,8 @@ func _parse_inventory_snapshot_output(output: String) -> Dictionary:
 		"coinage": 0,
 		"slot_count": 0,
 		"populated_count": 0,
+		"item_detail_count": 0,
+		"item_template_count": 0,
 		"slots": [],
 	}
 	for raw_line in output.split("\n"):
@@ -1479,6 +1481,8 @@ func _parse_inventory_snapshot_output(output: String) -> Dictionary:
 			result["coinage"] = _extract_int_field(line, "coinage=")
 			result["slot_count"] = _extract_int_field(line, "slot_count=")
 			result["populated_count"] = _extract_int_field(line, "populated_count=")
+			result["item_detail_count"] = _extract_int_field(line, "item_detail_count=")
+			result["item_template_count"] = _extract_int_field(line, "item_template_count=")
 		elif line.begins_with("INVENTORY_SLOT"):
 			result["slots"].append({
 				"slot": _extract_int_field(line, "slot="),
@@ -1486,6 +1490,13 @@ func _parse_inventory_snapshot_output(output: String) -> Dictionary:
 				"field_seen": _extract_int_field(line, "field_seen=") == 1,
 				"populated": _extract_int_field(line, "populated=") == 1,
 				"item_guid": _extract_token_after(line, "item_guid="),
+				"item_entry": _extract_int_field(line, "item_entry="),
+				"stack_count": _extract_int_field(line, "stack_count="),
+				"durability": _extract_int_field(line, "durability="),
+				"max_durability": _extract_int_field(line, "max_durability="),
+				"item_detail_seen": _extract_int_field(line, "item_detail_seen=") == 1,
+				"item_template_seen": _extract_int_field(line, "item_template_seen=") == 1,
+				"item_name": _extract_quoted_field(line, "item_name=\""),
 			})
 	result["inventory"] = {
 		"seen": result["inventory_seen"],
@@ -1494,6 +1505,8 @@ func _parse_inventory_snapshot_output(output: String) -> Dictionary:
 		"coinage": result["coinage"],
 		"slot_count": result["slot_count"],
 		"populated_count": result["populated_count"],
+		"item_detail_count": result["item_detail_count"],
+		"item_template_count": result["item_template_count"],
 		"slots": result["slots"],
 	}
 	return result

@@ -772,6 +772,220 @@ bool action_button_matches(ActionButtonSummary const& actual, ActionButtonSummar
         && actual.type == expected.type;
 }
 
+InventorySlotSummary* find_inventory_slot(PlayerInventorySummary& inventory, std::uint8_t slot)
+{
+    for (InventorySlotSummary& summary : inventory.slots)
+    {
+        if (summary.slot == slot)
+        {
+            return &summary;
+        }
+    }
+    return nullptr;
+}
+
+void ensure_inventory_slot(PlayerInventorySummary& inventory, InventorySlotSummary const& source)
+{
+    if (find_inventory_slot(inventory, source.slot) == nullptr)
+    {
+        inventory.slots.push_back(source);
+    }
+}
+
+void refresh_inventory_counts(PlayerInventorySummary& inventory)
+{
+    inventory.populated_count = 0;
+    inventory.item_detail_count = 0;
+    inventory.item_template_count = 0;
+    for (InventorySlotSummary const& slot : inventory.slots)
+    {
+        if (slot.populated)
+        {
+            ++inventory.populated_count;
+        }
+        if (slot.item_detail_seen)
+        {
+            ++inventory.item_detail_count;
+        }
+        if (slot.item_template_seen)
+        {
+            ++inventory.item_template_count;
+        }
+    }
+}
+
+void merge_inventory_summary(PlayerInventorySummary& target, PlayerInventorySummary const& source)
+{
+    if (!source.seen)
+    {
+        return;
+    }
+
+    target.seen = true;
+    target.player_guid = source.player_guid != 0 ? source.player_guid : target.player_guid;
+    if (source.coinage_seen)
+    {
+        target.coinage_seen = true;
+        target.coinage = source.coinage;
+    }
+
+    for (InventorySlotSummary const& source_slot : source.slots)
+    {
+        ensure_inventory_slot(target, source_slot);
+        InventorySlotSummary* target_slot = find_inventory_slot(target, source_slot.slot);
+        if (!target_slot || !source_slot.field_seen)
+        {
+            continue;
+        }
+
+        bool const same_item = target_slot->item_guid == source_slot.item_guid;
+        target_slot->section = source_slot.section;
+        target_slot->field_seen = true;
+        target_slot->populated = source_slot.populated;
+        target_slot->item_guid = source_slot.item_guid;
+        if (!same_item)
+        {
+            target_slot->item_entry = 0;
+            target_slot->item_name.clear();
+            target_slot->stack_count = 0;
+            target_slot->durability = 0;
+            target_slot->max_durability = 0;
+            target_slot->item_detail_seen = false;
+            target_slot->item_template_seen = false;
+        }
+    }
+
+    std::sort(
+        target.slots.begin(),
+        target.slots.end(),
+        [](InventorySlotSummary const& left, InventorySlotSummary const& right)
+        {
+            return left.slot < right.slot;
+        });
+    refresh_inventory_counts(target);
+}
+
+void apply_item_object_to_inventory(PlayerInventorySummary& inventory, InventoryItemObjectSummary const& item)
+{
+    if (!item.seen || item.guid == 0)
+    {
+        return;
+    }
+
+    for (InventorySlotSummary& slot : inventory.slots)
+    {
+        if (slot.item_guid != item.guid)
+        {
+            continue;
+        }
+
+        if (item.entry_seen)
+        {
+            slot.item_entry = item.entry;
+        }
+        if (item.stack_count_seen)
+        {
+            slot.stack_count = item.stack_count;
+        }
+        if (item.durability_seen)
+        {
+            slot.durability = item.durability;
+        }
+        if (item.max_durability_seen)
+        {
+            slot.max_durability = item.max_durability;
+        }
+        if (item.entry_seen)
+        {
+            slot.item_detail_seen = true;
+        }
+    }
+    refresh_inventory_counts(inventory);
+}
+
+void apply_item_template_to_inventory(PlayerInventorySummary& inventory, ItemTemplateSummary const& item_template)
+{
+    if (!item_template.parsed || item_template.entry == 0)
+    {
+        return;
+    }
+
+    for (InventorySlotSummary& slot : inventory.slots)
+    {
+        if (slot.item_entry != item_template.entry)
+        {
+            continue;
+        }
+        slot.item_name = item_template.name;
+        slot.item_template_seen = true;
+    }
+    refresh_inventory_counts(inventory);
+}
+
+std::vector<std::uint32_t> inventory_item_entries(PlayerInventorySummary const& inventory)
+{
+    std::vector<std::uint32_t> entries;
+    for (InventorySlotSummary const& slot : inventory.slots)
+    {
+        if (slot.item_entry == 0)
+        {
+            continue;
+        }
+        if (std::find(entries.begin(), entries.end(), slot.item_entry) == entries.end())
+        {
+            entries.push_back(slot.item_entry);
+        }
+    }
+    return entries;
+}
+
+std::optional<ItemTemplateSummary> query_item_template(
+    AuthenticatedWorldSession& session,
+    std::uint32_t item_entry,
+    FlowOptions options,
+    std::vector<std::uint16_t>& skipped_opcodes)
+{
+    write_world_packet(
+        session.socket.get(),
+        CMSG_ITEM_QUERY_SINGLE,
+        build_item_query_single_payload(item_entry),
+        &session.crypt);
+
+    for (int i = 0; i < 40; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session.socket.get(),
+            &session.crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (packet->opcode == SMSG_ITEM_QUERY_SINGLE_RESPONSE)
+        {
+            ItemTemplateSummary item_template = parse_item_query_single_response(packet->payload);
+            if (item_template.entry == item_entry)
+            {
+                return item_template;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(session, *packet);
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        skipped_opcodes.push_back(packet->opcode);
+    }
+
+    return std::nullopt;
+}
+
 void validate_chat_message(std::string const& message)
 {
     if (message.empty())
@@ -1840,7 +2054,8 @@ InventorySnapshotResult read_inventory_snapshot(
     result.realm = session->realm;
     result.character = selected;
 
-    for (int i = 0; i < 180; ++i)
+    int idle_after_ready = 0;
+    for (int i = 0; i < 260; ++i)
     {
         auto packet = read_world_packet_optional(
             session->socket.get(),
@@ -1851,10 +2066,17 @@ InventorySnapshotResult read_inventory_snapshot(
         {
             if (result.inventory_seen && result.logged_in_world)
             {
-                break;
+                ++idle_after_ready;
+                bool const all_details_seen = result.inventory.populated_count > 0
+                    && result.inventory.item_detail_count >= result.inventory.populated_count;
+                if (all_details_seen || idle_after_ready >= 20)
+                {
+                    break;
+                }
             }
             continue;
         }
+        idle_after_ready = 0;
         if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
         {
             UpdateObjectSummary update = parse_update_object_summary(
@@ -1863,12 +2085,12 @@ InventorySnapshotResult read_inventory_snapshot(
                 selected.guid);
             if (update.inventory.seen)
             {
-                result.inventory = update.inventory;
+                merge_inventory_summary(result.inventory, update.inventory);
                 result.inventory_seen = true;
-                if (result.logged_in_world)
-                {
-                    break;
-                }
+            }
+            for (InventoryItemObjectSummary const& item : update.inventory_items)
+            {
+                apply_item_object_to_inventory(result.inventory, item);
             }
             continue;
         }
@@ -1876,10 +2098,6 @@ InventorySnapshotResult read_inventory_snapshot(
         {
             answer_time_sync_request(*session, *packet);
             result.logged_in_world = true;
-            if (result.inventory_seen)
-            {
-                break;
-            }
             continue;
         }
         if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
@@ -1887,6 +2105,19 @@ InventorySnapshotResult read_inventory_snapshot(
             throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
         }
         result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    for (std::uint32_t item_entry : inventory_item_entries(result.inventory))
+    {
+        std::optional<ItemTemplateSummary> item_template = query_item_template(
+            *session,
+            item_entry,
+            options,
+            result.skipped_opcodes);
+        if (item_template)
+        {
+            apply_item_template_to_inventory(result.inventory, *item_template);
+        }
     }
 
     (void)request_graceful_logout(*session, options);

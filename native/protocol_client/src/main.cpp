@@ -600,6 +600,8 @@ int inventory_snapshot(
               << " coinage=" << result.inventory.coinage
               << " slot_count=" << result.inventory.slots.size()
               << " populated_count=" << result.inventory.populated_count
+              << " item_detail_count=" << result.inventory.item_detail_count
+              << " item_template_count=" << result.inventory.item_template_count
               << " skipped=" << result.skipped_opcodes.size()
               << "\n";
 
@@ -611,6 +613,13 @@ int inventory_snapshot(
                   << " field_seen=" << (slot.field_seen ? 1 : 0)
                   << " populated=" << (slot.populated ? 1 : 0)
                   << " item_guid=0x" << std::hex << slot.item_guid << std::dec
+                  << " item_entry=" << slot.item_entry
+                  << " stack_count=" << slot.stack_count
+                  << " durability=" << slot.durability
+                  << " max_durability=" << slot.max_durability
+                  << " item_detail_seen=" << (slot.item_detail_seen ? 1 : 0)
+                  << " item_template_seen=" << (slot.item_template_seen ? 1 : 0)
+                  << " item_name=\"" << slot.item_name << "\""
                   << "\n";
     }
     return result.inventory_seen && result.inventory.slots.size() == PlayerInventorySnapshotSlots ? 0 : 1;

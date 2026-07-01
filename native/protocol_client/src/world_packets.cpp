@@ -160,6 +160,10 @@ struct UpdateFieldValue
 };
 
 constexpr std::uint32_t UnitEndField = 0x0006 + 0x008E;
+constexpr std::uint32_t ObjectFieldEntry = 0x0003;
+constexpr std::uint32_t ItemFieldStackCount = 0x0006 + 0x0008;
+constexpr std::uint32_t ItemFieldDurability = 0x0006 + 0x0036;
+constexpr std::uint32_t ItemFieldMaxDurability = 0x0006 + 0x0037;
 constexpr std::uint32_t PlayerFieldInvSlotHead = UnitEndField + 0x00B0;
 constexpr std::uint32_t PlayerFieldPackSlot1 = UnitEndField + 0x00DE;
 constexpr std::uint32_t PlayerFieldCoinage = UnitEndField + 0x03FE;
@@ -316,6 +320,11 @@ bool high_guid_has_entry(std::uint16_t high)
     }
 }
 
+bool high_guid_is_item(std::uint16_t high)
+{
+    return high == 0x4000;
+}
+
 std::uint32_t guid_entry(std::uint64_t guid)
 {
     std::uint16_t const high = high_guid(guid);
@@ -377,6 +386,23 @@ bool update_value_at(std::vector<UpdateFieldValue> const& values, std::uint32_t 
     return false;
 }
 
+InventoryItemObjectSummary parse_inventory_item_object(
+    std::uint64_t guid,
+    std::uint8_t object_type,
+    std::vector<UpdateFieldValue> const& values)
+{
+    InventoryItemObjectSummary summary;
+    summary.seen = true;
+    summary.guid = guid;
+    summary.object_type = object_type;
+
+    summary.entry_seen = update_value_at(values, ObjectFieldEntry, summary.entry);
+    summary.stack_count_seen = update_value_at(values, ItemFieldStackCount, summary.stack_count);
+    summary.durability_seen = update_value_at(values, ItemFieldDurability, summary.durability);
+    summary.max_durability_seen = update_value_at(values, ItemFieldMaxDurability, summary.max_durability);
+    return summary;
+}
+
 InventorySlotSummary make_inventory_slot(std::uint8_t slot)
 {
     InventorySlotSummary summary;
@@ -426,11 +452,21 @@ std::uint32_t inventory_field_index_for_slot(std::uint8_t slot)
 void update_populated_count(PlayerInventorySummary& inventory)
 {
     inventory.populated_count = 0;
+    inventory.item_detail_count = 0;
+    inventory.item_template_count = 0;
     for (InventorySlotSummary const& slot : inventory.slots)
     {
         if (slot.populated)
         {
             ++inventory.populated_count;
+        }
+        if (slot.item_detail_seen)
+        {
+            ++inventory.item_detail_count;
+        }
+        if (slot.item_template_seen)
+        {
+            ++inventory.item_template_count;
         }
     }
 }
@@ -740,6 +776,13 @@ std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid)
     return payload;
 }
 
+std::vector<std::uint8_t> build_item_query_single_payload(std::uint32_t item_entry)
+{
+    std::vector<std::uint8_t> payload;
+    append_u32_le(payload, item_entry);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_time_sync_response_payload(std::uint32_t counter, std::uint32_t client_time)
 {
     std::vector<std::uint8_t> payload;
@@ -997,6 +1040,38 @@ ActionButtonsSummary parse_action_buttons_summary(std::span<const std::uint8_t> 
     return summary;
 }
 
+ItemTemplateSummary parse_item_query_single_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    ItemTemplateSummary summary;
+    summary.entry = read_u32_le(payload, offset);
+    if ((summary.entry & 0x80000000u) != 0)
+    {
+        return summary;
+    }
+
+    summary.item_class = read_u32_le(payload, offset);
+    summary.subclass = read_u32_le(payload, offset);
+    (void)read_u32_le(payload, offset); // sound override subclass
+    summary.name = read_c_string(payload, offset);
+    (void)read_c_string(payload, offset);
+    (void)read_c_string(payload, offset);
+    (void)read_c_string(payload, offset);
+    summary.display_id = read_u32_le(payload, offset);
+    summary.quality = read_u32_le(payload, offset);
+    (void)read_u32_le(payload, offset); // flags
+    (void)read_u32_le(payload, offset); // flags2
+    (void)read_u32_le(payload, offset); // buy price
+    (void)read_u32_le(payload, offset); // sell price
+    summary.inventory_type = read_u32_le(payload, offset);
+    (void)read_u32_le(payload, offset); // allowable class
+    (void)read_u32_le(payload, offset); // allowable race
+    summary.item_level = read_u32_le(payload, offset);
+    summary.required_level = read_u32_le(payload, offset);
+    summary.parsed = true;
+    return summary;
+}
+
 AttackerStateUpdateSummary parse_attacker_state_update(std::span<const std::uint8_t> payload)
 {
     constexpr std::uint32_t HITINFO_UNK1 = 0x00000001;
@@ -1181,6 +1256,10 @@ UpdateObjectSummary parse_update_object_summary(
             if (update_type == 0)
             {
                 std::vector<UpdateFieldValue> values = read_values_update(body, offset);
+                if (high_guid_is_item(high_guid(guid)))
+                {
+                    summary.inventory_items.push_back(parse_inventory_item_object(guid, 0, values));
+                }
                 if (guid == player_guid)
                 {
                     apply_player_inventory_values(summary.inventory, guid, values);
@@ -1199,11 +1278,19 @@ UpdateObjectSummary parse_update_object_summary(
                 std::uint8_t const object_type = read_u8(body, offset);
                 ParsedMovementUpdate movement = parse_movement_update(body, offset);
                 std::vector<UpdateFieldValue> values = read_values_update(body, offset);
+                bool const item_object = object_type == 1 || object_type == 2 || high_guid_is_item(high_guid(guid));
+                if (item_object)
+                {
+                    summary.inventory_items.push_back(parse_inventory_item_object(guid, object_type, values));
+                }
                 if (guid == player_guid)
                 {
                     apply_player_inventory_values(summary.inventory, guid, values);
                 }
-                summary.visible_objects.push_back(make_visible_object(update_type, guid, object_type, movement));
+                if (!item_object)
+                {
+                    summary.visible_objects.push_back(make_visible_object(update_type, guid, object_type, movement));
+                }
                 continue;
             }
         }
@@ -1303,6 +1390,12 @@ bool world_packet_self_test()
     {
         return false;
     }
+    auto item_query_payload = build_item_query_single_payload(38);
+    auto item_query_packet = build_client_packet(CMSG_ITEM_QUERY_SINGLE, item_query_payload);
+    if (item_query_packet.size() != 10 || item_query_packet[2] != 0x56)
+    {
+        return false;
+    }
 
     auto create_payload = build_character_create_payload("Codextest");
     if (create_payload.empty() || create_payload.back() != 0)
@@ -1338,7 +1431,8 @@ bool world_packet_self_test()
     }
 
     std::vector<std::uint8_t> update_payload;
-    append_u32_le(update_payload, 1);
+    constexpr std::uint64_t synthetic_item_guid = 0x40000000001F4538ULL;
+    append_u32_le(update_payload, 2);
     append_u8(update_payload, 2); // create object
     append_packed_guid(update_payload, 0xF13000033700000BULL);
     append_u8(update_payload, 3); // unit object type
@@ -1364,8 +1458,19 @@ bool world_packet_self_test()
     {
         append_u32_le(update_payload, mask);
     }
-    append_u32_le(update_payload, 0x5678);
-    append_u32_le(update_payload, 0x1234);
+    append_u32_le(update_payload, static_cast<std::uint32_t>(synthetic_item_guid & 0xFFFFFFFFu));
+    append_u32_le(update_payload, static_cast<std::uint32_t>(synthetic_item_guid >> 32));
+    append_u32_le(update_payload, 42);
+    append_u8(update_payload, 2); // create item object
+    append_packed_guid(update_payload, synthetic_item_guid);
+    append_u8(update_payload, 1); // item object type
+    append_u16_le(update_payload, 0); // no movement update fields
+    append_u8(update_payload, 2); // value update mask blocks
+    append_u32_le(update_payload, (1u << ObjectFieldEntry) | (1u << ItemFieldStackCount));
+    append_u32_le(update_payload, (1u << (ItemFieldDurability - 32)) | (1u << (ItemFieldMaxDurability - 32)));
+    append_u32_le(update_payload, 38);
+    append_u32_le(update_payload, 1);
+    append_u32_le(update_payload, 17);
     append_u32_le(update_payload, 42);
     auto update = parse_update_object_summary(update_payload, false, 0xF13000033700000BULL);
 
@@ -1418,6 +1523,28 @@ bool world_packet_self_test()
     }
     ActionButtonsSummary action_buttons = parse_action_buttons_summary(action_buttons_payload);
 
+    std::vector<std::uint8_t> item_template_payload;
+    append_u32_le(item_template_payload, 38);
+    append_u32_le(item_template_payload, 2);
+    append_u32_le(item_template_payload, 7);
+    append_u32_le(item_template_payload, 0);
+    item_template_payload.insert(item_template_payload.end(), {'R', 'e', 'c', 'r', 'u', 'i', 't', '\'', 's', ' ', 'S', 'h', 'i', 'r', 't', 0});
+    append_u8(item_template_payload, 0);
+    append_u8(item_template_payload, 0);
+    append_u8(item_template_payload, 0);
+    append_u32_le(item_template_payload, 123);
+    append_u32_le(item_template_payload, 1);
+    append_u32_le(item_template_payload, 0);
+    append_u32_le(item_template_payload, 0);
+    append_u32_le(item_template_payload, 10);
+    append_u32_le(item_template_payload, 1);
+    append_u32_le(item_template_payload, 4);
+    append_u32_le(item_template_payload, 0xFFFFFFFFu);
+    append_u32_le(item_template_payload, 0xFFFFFFFFu);
+    append_u32_le(item_template_payload, 1);
+    append_u32_le(item_template_payload, 1);
+    ItemTemplateSummary item_template = parse_item_query_single_response(item_template_payload);
+
     std::vector<std::uint8_t> attacker_state_payload;
     append_u32_le(attacker_state_payload, 0x00000002); // affects victim
     append_packed_guid(attacker_state_payload, 0x1234);
@@ -1467,7 +1594,13 @@ bool world_packet_self_test()
         && update.inventory.coinage == 42
         && update.inventory.slots.size() == PlayerInventorySnapshotSlots
         && update.inventory.slots[0].populated
-        && update.inventory.slots[0].item_guid == 0x123400005678ULL
+        && update.inventory.slots[0].item_guid == synthetic_item_guid
+        && update.inventory_items.size() == 1
+        && update.inventory_items[0].guid == synthetic_item_guid
+        && update.inventory_items[0].entry == 38
+        && update.inventory_items[0].stack_count == 1
+        && update.inventory_items[0].durability == 17
+        && update.inventory_items[0].max_durability == 42
         && chat.parsed
         && chat.chat_type == CHAT_MSG_SAY
         && chat.language == LANG_COMMON
@@ -1491,6 +1624,12 @@ bool world_packet_self_test()
         && action_buttons.buttons[0].type == 0
         && action_buttons.buttons[1].action == 6948
         && action_buttons.buttons[1].type == 0x80
+        && item_template.parsed
+        && item_template.entry == 38
+        && item_template.name == "Recruit's Shirt"
+        && item_template.quality == 1
+        && item_template.inventory_type == 4
+        && item_template.item_level == 1
         && attacker_state.parsed
         && attacker_state.hit_info == 0x00000002
         && attacker_state.attacker_guid == 0x1234

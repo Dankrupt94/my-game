@@ -1134,3 +1134,34 @@ Validation:
 - `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `slots=39`, `populated=7`, and `coinage=0`.
 - `godot-4 --headless --path . --quit` passed.
 - Local `qwen-agent` advisory review produced only generic checklist items; no actionable blocker was confirmed after checking parser bounds, field indexing, bridge shape, and self-test coverage.
+
+## 2026-07-01 - Add Stage 17 Inventory Item Details Slice
+
+Goal: upgrade the Stage 17 inventory scene from GUID-only slot visibility to read-only item details resolved from the live AzerothCore protocol stream.
+
+Plan:
+
+- Parse inventory item object update fields for item entry, stack count, durability, and max durability.
+- Keep inventory item objects out of the general nearby-visible-object list so equipped/backpack items do not masquerade as world actors.
+- Query item templates for discovered entries with `CMSG_ITEM_QUERY_SINGLE`.
+- Parse `SMSG_ITEM_QUERY_SINGLE_RESPONSE` early fields for item names and display metadata.
+- Surface detail counts and resolved-name counts through the native CLI, Godot extension, GDScript bridge, and Stage 17 inventory scene.
+- Rebuild the Godot extension and rerun native/live/Godot checks.
+
+Result:
+
+- Added item-object detail parsing to `parse_update_object_summary`.
+- Added item-template query building and response parsing.
+- Updated `read_inventory_snapshot` to wait for item details, query templates, and merge names into matching slots.
+- Updated CLI, Godot extension, bridge, and `stage17_inventory_view.gd` output to show item entry, stack count, durability, and names.
+- Updated the feature parity matrix, Stage 17 gate notes, and packet spec.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed, including synthetic item-object and item-template parsing.
+- Native `--inventory-snapshot` passed for `Codexstage` with `inventory_seen=1`, `logged_in_world=1`, `slot_count=39`, `populated_count=7`, `item_detail_count=7`, and `item_template_count=7`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
+- `godot-4 --headless --path . --quit` passed.
+- Local `qwen-agent` advisory review produced only generic checklist reminders; no actionable blocker was confirmed after live and Godot validation.

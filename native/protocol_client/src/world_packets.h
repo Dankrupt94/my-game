@@ -11,6 +11,7 @@
 constexpr std::uint32_t CMSG_AUTH_SESSION = 0x1ED;
 constexpr std::uint32_t CMSG_CHAR_CREATE = 0x036;
 constexpr std::uint32_t CMSG_CHAR_ENUM = 0x037;
+constexpr std::uint32_t CMSG_ITEM_QUERY_SINGLE = 0x056;
 constexpr std::uint32_t CMSG_PLAYER_LOGIN = 0x03D;
 constexpr std::uint32_t CMSG_LOGOUT_REQUEST = 0x04B;
 constexpr std::uint32_t CMSG_MESSAGECHAT = 0x095;
@@ -30,6 +31,7 @@ constexpr std::uint16_t SMSG_CHAR_ENUM = 0x03B;
 constexpr std::uint16_t SMSG_CHARACTER_LOGIN_FAILED = 0x041;
 constexpr std::uint16_t SMSG_LOGOUT_RESPONSE = 0x04C;
 constexpr std::uint16_t SMSG_LOGOUT_COMPLETE = 0x04D;
+constexpr std::uint16_t SMSG_ITEM_QUERY_SINGLE_RESPONSE = 0x058;
 constexpr std::uint16_t SMSG_MESSAGECHAT = 0x096;
 constexpr std::uint16_t SMSG_UPDATE_OBJECT = 0x0A9;
 constexpr std::uint16_t SMSG_ACTION_BUTTONS = 0x129;
@@ -108,8 +110,44 @@ struct InventorySlotSummary
     std::uint8_t slot = 0;
     std::uint8_t section = 0;
     std::uint64_t item_guid = 0;
+    std::uint32_t item_entry = 0;
+    std::string item_name;
+    std::uint32_t stack_count = 0;
+    std::uint32_t durability = 0;
+    std::uint32_t max_durability = 0;
     bool field_seen = false;
     bool populated = false;
+    bool item_detail_seen = false;
+    bool item_template_seen = false;
+};
+
+struct InventoryItemObjectSummary
+{
+    bool seen = false;
+    std::uint64_t guid = 0;
+    std::uint8_t object_type = 0;
+    std::uint32_t entry = 0;
+    std::uint32_t stack_count = 0;
+    std::uint32_t durability = 0;
+    std::uint32_t max_durability = 0;
+    bool entry_seen = false;
+    bool stack_count_seen = false;
+    bool durability_seen = false;
+    bool max_durability_seen = false;
+};
+
+struct ItemTemplateSummary
+{
+    bool parsed = false;
+    std::uint32_t entry = 0;
+    std::uint32_t item_class = 0;
+    std::uint32_t subclass = 0;
+    std::string name;
+    std::uint32_t display_id = 0;
+    std::uint32_t quality = 0;
+    std::uint32_t inventory_type = 0;
+    std::uint32_t item_level = 0;
+    std::uint32_t required_level = 0;
 };
 
 struct PlayerInventorySummary
@@ -119,6 +157,8 @@ struct PlayerInventorySummary
     bool coinage_seen = false;
     std::uint32_t coinage = 0;
     std::size_t populated_count = 0;
+    std::size_t item_detail_count = 0;
+    std::size_t item_template_count = 0;
     std::vector<InventorySlotSummary> slots;
 };
 
@@ -135,6 +175,7 @@ struct UpdateObjectSummary
     bool visible_parse_complete = false;
     std::string visible_parse_error;
     std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<InventoryItemObjectSummary> inventory_items;
     PlayerInventorySummary inventory;
 };
 
@@ -251,6 +292,7 @@ std::vector<std::uint8_t> build_auth_session_payload(
 std::vector<std::uint8_t> build_character_create_payload(std::string const& name);
 std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_guid);
 std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid);
+std::vector<std::uint8_t> build_item_query_single_payload(std::uint32_t item_entry);
 std::vector<std::uint8_t> build_time_sync_response_payload(std::uint32_t counter, std::uint32_t client_time);
 std::vector<std::uint8_t> build_movement_payload(std::uint64_t character_guid, MovementSample const& movement);
 std::vector<std::uint8_t> build_chat_say_payload(std::uint32_t language, std::string const& message);
@@ -279,6 +321,7 @@ std::uint32_t parse_time_sync_counter(std::span<const std::uint8_t> payload);
 ChatMessageSummary parse_chat_message_summary(std::span<const std::uint8_t> payload, bool gm_message);
 InitialSpellsSummary parse_initial_spells_summary(std::span<const std::uint8_t> payload);
 ActionButtonsSummary parse_action_buttons_summary(std::span<const std::uint8_t> payload);
+ItemTemplateSummary parse_item_query_single_response(std::span<const std::uint8_t> payload);
 AttackerStateUpdateSummary parse_attacker_state_update(std::span<const std::uint8_t> payload);
 SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::span<const std::uint8_t> payload);
 UpdateObjectSummary parse_update_object_summary(

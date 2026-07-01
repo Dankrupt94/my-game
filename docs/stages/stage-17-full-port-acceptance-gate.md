@@ -46,3 +46,13 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Godot now exposes a 39-slot equipment, bag, and backpack grid through `scenes/stage17_inventory_view.tscn`.
 - The slice reports live item GUID presence only. Item names, icons, stack counts, durability, bag contents beyond the base backpack, and item actions remain future work.
 - Validation: `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with 39 slots and 7 populated slots for `Codexstage`.
+
+### 2026-07-01 - Inventory Item Detail Snapshot
+
+- Expanded the inventory slice from GUID-only slots to item object details.
+- The native parser now extracts item entry, stack count, durability, and max durability from item object value updates.
+- The flow now sends bounded `CMSG_ITEM_QUERY_SINGLE` requests for discovered item entries and applies `SMSG_ITEM_QUERY_SINGLE_RESPONSE` names back onto matching inventory slots.
+- The Godot extension, script bridge, and Stage 17 inventory scene now surface item detail counts and resolved-name counts.
+- Validation: native `--inventory-snapshot` passed for `Codexstage` with 39 slots, 7 populated slots, 7 item-detail rows, and 7 resolved names.
+- Validation: `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
+- Remaining work: item icons, full tooltips/stats, nested bag contents beyond the base backpack, item actions, equipment changes, loot-to-inventory flow, and persistence checks after mutation.
