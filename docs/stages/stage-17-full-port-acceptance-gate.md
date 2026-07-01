@@ -66,3 +66,12 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Validation: native `--swap-inventory-slots` passed for `Codexstage` with `before_seen=1`, `swap_confirmed=1`, and `restore_confirmed=1` for slots `23` and `25`.
 - Validation: `ACORE_INVENTORY_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `swap_confirmed=true` and `restore_confirmed=true`.
 - Remaining work: player-driven drag/drop, arbitrary slot validation, nested bag moves, equipment swaps, item splitting, item use, item destruction, failure-code UI, item cooldowns, loot-to-bag handoff, and long-session persistence checks.
+
+### 2026-07-01 - Reversible Equipment Unequip/Restore Probe
+
+- Extended the Stage 17 inventory scene with a `Test Unequip` control that uses the same authenticated world-session bridge to move an equipped main-hand item into the backpack and restore it.
+- The live probe uses source slot `15` and destination slot `26`, then confirms the equipped item GUID leaves slot `15`, appears in slot `26`, and returns to slot `15` after restore.
+- This is the first equipment mutation milestone. It proves Godot can change live equipped state through AzerothCore without launching the original client.
+- Validation: native `--swap-inventory-slots` passed for `Codexstage` with `before_seen=1`, `swap_confirmed=1`, and `restore_confirmed=1` for slots `15` and `26`.
+- Validation: `ACORE_EQUIPMENT_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `swap_confirmed=true` and `restore_confirmed=true`.
+- Remaining work: paper doll UI, arbitrary equip/unequip, item requirements, stat/aura display changes, weapon/offhand rules, failure-code UI, repair/durability workflows, and long-session persistence checks after normal player-driven equipment changes.

@@ -1196,3 +1196,30 @@ Validation:
 - `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
 - `godot-4 --headless --path . --quit` passed.
 - Local `qwen-agent` advisory review returned only general checklist reminders; no actionable blocker was confirmed after live native and Godot validation.
+
+## 2026-07-01 - Add Stage 17 Reversible Equipment Unequip Slice
+
+Goal: extend the Stage 17 inventory mutation path from backpack-only movement into a safe equipment unequip/restore proof.
+
+Plan:
+
+- Reuse the generic `--swap-inventory-slots` / `swap_inventory_slots(...)` path with equipment source slot `15` and empty backpack destination slot `26`.
+- Prove natively that AzerothCore accepts the equipment-to-backpack move and restore.
+- Add a visible `Test Unequip` control to the Stage 17 inventory scene.
+- Add a headless equipment self-test path for the Godot scene.
+- Document this as the first equipment mutation milestone, not full equipment parity.
+
+Result:
+
+- Confirmed native unequip/restore works for `Codexstage` slot `15` to slot `26`.
+- Updated `scripts/stage17_inventory_view.gd` with a second reversible mutation control and `ACORE_EQUIPMENT_SWAP_SELF_TEST=1`.
+- Updated the feature parity matrix, Stage 17 gate notes, world-session packet spec, and task log.
+
+Validation:
+
+- Native `--swap-inventory-slots` passed for `Codexstage` with `before_seen=1`, `swap_confirmed=1`, and `restore_confirmed=1` for slots `15` and `26`.
+- `ACORE_EQUIPMENT_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `swap_confirmed=true` and `restore_confirmed=true`.
+- `ACORE_INVENTORY_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `swap_confirmed=true` and `restore_confirmed=true`.
+- `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
+- `godot-4 --headless --path . --quit` passed.
+- Local `qwen-agent` advisory review returned only checklist reminders; no actionable blocker was confirmed after the native and Godot validations.

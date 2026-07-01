@@ -267,7 +267,7 @@ Base inventory swap:
 
 | Direction | Opcode | Payload | Stage 17 use |
 | --- | ---: | --- | --- |
-| Client to server | `CMSG_SWAP_INV_ITEM` (`0x10D`) | `uint8 destination_slot`, then `uint8 source_slot` | Moves or swaps items inside the base inventory bag. Stage 17 uses source slot `23` and destination slot `25`, then restores `25` back to `23`. |
+| Client to server | `CMSG_SWAP_INV_ITEM` (`0x10D`) | `uint8 destination_slot`, then `uint8 source_slot` | Moves or swaps items inside `INVENTORY_SLOT_BAG_0`, including equipped inventory slots and base backpack slots. Stage 17 uses backpack source slot `23` to destination slot `25`, then restores `25` back to `23`; it also uses equipment source slot `15` to backpack slot `26`, then restores `26` back to `15`. |
 | Server to client | `SMSG_INVENTORY_CHANGE_FAILURE` (`0x112`) | Failure payload varies by reason | Treated as a failed move during the bounded probe. |
 
 The AzerothCore handler reads destination first, then source, and calls `Player::SwapItem` with `INVENTORY_SLOT_BAG_0`. Stage 17 confirms the mutation by reading inventory snapshots before the move, after the move, and after the restore.
@@ -282,6 +282,7 @@ Stage 17 inventory snapshot behavior:
 - The same scene can run a reversible base-backpack move/restore probe through the Godot protocol bridge.
 - Local validation observed 39 slots, 7 populated item GUIDs, 7 item-detail rows, and 7 resolved item names for `Codexstage`; coinage was `0`, and the zero-valued coinage field was not included in that live update packet.
 - Local validation also moved the slot `23` item to slot `25`, confirmed the destination held the same GUID, restored the item to slot `23`, and confirmed slot `25` was empty again.
+- A follow-up validation moved the equipped slot `15` item to backpack slot `26`, confirmed the destination held the same GUID, restored the item to slot `15`, and confirmed slot `26` was empty again.
 
 Important Stage 15 correction: database spawn GUIDs are not live packet GUIDs. AzerothCore creates runtime object counters when the map instantiates creatures/gameobjects. Client actions must target the live `ObjectGuid` from the update stream.
 

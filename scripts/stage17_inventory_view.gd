@@ -17,7 +17,7 @@ var detail_label: Label
 var swap_label: Label
 var slot_grid: GridContainer
 var self_test_finished := false
-var swap_self_test_finished := false
+var mutation_self_test_finished := false
 
 
 func _ready() -> void:
@@ -76,6 +76,12 @@ func _build_view() -> void:
 	swap_button.pressed.connect(_run_swap_probe)
 	action_row.add_child(swap_button)
 
+	var equipment_button := Button.new()
+	equipment_button.text = "Test Unequip"
+	equipment_button.tooltip_text = "Main hand -> Backpack 4"
+	equipment_button.pressed.connect(_run_equipment_probe)
+	action_row.add_child(equipment_button)
+
 	swap_label = Label.new()
 	swap_label.text = "Move: idle"
 	swap_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -117,8 +123,11 @@ func _load_inventory() -> void:
 		str(result.get("item_template_count", 0)),
 		str(result.get("coinage", 0)),
 	])
-	if OS.get_environment("ACORE_INVENTORY_SWAP_SELF_TEST") == "1" and not swap_self_test_finished:
+	if OS.get_environment("ACORE_INVENTORY_SWAP_SELF_TEST") == "1" and not mutation_self_test_finished:
 		call_deferred("_run_swap_probe")
+		return
+	if OS.get_environment("ACORE_EQUIPMENT_SWAP_SELF_TEST") == "1" and not mutation_self_test_finished:
+		call_deferred("_run_equipment_probe")
 		return
 	_finish_self_test(slots.size() == 39, result)
 
@@ -198,27 +207,36 @@ func _show_slot(slot: Dictionary, index: int) -> void:
 	]
 
 
-func _run_swap_probe() -> void:
-	swap_label.text = "Move: running"
+func _run_swap_probe(
+	source_slot: int = 23,
+	destination_slot: int = 25,
+	label_prefix: String = "Move",
+	self_test_kind: String = "inventory") -> void:
+	swap_label.text = label_prefix + ": running"
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.swap_inventory_slots(TEST_CHARACTER_NAME, 23, 25)
+	var result := bridge.swap_inventory_slots(TEST_CHARACTER_NAME, source_slot, destination_slot)
 	var ok := bool(result.get("ok", false))
 	if ok:
-		swap_label.text = "Move: restored"
+		swap_label.text = label_prefix + ": restored"
 	else:
-		swap_label.text = "Move: failed"
+		swap_label.text = label_prefix + ": failed"
 		detail_label.text = str(result.get("error", result.get("output", "Inventory move failed")))
 	print("INVENTORY_SWAP_READY source=%s destination=%s swap_confirmed=%s restore_confirmed=%s" % [
-		str(result.get("source_slot", 23)),
-		str(result.get("destination_slot", 25)),
+		str(result.get("source_slot", source_slot)),
+		str(result.get("destination_slot", destination_slot)),
 		str(result.get("swap_confirmed", false)),
 		str(result.get("restore_confirmed", false)),
 	])
-	if OS.get_environment("ACORE_INVENTORY_SWAP_SELF_TEST") == "1":
-		_finish_swap_self_test(ok, result)
+	if OS.get_environment("ACORE_INVENTORY_SWAP_SELF_TEST") == "1" \
+			or OS.get_environment("ACORE_EQUIPMENT_SWAP_SELF_TEST") == "1":
+		_finish_swap_self_test(ok, result, self_test_kind)
 		return
 	if ok:
 		call_deferred("_load_inventory")
+
+
+func _run_equipment_probe() -> void:
+	_run_swap_probe(15, 26, "Unequip", "equipment")
 
 
 func _section_for_slot(index: int) -> String:
@@ -263,17 +281,24 @@ func _finish_self_test(ok: bool, result: Dictionary) -> void:
 		get_tree().quit(1)
 
 
-func _finish_swap_self_test(ok: bool, result: Dictionary) -> void:
-	if swap_self_test_finished:
+func _finish_swap_self_test(ok: bool, result: Dictionary, self_test_kind: String = "inventory") -> void:
+	if mutation_self_test_finished:
 		return
-	swap_self_test_finished = true
+	mutation_self_test_finished = true
 
 	if ok:
-		print("INVENTORY_SWAP_SELF_TEST_OK source=%s destination=%s" % [
+		var marker := "INVENTORY_SWAP_SELF_TEST_OK"
+		if self_test_kind == "equipment":
+			marker = "EQUIPMENT_SWAP_SELF_TEST_OK"
+		print("%s source=%s destination=%s" % [
+			marker,
 			str(result.get("source_slot", 23)),
 			str(result.get("destination_slot", 25)),
 		])
 		get_tree().quit(0)
 	else:
-		push_error("INVENTORY_SWAP_SELF_TEST_FAILED: " + str(result.get("error", result.get("output", "unknown"))))
+		var marker := "INVENTORY_SWAP_SELF_TEST_FAILED"
+		if self_test_kind == "equipment":
+			marker = "EQUIPMENT_SWAP_SELF_TEST_FAILED"
+		push_error(marker + ": " + str(result.get("error", result.get("output", "unknown"))))
 		get_tree().quit(1)
