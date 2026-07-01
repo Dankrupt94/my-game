@@ -255,6 +255,18 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `ACORE_VENDOR_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed after the selected-row UI change.
 - Remaining work: keep inventory visibly refreshed after purchase/sale, add stock refresh and failure-code UI, add repair, wire local-only item names/icons/tooltips, replace scan-list targeting with in-world click targeting, and move into a persistent world session.
 
+### 2026-07-01 - Vendor Transaction Inventory Feedback
+
+- Added visible transaction feedback to `scenes/stage17_vendor_view.tscn`.
+- After a selected-row buy/sell proof, the scene now shows transaction success state, inventory snapshot presence, money deltas, and the bought slot state before buy, after buy, and after sell when the native extension provides slot dictionaries.
+- Tightened `ACORE_VENDOR_BUY_SELL_SELF_TEST=1` so it now requires `inventory_before_seen`, `inventory_after_buy_seen`, and `inventory_after_sell_seen` in addition to the existing buy/sell roundtrip proof.
+- Added `ACORE_VENDOR_UI_SELF_TEST=1` as a UI-lane validation path that renders selected-row and transaction feedback with synthetic dictionaries only, without invoking bridge or live-session code.
+- Validation: `godot-4 --headless --path . --quit` passed.
+- Validation: `ACORE_VENDOR_UI_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with selected slot `8`, item id `17184`, 7 rendered result rows, and transaction snapshots `true/true/true`.
+- Validation: `ACORE_VENDOR_BUY_SELL_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with selected item id `17184`, bought slot `34`, buy opcode `0x1A4`, `roundtrip=true`, and coinage delta `-26`.
+- Validation: `ACORE_VENDOR_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` still passed after the transaction feedback change.
+- Remaining work: replace this transaction proof list with a persistent vendor/inventory layout that refreshes the actual inventory panel after buy/sell, add stock refresh and failure-code UI, add repair, and move the interaction into a persistent world session.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

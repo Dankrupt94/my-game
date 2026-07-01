@@ -20,6 +20,7 @@ var target_name_input: LineEdit
 var target_picker: ItemList
 var selected_item_label: Label
 var quantity_input: SpinBox
+var transaction_label: Label
 var item_list: ItemList
 var visible_targets: Array = []
 var selected_vendor_item: Dictionary = {}
@@ -31,6 +32,8 @@ func _ready() -> void:
 	_build_view()
 	if OS.get_environment("ACORE_VENDOR_TARGET_PICKER_SELF_TEST") == "1":
 		call_deferred("_run_target_picker_self_test")
+	elif OS.get_environment("ACORE_VENDOR_UI_SELF_TEST") == "1":
+		call_deferred("_run_vendor_ui_self_test")
 	elif OS.get_environment("ACORE_VENDOR_BUY_SELL_SELF_TEST") == "1":
 		call_deferred("_run_vendor_buy_sell_self_test")
 	elif OS.get_environment("ACORE_VENDOR_LIST_SELF_TEST") == "1":
@@ -156,6 +159,11 @@ func _build_view() -> void:
 	buy_sell_button.pressed.connect(_run_vendor_buy_sell_probe)
 	item_action_row.add_child(buy_sell_button)
 
+	transaction_label = Label.new()
+	transaction_label.text = "Transaction: idle"
+	transaction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	stack.add_child(transaction_label)
+
 	item_list = ItemList.new()
 	item_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	item_list.item_selected.connect(_on_vendor_item_selected)
@@ -173,6 +181,7 @@ func _run_vendor_list_self_test() -> void:
 func _run_vendor_list_probe(finish_self_test := true) -> Dictionary:
 	status_label.text = "Running"
 	vendor_label.text = "Vendor: loading"
+	_set_transaction_text("Transaction: idle")
 	item_list.clear()
 	selected_vendor_item = {}
 	_update_selected_item_label()
@@ -220,9 +229,114 @@ func _run_vendor_buy_sell_self_test() -> void:
 	_run_vendor_buy_sell_probe(true)
 
 
+func _run_vendor_ui_self_test() -> void:
+	var list_result := {
+		"item_count": 2,
+		"error_code": 0,
+		"items": [
+			{
+				"vendor_slot": VENDOR_BUY_SELL_TEST_SLOT,
+				"item_id": VENDOR_BUY_SELL_TEST_ITEM_ID,
+				"display_id": 0,
+				"left_in_stock": INFINITE_STOCK,
+				"buy_price": 32,
+				"max_durability": 0,
+				"buy_count": 1,
+				"extended_cost": 0,
+			},
+			{
+				"vendor_slot": 9,
+				"item_id": 17000,
+				"display_id": 0,
+				"left_in_stock": 4,
+				"buy_price": 120,
+				"max_durability": 0,
+				"buy_count": 1,
+				"extended_cost": 0,
+			},
+		],
+	}
+	_render_vendor(list_result)
+
+	var transaction_result := {
+		"buy_sent": true,
+		"buy_response_seen": true,
+		"buy_succeeded": true,
+		"buy_failed": false,
+		"buy_response_opcode": SMSG_BUY_ITEM,
+		"buy_failure_reason": 0,
+		"item_id": VENDOR_BUY_SELL_TEST_ITEM_ID,
+		"count": VENDOR_BUY_SELL_TEST_COUNT,
+		"bought_slot": 34,
+		"bought_guid": "0x4000000000000001",
+		"sell_sent": true,
+		"sell_error_seen": false,
+		"sell_confirmed": true,
+		"roundtrip_confirmed": true,
+		"inventory_before_seen": true,
+		"inventory_after_buy_seen": true,
+		"inventory_after_sell_seen": true,
+		"before_coinage": 9939,
+		"after_buy_coinage": 9907,
+		"after_sell_coinage": 9913,
+		"buy_coinage_delta": -32,
+		"sell_coinage_delta": 6,
+		"roundtrip_coinage_delta": -26,
+		"bought_slot_before": {
+			"slot": 34,
+			"populated": false,
+			"item_entry": 0,
+			"stack_count": 0,
+			"item_guid": "0x0",
+		},
+		"bought_slot_after_buy": {
+			"slot": 34,
+			"populated": true,
+			"item_entry": VENDOR_BUY_SELL_TEST_ITEM_ID,
+			"stack_count": 1,
+			"item_guid": "0x4000000000000001",
+		},
+		"bought_slot_after_sell": {
+			"slot": 34,
+			"populated": false,
+			"item_entry": 0,
+			"stack_count": 0,
+			"item_guid": "0x0",
+		},
+	}
+	_render_vendor_buy_sell(transaction_result)
+
+	var selected_ok := int(selected_vendor_item.get("vendor_slot", 0)) == VENDOR_BUY_SELL_TEST_SLOT \
+		and int(selected_vendor_item.get("item_id", 0)) == VENDOR_BUY_SELL_TEST_ITEM_ID
+	var transaction_ok := transaction_label != null \
+		and transaction_label.text.find("snapshots true/true/true") != -1 \
+		and transaction_label.text.find("total -26c") != -1
+	var inventory_rows_ok := item_list != null and item_list.item_count >= 7 \
+		and item_list.get_item_text(item_list.item_count - 2).find("item 17184") != -1 \
+		and item_list.get_item_text(item_list.item_count - 1).find("slot 34 empty") != -1
+
+	if selected_ok and transaction_ok and inventory_rows_ok:
+		print("VENDOR_UI_SELF_TEST_OK selected_slot=%s item_id=%s rows=%s transaction=\"%s\"" % [
+			str(selected_vendor_item.get("vendor_slot", 0)),
+			str(selected_vendor_item.get("item_id", 0)),
+			str(item_list.item_count),
+			transaction_label.text,
+		])
+		get_tree().quit(0)
+		return
+
+	push_error("VENDOR_UI_SELF_TEST_FAILED selected_ok=%s transaction_ok=%s inventory_rows_ok=%s" % [
+		str(selected_ok),
+		str(transaction_ok),
+		str(inventory_rows_ok),
+	])
+	get_tree().quit(1)
+
+
 func _run_vendor_buy_sell_probe(finish_self_test := false) -> void:
 	status_label.text = "Running"
 	vendor_label.text = "Vendor: buying and selling"
+	_set_transaction_text("Transaction: running")
 
 	if selected_target_selector.is_empty():
 		var scan_result := _scan_visible_targets(false)
@@ -288,6 +402,7 @@ func _run_target_picker_self_test() -> void:
 func _scan_visible_targets(finish_self_test := false) -> Dictionary:
 	status_label.text = "Scanning"
 	vendor_label.text = "Vendor: scanning"
+	_set_transaction_text("Transaction: idle")
 	item_list.clear()
 	target_picker.clear()
 	target_picker.add_item("Scanning live visible units...")
@@ -475,6 +590,7 @@ func _target_name_from_visible(target: Dictionary) -> String:
 func _render_vendor(result: Dictionary) -> void:
 	var item_count := int(result.get("item_count", 0))
 	vendor_label.text = "Vendor returned %s item row(s)." % str(item_count)
+	_set_transaction_text("Transaction: ready")
 	selected_vendor_item = {}
 	_update_selected_item_label()
 
@@ -504,6 +620,14 @@ func _render_vendor(result: Dictionary) -> void:
 
 func _render_vendor_buy_sell(result: Dictionary) -> void:
 	item_list.clear()
+	_set_transaction_text("Transaction: buy %s, sell %s, snapshots %s/%s/%s, total %s" % [
+		str(result.get("buy_succeeded", false)),
+		str(result.get("sell_confirmed", false)),
+		str(result.get("inventory_before_seen", false)),
+		str(result.get("inventory_after_buy_seen", false)),
+		str(result.get("inventory_after_sell_seen", false)),
+		_money_delta_text(int(result.get("roundtrip_coinage_delta", 0))),
+	])
 	item_list.add_item("Buy sent %s | response %s | opcode 0x%s | failed reason %s" % [
 		str(result.get("buy_sent", false)),
 		str(result.get("buy_response_seen", false)),
@@ -530,6 +654,9 @@ func _render_vendor_buy_sell(result: Dictionary) -> void:
 		_money_delta_text(int(result.get("sell_coinage_delta", 0))),
 		_money_delta_text(int(result.get("roundtrip_coinage_delta", 0))),
 	])
+	item_list.add_item("Inventory before: " + _slot_state_text(result.get("bought_slot_before", {})))
+	item_list.add_item("After buy: " + _slot_state_text(result.get("bought_slot_after_buy", {})))
+	item_list.add_item("After sell: " + _slot_state_text(result.get("bought_slot_after_sell", {})))
 
 
 func _finish_vendor_list_self_test(ok: bool, result: Dictionary) -> void:
@@ -557,6 +684,9 @@ func _finish_vendor_buy_sell_self_test(ok: bool, result: Dictionary) -> void:
 			and int(result.get("vendor_slot", 0)) == VENDOR_BUY_SELL_TEST_SLOT \
 			and int(result.get("item_id", 0)) == VENDOR_BUY_SELL_TEST_ITEM_ID \
 			and int(result.get("count", 0)) == VENDOR_BUY_SELL_TEST_COUNT \
+			and bool(result.get("inventory_before_seen", false)) \
+			and bool(result.get("inventory_after_buy_seen", false)) \
+			and bool(result.get("inventory_after_sell_seen", false)) \
 			and bool(result.get("buy_response_seen", false)) \
 			and bool(result.get("buy_succeeded", false)) \
 			and int(result.get("buy_response_opcode", 0)) == SMSG_BUY_ITEM \
@@ -646,10 +776,36 @@ func _update_selected_item_label() -> void:
 	]
 
 
+func _set_transaction_text(text: String) -> void:
+	if transaction_label != null:
+		transaction_label.text = text
+
+
 func _buy_sell_count() -> int:
 	if quantity_input == null:
 		return VENDOR_BUY_SELL_TEST_COUNT
 	return max(1, int(quantity_input.value))
+
+
+func _slot_state_text(slot_value) -> String:
+	if typeof(slot_value) != TYPE_DICTIONARY:
+		return "snapshot unavailable"
+	var slot: Dictionary = slot_value
+	if slot.is_empty():
+		return "snapshot unavailable"
+	var slot_index := int(slot.get("slot", -1))
+	var entry := int(slot.get("item_entry", 0))
+	var stack := int(slot.get("stack_count", 0))
+	var populated := bool(slot.get("populated", entry > 0))
+	var guid := str(slot.get("item_guid", "0x0"))
+	if not populated or entry <= 0:
+		return "slot %s empty" % str(slot_index)
+	return "slot %s item %s x%s guid %s" % [
+		str(slot_index),
+		str(entry),
+		str(stack),
+		guid,
+	]
 
 
 func _stock_text(stock: int) -> String:
