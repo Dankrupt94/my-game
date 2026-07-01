@@ -80,6 +80,46 @@ Array character_array(std::vector<CharacterSummary> const& characters)
     }
     return values;
 }
+
+Dictionary character_dictionary(CharacterSummary const& character)
+{
+    Dictionary value;
+    value["guid"] = guid_to_hex(character.guid);
+    value["name"] = String(character.name.c_str());
+    value["level"] = static_cast<int>(character.level);
+    value["race"] = static_cast<int>(character.race);
+    value["class"] = static_cast<int>(character.character_class);
+    value["map"] = static_cast<int>(character.map);
+    value["x"] = character.x;
+    value["y"] = character.y;
+    value["z"] = character.z;
+    return value;
+}
+
+Dictionary login_verify_dictionary(LoginVerifyWorld const& login)
+{
+    Dictionary value;
+    value["map"] = static_cast<int>(login.map);
+    value["x"] = login.x;
+    value["y"] = login.y;
+    value["z"] = login.z;
+    value["orientation"] = login.orientation;
+    return value;
+}
+
+Dictionary update_dictionary(UpdateObjectSummary const& update)
+{
+    Dictionary value;
+    value["seen"] = update.seen;
+    value["compressed"] = update.compressed;
+    value["uncompressed_size"] = static_cast<int>(update.uncompressed_size);
+    value["block_count"] = static_cast<int>(update.block_count);
+    value["first_update_type"] = static_cast<int>(update.first_update_type);
+    value["first_guid"] = guid_to_hex(update.first_guid);
+    value["contains_player_guid"] = update.contains_player_guid;
+    value["payload_size"] = static_cast<int>(update.payload_size);
+    return value;
+}
 }
 
 void AcoreProtocolClient::_bind_methods()
@@ -88,6 +128,12 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("character_flow", "host", "port", "account", "password"),
         &AcoreProtocolClient::character_flow);
+    ClassDB::bind_method(
+        D_METHOD("create_character", "host", "port", "account", "password", "name"),
+        &AcoreProtocolClient::create_character);
+    ClassDB::bind_method(
+        D_METHOD("enter_world", "host", "port", "account", "password", "character_name"),
+        &AcoreProtocolClient::enter_world);
 }
 
 Dictionary AcoreProtocolClient::self_test()
@@ -104,6 +150,76 @@ Dictionary AcoreProtocolClient::self_test()
         result["ok"] = true;
         result["logon_challenge_size"] = 38;
         result["bridge"] = "AcoreProtocolClient";
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::create_character(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& name)
+{
+    try
+    {
+        acore_protocol::CharacterCreateResult flow = acore_protocol::create_character(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(name));
+
+        Dictionary result;
+        result["ok"] = flow.success;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["char_create_ok"] = flow.success;
+        result["name"] = String(flow.name.c_str());
+        result["response"] = static_cast<int>(flow.response);
+        result["character_count"] = static_cast<int>(flow.characters.size());
+        result["realm"] = realm_dictionary(flow.realm);
+        result["characters"] = character_array(flow.characters);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::enter_world(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name)
+{
+    try
+    {
+        acore_protocol::EnterWorldResult flow = acore_protocol::enter_world(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name));
+
+        Dictionary result;
+        result["ok"] = true;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["world_login_ok"] = true;
+        result["login_verify_ok"] = true;
+        result["update_object_seen"] = flow.update.seen;
+        result["realm"] = realm_dictionary(flow.realm);
+        result["character"] = character_dictionary(flow.character);
+        result["login"] = login_verify_dictionary(flow.login);
+        result["update"] = update_dictionary(flow.update);
+        result["skipped_login_opcodes"] = opcode_array(flow.skipped_login_opcodes);
         return result;
     }
     catch (std::exception const& exc)

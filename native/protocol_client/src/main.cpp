@@ -129,6 +129,75 @@ int character_flow(std::string const& host, std::string const& port, std::string
     return 0;
 }
 
+int create_character(std::string const& host, std::string const& port, std::string const& account, std::string const& name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::CharacterCreateResult result = acore_protocol::create_character(
+        host,
+        port,
+        account,
+        protocol_password(),
+        name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "CHAR_CREATE_" << (result.success ? "OK" : "FAILED")
+              << " name=\"" << result.name << "\""
+              << " response=0x" << hex(std::span<const std::uint8_t>(&result.response, 1))
+              << "\n";
+    std::cout << "CHAR_ENUM_OK count=" << result.characters.size() << "\n";
+    for (CharacterSummary const& character : result.characters)
+    {
+        std::cout << "CHAR guid=0x" << std::hex << character.guid << std::dec
+                  << " name=\"" << character.name << "\""
+                  << " level=" << static_cast<int>(character.level)
+                  << " race=" << static_cast<int>(character.race)
+                  << " class=" << static_cast<int>(character.character_class)
+                  << " map=" << character.map
+                  << " pos=(" << character.x << "," << character.y << "," << character.z << ")"
+                  << "\n";
+    }
+    return result.success ? 0 : 1;
+}
+
+int enter_world(std::string const& host, std::string const& port, std::string const& account, std::string const& character_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::EnterWorldResult result = acore_protocol::enter_world(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "WORLD_LOGIN_OK"
+              << " guid=0x" << std::hex << result.character.guid << std::dec
+              << " name=\"" << result.character.name << "\""
+              << " level=" << static_cast<int>(result.character.level)
+              << " race=" << static_cast<int>(result.character.race)
+              << " class=" << static_cast<int>(result.character.character_class)
+              << "\n";
+    std::cout << "LOGIN_VERIFY_WORLD_OK"
+              << " map=" << result.login.map
+              << " pos=(" << result.login.x << "," << result.login.y << "," << result.login.z << ")"
+              << " orientation=" << result.login.orientation
+              << "\n";
+    std::cout << "UPDATE_OBJECT_" << (result.update.seen ? "SEEN" : "MISSING")
+              << " compressed=" << (result.update.compressed ? 1 : 0)
+              << " blocks=" << result.update.block_count
+              << " first_type=" << static_cast<int>(result.update.first_update_type)
+              << " first_guid=0x" << std::hex << result.update.first_guid << std::dec
+              << " contains_player=" << (result.update.contains_player_guid ? 1 : 0)
+              << "\n";
+    return 0;
+}
+
 int world_challenge(std::string const& host, std::string const& port)
 {
     acore_protocol::WorldChallengeSummary summary = acore_protocol::probe_world_challenge(host, port);
@@ -147,6 +216,8 @@ void usage()
               << "  acore_protocol_client --auth-challenge <host> <port> <account>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --auth-flow <host> <port> <account>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --character-flow <host> <port> <account>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --create-character <host> <port> <account> <name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --enter-world <host> <port> <account> [character-name]\n"
               << "  acore_protocol_client --world-challenge <host> <port>\n";
 }
 }
@@ -178,6 +249,16 @@ int main(int argc, char** argv)
         if (argc == 5 && std::strcmp(argv[1], "--character-flow") == 0)
         {
             return character_flow(argv[2], argv[3], argv[4]);
+        }
+
+        if (argc == 6 && std::strcmp(argv[1], "--create-character") == 0)
+        {
+            return create_character(argv[2], argv[3], argv[4], argv[5]);
+        }
+
+        if ((argc == 5 || argc == 6) && std::strcmp(argv[1], "--enter-world") == 0)
+        {
+            return enter_world(argv[2], argv[3], argv[4], argc == 6 ? argv[5] : "");
         }
 
         usage();

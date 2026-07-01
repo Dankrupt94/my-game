@@ -49,6 +49,20 @@ public:
         other.fd_ = -1;
     }
 
+    SocketFd& operator=(SocketFd&& other) noexcept
+    {
+        if (this != &other)
+        {
+            if (fd_ >= 0)
+            {
+                close(fd_);
+            }
+            fd_ = other.fd_;
+            other.fd_ = -1;
+        }
+        return *this;
+    }
+
     [[nodiscard]] int get() const { return fd_; }
 
 private:
@@ -66,6 +80,13 @@ struct WorldPacketData
 {
     std::uint16_t opcode = 0;
     std::vector<std::uint8_t> payload;
+};
+
+struct AuthenticatedWorldSession
+{
+    SocketFd socket;
+    AuthCrypt crypt;
+    RealmInfo realm;
 };
 
 SocketFd connect_tcp(std::string const& host, std::string const& port)
@@ -421,6 +442,110 @@ std::uint8_t parse_auth_response(std::span<const std::uint8_t> payload)
     }
     return payload[0];
 }
+
+std::unique_ptr<AuthenticatedWorldSession> connect_authenticated_world(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    FlowOptions options)
+{
+    AuthFlowResult auth = run_auth_flow(host, port, account, password);
+    SocketFd socket = connect_tcp(auth.realm.host, auth.realm.port);
+
+    WorldPacketData challenge_packet = read_world_packet(socket.get(), nullptr, options.trace_world_packets);
+    if (challenge_packet.opcode != SMSG_AUTH_CHALLENGE || challenge_packet.payload.size() != 40)
+    {
+        throw std::runtime_error("expected SMSG_AUTH_CHALLENGE from worldserver");
+    }
+
+    std::array<std::uint8_t, 4> server_seed{};
+    std::copy_n(challenge_packet.payload.data() + 4, server_seed.size(), server_seed.begin());
+    std::array<std::uint8_t, 4> local_challenge = random_seed4();
+    auto addon_info = build_empty_addon_info();
+    auto auth_payload = build_auth_session_payload(
+        account,
+        auth.session_key,
+        server_seed,
+        local_challenge,
+        auth.realm.realm_id,
+        addon_info);
+    write_world_packet(socket.get(), CMSG_AUTH_SESSION, auth_payload, nullptr);
+
+    auto session = std::make_unique<AuthenticatedWorldSession>();
+    session->socket = std::move(socket);
+    session->realm = auth.realm;
+    session->crypt.init(auth.session_key);
+
+    bool authed = false;
+    for (int i = 0; i < 10; ++i)
+    {
+        WorldPacketData packet = read_world_packet(session->socket.get(), &session->crypt, options.trace_world_packets);
+        if (packet.opcode != SMSG_AUTH_RESPONSE)
+        {
+            continue;
+        }
+
+        std::uint8_t const response = parse_auth_response(packet.payload);
+        if (response != 0x0C)
+        {
+            throw std::runtime_error("world auth failed with response 0x" + hex(std::span<const std::uint8_t>(&response, 1)));
+        }
+        authed = true;
+        break;
+    }
+
+    if (!authed)
+    {
+        throw std::runtime_error("did not receive SMSG_AUTH_RESPONSE");
+    }
+
+    return session;
+}
+
+std::vector<CharacterSummary> request_character_enum(AuthenticatedWorldSession& session, FlowOptions options, std::vector<std::uint16_t>* skipped)
+{
+    write_world_packet(session.socket.get(), CMSG_CHAR_ENUM, {}, &session.crypt);
+    for (int i = 0; i < 20; ++i)
+    {
+        WorldPacketData packet = read_world_packet(session.socket.get(), &session.crypt, options.trace_world_packets);
+        if (packet.opcode != SMSG_CHAR_ENUM)
+        {
+            if (skipped)
+            {
+                skipped->push_back(packet.opcode);
+            }
+            continue;
+        }
+
+        return parse_char_enum(packet.payload);
+    }
+
+    throw std::runtime_error("did not receive SMSG_CHAR_ENUM");
+}
+
+CharacterSummary select_character(std::vector<CharacterSummary> const& characters, std::string const& character_name)
+{
+    if (characters.empty())
+    {
+        throw std::runtime_error("account has no characters to enter world");
+    }
+
+    if (character_name.empty())
+    {
+        return characters[0];
+    }
+
+    for (CharacterSummary const& character : characters)
+    {
+        if (character.name == character_name)
+        {
+            return character;
+        }
+    }
+
+    throw std::runtime_error("character not found: " + character_name);
+}
 }
 
 std::vector<std::uint8_t> build_auth_logon_challenge(std::string const& account)
@@ -551,72 +676,101 @@ CharacterFlowResult run_character_flow(
     std::string const& password,
     FlowOptions options)
 {
-    AuthFlowResult auth = run_auth_flow(host, port, account, password);
-    SocketFd socket = connect_tcp(auth.realm.host, auth.realm.port);
-
-    WorldPacketData challenge_packet = read_world_packet(socket.get(), nullptr, options.trace_world_packets);
-    if (challenge_packet.opcode != SMSG_AUTH_CHALLENGE || challenge_packet.payload.size() != 40)
-    {
-        throw std::runtime_error("expected SMSG_AUTH_CHALLENGE from worldserver");
-    }
-
-    std::array<std::uint8_t, 4> server_seed{};
-    std::copy_n(challenge_packet.payload.data() + 4, server_seed.size(), server_seed.begin());
-    std::array<std::uint8_t, 4> local_challenge = random_seed4();
-    auto addon_info = build_empty_addon_info();
-    auto auth_payload = build_auth_session_payload(
-        account,
-        auth.session_key,
-        server_seed,
-        local_challenge,
-        auth.realm.realm_id,
-        addon_info);
-    write_world_packet(socket.get(), CMSG_AUTH_SESSION, auth_payload, nullptr);
-
-    AuthCrypt crypt;
-    crypt.init(auth.session_key);
-
+    auto session = connect_authenticated_world(host, port, account, password, options);
     CharacterFlowResult result;
-    result.realm = auth.realm;
+    result.realm = session->realm;
+    result.characters = request_character_enum(*session, options, &result.skipped_character_opcodes);
+    return result;
+}
 
-    bool authed = false;
-    for (int i = 0; i < 10; ++i)
-    {
-        WorldPacketData packet = read_world_packet(socket.get(), &crypt, options.trace_world_packets);
-        if (packet.opcode != SMSG_AUTH_RESPONSE)
-        {
-            result.skipped_auth_opcodes.push_back(packet.opcode);
-            continue;
-        }
-
-        std::uint8_t const response = parse_auth_response(packet.payload);
-        if (response != 0x0C)
-        {
-            throw std::runtime_error("world auth failed with response 0x" + hex(std::span<const std::uint8_t>(&response, 1)));
-        }
-        authed = true;
-        break;
-    }
-
-    if (!authed)
-    {
-        throw std::runtime_error("did not receive SMSG_AUTH_RESPONSE");
-    }
-
-    write_world_packet(socket.get(), CMSG_CHAR_ENUM, {}, &crypt);
+CharacterCreateResult create_character(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& name,
+    FlowOptions options)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    write_world_packet(session->socket.get(), CMSG_CHAR_CREATE, build_character_create_payload(name), &session->crypt);
     for (int i = 0; i < 20; ++i)
     {
-        WorldPacketData packet = read_world_packet(socket.get(), &crypt, options.trace_world_packets);
-        if (packet.opcode != SMSG_CHAR_ENUM)
+        WorldPacketData packet = read_world_packet(session->socket.get(), &session->crypt, options.trace_world_packets);
+        if (packet.opcode != SMSG_CHAR_CREATE)
         {
-            result.skipped_character_opcodes.push_back(packet.opcode);
             continue;
         }
+        if (packet.payload.empty())
+        {
+            throw std::runtime_error("SMSG_CHAR_CREATE payload is empty");
+        }
 
-        result.characters = parse_char_enum(packet.payload);
+        CharacterCreateResult result;
+        result.realm = session->realm;
+        result.name = name;
+        result.response = packet.payload[0];
+        result.success = result.response == 0x2F;
+        result.characters = request_character_enum(*session, options, nullptr);
         return result;
     }
 
-    throw std::runtime_error("did not receive SMSG_CHAR_ENUM");
+    throw std::runtime_error("did not receive SMSG_CHAR_CREATE");
+}
+
+EnterWorldResult enter_world(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    FlowOptions options)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+
+    write_world_packet(session->socket.get(), CMSG_PLAYER_LOGIN, build_player_login_payload(selected.guid), &session->crypt);
+
+    EnterWorldResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    bool verified_world = false;
+    for (int i = 0; i < 80; ++i)
+    {
+        WorldPacketData packet = read_world_packet(session->socket.get(), &session->crypt, options.trace_world_packets);
+        if (packet.opcode == SMSG_LOGIN_VERIFY_WORLD)
+        {
+            result.login = parse_login_verify_world(packet.payload);
+            verified_world = true;
+            continue;
+        }
+        if (packet.opcode == SMSG_UPDATE_OBJECT || packet.opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            result.update = parse_update_object_summary(
+                packet.payload,
+                packet.opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            if (verified_world)
+            {
+                return result;
+            }
+            continue;
+        }
+        if (packet.opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet.payload));
+        }
+        result.skipped_login_opcodes.push_back(packet.opcode);
+        if (verified_world && result.skipped_login_opcodes.size() >= 20)
+        {
+            return result;
+        }
+    }
+
+    if (!verified_world)
+    {
+        throw std::runtime_error("did not receive SMSG_LOGIN_VERIFY_WORLD");
+    }
+    return result;
 }
 }

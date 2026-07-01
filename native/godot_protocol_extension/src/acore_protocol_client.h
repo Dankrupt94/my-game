@@ -18,4 +18,16 @@ public:
         godot::String const& port,
         godot::String const& account,
         godot::String const& password);
+    godot::Dictionary create_character(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& name);
+    godot::Dictionary enter_world(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name);
 };

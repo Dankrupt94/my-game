@@ -53,6 +53,24 @@ struct CharacterFlowResult
     std::vector<CharacterSummary> characters;
 };
 
+struct CharacterCreateResult
+{
+    RealmInfo realm;
+    std::string name;
+    std::uint8_t response = 0;
+    bool success = false;
+    std::vector<CharacterSummary> characters;
+};
+
+struct EnterWorldResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    LoginVerifyWorld login;
+    UpdateObjectSummary update;
+    std::vector<std::uint16_t> skipped_login_opcodes;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -81,5 +99,21 @@ CharacterFlowResult run_character_flow(
     std::string const& port,
     std::string const& account,
     std::string const& password,
+    FlowOptions options = {});
+
+CharacterCreateResult create_character(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& name,
+    FlowOptions options = {});
+
+EnterWorldResult enter_world(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
     FlowOptions options = {});
 }

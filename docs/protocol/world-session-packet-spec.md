@@ -153,6 +153,40 @@ Then one repeated character block per character. The block is written by `Player
 | pet family | 4 | Pet family |
 | equipment slots | variable | For each slot before `INVENTORY_SLOT_BAG_END`: `uint32 display`, `uint8 inventory type`, `uint32 enchant aura` |
 
+## Character Creation
+
+Client request:
+
+| Opcode | Payload |
+| --- | --- |
+| `CMSG_CHAR_CREATE` (`0x036`) | Name and appearance fields |
+
+Payload in `WorldSession::HandleCharCreateOpcode` read order:
+
+| Field | Size | Stage 12 test value |
+| --- | ---: | --- |
+| name | variable | Null-terminated test character name |
+| race | 1 | `1` human |
+| class | 1 | `1` warrior |
+| gender | 1 | `0` male |
+| skin | 1 | `0` |
+| face | 1 | `0` |
+| hair style | 1 | `0` |
+| hair color | 1 | `0` |
+| facial hair | 1 | `0` |
+| outfit id | 1 | `0`; ignored by AzerothCore during create |
+
+Server response:
+
+| Opcode | Payload |
+| --- | --- |
+| `SMSG_CHAR_CREATE` (`0x03A`) | One `uint8` result code |
+
+Observed Stage 12 behavior:
+
+- First create of `Codexstage` produced a character visible in the next enum.
+- Re-running create with the same name returns response `0x32`, which is the expected duplicate-name/name-unavailable path for the already-created local test character.
+
 ## Character Select
 
 Client request:
@@ -167,7 +201,36 @@ First expected world-position response:
 | --- | --- |
 | `SMSG_LOGIN_VERIFY_WORLD` (`0x236`) | `uint32 map`, `float x`, `float y`, `float z`, `float orientation` |
 
-After that, the server sends the broader login packet stream and eventually object updates. Stage 12 should not pretend the enter-world flow is complete until `SMSG_UPDATE_OBJECT` parsing is underway.
+Observed Stage 12 login response for local test character `Codexstage`:
+
+| Field | Value |
+| --- | --- |
+| map | `0` |
+| x | `-8949.95` |
+| y | `-132.493` |
+| z | `83.5312` |
+| orientation | `0` |
+
+After that, the server sends the broader login packet stream. The Stage 12 trace observed feature status, account data times, MOTD, bind point, initial spells, and related login packets, but did not observe `SMSG_UPDATE_OBJECT` or `SMSG_COMPRESSED_UPDATE_OBJECT` within the current packet window.
+
+## Update Object Boundary
+
+Relevant opcodes:
+
+| Opcode | Value | Stage 12 support |
+| --- | ---: | --- |
+| `SMSG_UPDATE_OBJECT` | `0x0A9` | Parser reads block count and first update block boundary when present |
+| `SMSG_COMPRESSED_UPDATE_OBJECT` | `0x1F6` | Parser inflates zlib payload, then reads the same summary fields |
+
+Uncompressed update payload begins with:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| block count | 4 | Number of update blocks, plus out-of-range block when present |
+| update type | 1 | First update block type |
+| packed guid | variable | Present for the create/values/movement update types handled by the Stage 12 summary parser |
+
+Stage 12 intentionally stops at a summary parser. Full value-bitmask and movement-block parsing should be handled in the next packet-layer stage, after a reproducible live `SMSG_UPDATE_OBJECT` sample is available from the local server.
 
 ## Stage 11 First World Target
 

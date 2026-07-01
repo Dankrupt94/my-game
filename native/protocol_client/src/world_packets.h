@@ -9,8 +9,15 @@
 #include <vector>
 
 constexpr std::uint32_t CMSG_AUTH_SESSION = 0x1ED;
+constexpr std::uint32_t CMSG_CHAR_CREATE = 0x036;
 constexpr std::uint32_t CMSG_CHAR_ENUM = 0x037;
+constexpr std::uint32_t CMSG_PLAYER_LOGIN = 0x03D;
+constexpr std::uint16_t SMSG_CHAR_CREATE = 0x03A;
 constexpr std::uint16_t SMSG_CHAR_ENUM = 0x03B;
+constexpr std::uint16_t SMSG_CHARACTER_LOGIN_FAILED = 0x041;
+constexpr std::uint16_t SMSG_UPDATE_OBJECT = 0x0A9;
+constexpr std::uint16_t SMSG_COMPRESSED_UPDATE_OBJECT = 0x1F6;
+constexpr std::uint16_t SMSG_LOGIN_VERIFY_WORLD = 0x236;
 constexpr std::size_t CharEnumEquipmentSlots = 23;
 
 struct CharacterSummary
@@ -28,6 +35,27 @@ struct CharacterSummary
     float z = 0;
 };
 
+struct LoginVerifyWorld
+{
+    std::uint32_t map = 0;
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float orientation = 0;
+};
+
+struct UpdateObjectSummary
+{
+    bool seen = false;
+    bool compressed = false;
+    std::uint32_t uncompressed_size = 0;
+    std::uint32_t block_count = 0;
+    std::uint8_t first_update_type = 0;
+    std::uint64_t first_guid = 0;
+    bool contains_player_guid = false;
+    std::size_t payload_size = 0;
+};
+
 std::vector<std::uint8_t> build_empty_addon_info();
 std::vector<std::uint8_t> build_auth_session_payload(
     std::string const& account,
@@ -36,6 +64,13 @@ std::vector<std::uint8_t> build_auth_session_payload(
     std::array<std::uint8_t, 4> const& local_challenge,
     std::uint32_t realm_id,
     std::span<const std::uint8_t> addon_info);
+std::vector<std::uint8_t> build_character_create_payload(std::string const& name);
+std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_guid);
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload);
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
+LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);
+UpdateObjectSummary parse_update_object_summary(
+    std::span<const std::uint8_t> payload,
+    bool compressed,
+    std::uint64_t player_guid);
 bool world_packet_self_test();

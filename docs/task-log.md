@@ -13,6 +13,21 @@ Plan:
 - Add a Godot scene that renders a basic grid and marker at the server-reported login coordinates.
 - Validate through native helper, Godot extension, and headless Godot scene checks.
 
+Result:
+
+- Created the local-only test character `Codexstage` for the ignored protocol smoke account.
+- Added native protocol support for `CMSG_CHAR_CREATE`, `SMSG_CHAR_CREATE`, `CMSG_PLAYER_LOGIN`, `SMSG_LOGIN_VERIFY_WORLD`, `SMSG_UPDATE_OBJECT`, and `SMSG_COMPRESSED_UPDATE_OBJECT`.
+- Added `--create-character` and `--enter-world` helper commands.
+- Verified live enter-world against the local AzerothCore stack: `Codexstage` enters map `0` at `(-8949.95, -132.493, 83.5312)` with orientation `0`.
+- Added Godot `AcoreProtocolClient` methods for `create_character` and `enter_world`.
+- Added `ProtocolClientBridge.create_test_character(...)` and `ProtocolClientBridge.enter_world(...)` with native-extension preference and direct helper fallback.
+- Removed shell-sourced credential loading from the helper fallback; Godot now reads the ignored local account file itself and passes credentials only to the local process.
+- Added `scenes/enter_world_view.tscn` and `scripts/enter_world_view.gd`, which render the Stage 12 grid and marker from the server-reported login position.
+- Added `tools/enter_world_bridge_smoke.gd` for headless enter-world checks.
+- Validated native self-tests, live character enum, live enter-world, Godot protocol smoke, and the Stage 12 scene self-test.
+- Used local `qwen-agent` as a narrow advisory reviewer for the Stage 12 diff; it raised no concrete blocker beyond future test and refactor suggestions.
+- The local login stream did not emit `SMSG_UPDATE_OBJECT`/`SMSG_COMPRESSED_UPDATE_OBJECT` in the observed Stage 12 packet window. Full object replication parsing is documented as the next packet-layer task.
+
 ## 2026-06-30 - Stage 11 Godot GDExtension Wrapper Checkpoint Started
 
 Goal: attempt the first actual Godot-native wrapper around the protocol bridge so Godot can eventually call the validated character-flow path without launching a helper process.

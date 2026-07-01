@@ -80,6 +80,20 @@ std::uint64_t read_u64_le(std::span<const std::uint8_t> bytes, std::size_t& offs
     return value;
 }
 
+std::uint64_t read_packed_guid(std::span<const std::uint8_t> bytes, std::size_t& offset)
+{
+    std::uint8_t const mask = read_u8(bytes, offset);
+    std::uint64_t value = 0;
+    for (int i = 0; i < 8; ++i)
+    {
+        if ((mask & (1 << i)) != 0)
+        {
+            value |= static_cast<std::uint64_t>(read_u8(bytes, offset)) << (i * 8);
+        }
+    }
+    return value;
+}
+
 float read_float_le(std::span<const std::uint8_t> bytes, std::size_t& offset)
 {
     std::uint32_t raw = read_u32_le(bytes, offset);
@@ -168,6 +182,29 @@ void append_synthetic_character(std::vector<std::uint8_t>& payload)
         append_u32_le(payload, 0);
     }
 }
+
+std::vector<std::uint8_t> inflate_update_payload(std::span<const std::uint8_t> payload, std::uint32_t& uncompressed_size)
+{
+    if (payload.size() < 4)
+    {
+        throw std::runtime_error("compressed update object payload is too short");
+    }
+
+    std::size_t offset = 0;
+    uncompressed_size = read_u32_le(payload, offset);
+    std::vector<std::uint8_t> inflated(uncompressed_size);
+    uLongf destination_size = inflated.size();
+    int const result = uncompress(
+        inflated.data(),
+        &destination_size,
+        payload.data() + offset,
+        payload.size() - offset);
+    if (result != Z_OK || destination_size != inflated.size())
+    {
+        throw std::runtime_error("could not inflate compressed update object payload");
+    }
+    return inflated;
+}
 }
 
 std::vector<std::uint8_t> build_empty_addon_info()
@@ -224,6 +261,35 @@ std::vector<std::uint8_t> build_auth_session_payload(
     return payload;
 }
 
+std::vector<std::uint8_t> build_character_create_payload(std::string const& name)
+{
+    if (name.empty() || name.size() > 12)
+    {
+        throw std::runtime_error("character name must be 1 to 12 bytes");
+    }
+
+    std::vector<std::uint8_t> payload;
+    payload.insert(payload.end(), name.begin(), name.end());
+    append_u8(payload, 0);
+    append_u8(payload, 1); // human
+    append_u8(payload, 1); // warrior
+    append_u8(payload, 0); // male
+    append_u8(payload, 0); // skin
+    append_u8(payload, 0); // face
+    append_u8(payload, 0); // hair style
+    append_u8(payload, 0); // hair color
+    append_u8(payload, 0); // facial hair
+    append_u8(payload, 0); // outfit id; AzerothCore ignores this on create.
+    return payload;
+}
+
+std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_guid)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, character_guid);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload)
 {
     std::vector<std::uint8_t> packet = build_client_header(opcode, payload.size());
@@ -276,6 +342,57 @@ std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payl
     return characters;
 }
 
+LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload)
+{
+    if (payload.size() != 20)
+    {
+        throw std::runtime_error("SMSG_LOGIN_VERIFY_WORLD payload must be 20 bytes");
+    }
+
+    std::size_t offset = 0;
+    LoginVerifyWorld position;
+    position.map = read_u32_le(payload, offset);
+    position.x = read_float_le(payload, offset);
+    position.y = read_float_le(payload, offset);
+    position.z = read_float_le(payload, offset);
+    position.orientation = read_float_le(payload, offset);
+    return position;
+}
+
+UpdateObjectSummary parse_update_object_summary(
+    std::span<const std::uint8_t> payload,
+    bool compressed,
+    std::uint64_t player_guid)
+{
+    UpdateObjectSummary summary;
+    summary.seen = true;
+    summary.compressed = compressed;
+    summary.payload_size = payload.size();
+
+    std::vector<std::uint8_t> inflated;
+    std::span<const std::uint8_t> body = payload;
+    if (compressed)
+    {
+        inflated = inflate_update_payload(payload, summary.uncompressed_size);
+        body = inflated;
+    }
+
+    std::size_t offset = 0;
+    summary.block_count = read_u32_le(body, offset);
+    if (summary.block_count == 0 || offset >= body.size())
+    {
+        return summary;
+    }
+
+    summary.first_update_type = read_u8(body, offset);
+    if (summary.first_update_type == 2 || summary.first_update_type == 3 || summary.first_update_type == 0 || summary.first_update_type == 1)
+    {
+        summary.first_guid = read_packed_guid(body, offset);
+        summary.contains_player_guid = summary.first_guid == player_guid;
+    }
+    return summary;
+}
+
 bool world_packet_self_test()
 {
     srp6::SessionKey session_key{};
@@ -295,6 +412,30 @@ bool world_packet_self_test()
 
     auto char_enum_packet = build_client_packet(CMSG_CHAR_ENUM, {});
     if (hex(char_enum_packet) != "000437000000")
+    {
+        return false;
+    }
+
+    auto login_packet = build_client_packet(CMSG_PLAYER_LOGIN, build_player_login_payload(0x1234));
+    if (login_packet.size() != 14 || login_packet[2] != 0x3D)
+    {
+        return false;
+    }
+
+    auto create_payload = build_character_create_payload("Codextest");
+    if (create_payload.empty() || create_payload.back() != 0)
+    {
+        return false;
+    }
+
+    std::vector<std::uint8_t> login_verify;
+    append_u32_le(login_verify, 0);
+    append_float_le(login_verify, -8949.95f);
+    append_float_le(login_verify, -132.493f);
+    append_float_le(login_verify, 83.5312f);
+    append_float_le(login_verify, 0.1f);
+    auto verify = parse_login_verify_world(login_verify);
+    if (verify.map != 0 || verify.z < 83.0f)
     {
         return false;
     }
