@@ -388,6 +388,70 @@ int combat_probe(
     return result.live_target_found && result.attack_sent && result.attacker_state_update_seen ? 0 : 1;
 }
 
+int loot_open_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_guid,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::LootOpenProbeResult result = acore_protocol::loot_open_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_guid),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "LOOT_OPEN_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " target_name=\"" << result.target_name << "\""
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " target_has_position=" << (result.target_has_position ? 1 : 0)
+              << " target_pos=(" << result.target_x << "," << result.target_y << "," << result.target_z << ")"
+              << " visible_objects=" << result.visible_objects.size()
+              << " approach_movement_sent=" << (result.approach_movement_sent ? 1 : 0)
+              << " return_movement_sent=" << (result.return_movement_sent ? 1 : 0)
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " loot_open_sent=" << (result.loot_open_sent ? 1 : 0)
+              << " loot_response_seen=" << (result.loot_response_seen ? 1 : 0)
+              << " loot_release_sent=" << (result.loot_release_sent ? 1 : 0)
+              << " loot_release_response_seen=" << (result.loot_release_response_seen ? 1 : 0)
+              << " loot_release_success=" << (result.loot_release_success ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " loot_parsed=" << (result.loot.parsed ? 1 : 0)
+              << " loot_error=" << (result.loot.error ? 1 : 0)
+              << " loot_error_code=" << static_cast<int>(result.loot.error_code)
+              << " loot_type=" << static_cast<int>(result.loot.loot_type)
+              << " gold=" << result.loot.gold
+              << " item_count=" << static_cast<int>(result.loot.item_count)
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    for (LootItemSummary const& item : result.loot.items)
+    {
+        std::cout << "LOOT_ITEM"
+                  << " slot=" << static_cast<int>(item.slot)
+                  << " item_id=" << item.item_id
+                  << " count=" << item.count
+                  << " display_id=" << item.display_id
+                  << " random_suffix=" << item.random_suffix
+                  << " random_property_id=" << item.random_property_id
+                  << " slot_type=" << static_cast<int>(item.slot_type)
+                  << "\n";
+    }
+
+    return result.loot_open_sent && (result.loot_response_seen || result.loot_release_response_seen) ? 0 : 1;
+}
+
 int chat_say(
     std::string const& host,
     std::string const& port,
@@ -952,6 +1016,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --move-heartbeat <host> <port> <account> <character-name> <delta-x> <delta-y> <delta-orientation>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --npc-interaction <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --loot-open-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-say <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-whisper-self <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --spellbook <host> <port> <account> <character-name>\n"
@@ -1018,6 +1083,11 @@ int main(int argc, char** argv)
         if (argc == 8 && std::strcmp(argv[1], "--combat-probe") == 0)
         {
             return combat_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+        }
+
+        if (argc == 8 && std::strcmp(argv[1], "--loot-open-probe") == 0)
+        {
+            return loot_open_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
         }
 
         if (argc == 7 && std::strcmp(argv[1], "--chat-say") == 0)

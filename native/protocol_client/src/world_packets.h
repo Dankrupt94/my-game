@@ -22,6 +22,10 @@ constexpr std::uint32_t CMSG_SPLIT_ITEM = 0x10E;
 constexpr std::uint32_t CMSG_SET_SELECTION = 0x13D;
 constexpr std::uint32_t CMSG_ATTACKSWING = 0x141;
 constexpr std::uint32_t CMSG_ATTACKSTOP = 0x142;
+constexpr std::uint32_t CMSG_AUTOSTORE_LOOT_ITEM = 0x108;
+constexpr std::uint32_t CMSG_LOOT = 0x15D;
+constexpr std::uint32_t CMSG_LOOT_MONEY = 0x15E;
+constexpr std::uint32_t CMSG_LOOT_RELEASE = 0x15F;
 constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
 constexpr std::uint32_t CMSG_TIME_SYNC_RESP = 0x391;
 constexpr std::uint32_t MSG_MOVE_START_FORWARD = 0x0B5;
@@ -50,6 +54,12 @@ constexpr std::uint16_t SMSG_ATTACKSWING_BADFACING = 0x146;
 constexpr std::uint16_t SMSG_ATTACKSWING_DEADTARGET = 0x148;
 constexpr std::uint16_t SMSG_ATTACKSWING_CANT_ATTACK = 0x149;
 constexpr std::uint16_t SMSG_ATTACKERSTATEUPDATE = 0x14A;
+constexpr std::uint16_t SMSG_LOOT_RESPONSE = 0x160;
+constexpr std::uint16_t SMSG_LOOT_RELEASE_RESPONSE = 0x161;
+constexpr std::uint16_t SMSG_LOOT_REMOVED = 0x162;
+constexpr std::uint16_t SMSG_LOOT_MONEY_NOTIFY = 0x163;
+constexpr std::uint16_t SMSG_LOOT_ITEM_NOTIFY = 0x164;
+constexpr std::uint16_t SMSG_LOOT_CLEAR_MONEY = 0x165;
 constexpr std::uint16_t SMSG_COMPRESSED_UPDATE_OBJECT = 0x1F6;
 constexpr std::uint16_t SMSG_GOSSIP_MESSAGE = 0x17D;
 constexpr std::uint16_t SMSG_LOGIN_VERIFY_WORLD = 0x236;
@@ -284,6 +294,30 @@ struct SpellCastResponseSummary
     bool spell_failure = false;
 };
 
+struct LootItemSummary
+{
+    std::uint8_t slot = 0;
+    std::uint32_t item_id = 0;
+    std::uint32_t count = 0;
+    std::uint32_t display_id = 0;
+    std::uint32_t random_suffix = 0;
+    std::uint32_t random_property_id = 0;
+    std::uint8_t slot_type = 0;
+};
+
+struct LootResponseSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t guid = 0;
+    std::uint8_t loot_type = 0;
+    bool error = false;
+    std::uint8_t error_code = 0;
+    std::uint32_t gold = 0;
+    std::uint8_t item_count = 0;
+    std::vector<LootItemSummary> items;
+};
+
 std::vector<std::uint8_t> build_empty_addon_info();
 std::vector<std::uint8_t> build_auth_session_payload(
     std::string const& account,
@@ -295,6 +329,9 @@ std::vector<std::uint8_t> build_auth_session_payload(
 std::vector<std::uint8_t> build_character_create_payload(std::string const& name);
 std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_guid);
 std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid);
+std::vector<std::uint8_t> build_loot_payload(std::uint64_t raw_guid);
+std::vector<std::uint8_t> build_loot_release_payload(std::uint64_t raw_guid);
+std::vector<std::uint8_t> build_autostore_loot_item_payload(std::uint8_t loot_slot);
 std::vector<std::uint8_t> build_item_query_single_payload(std::uint32_t item_entry);
 std::vector<std::uint8_t> build_time_sync_response_payload(std::uint32_t counter, std::uint32_t client_time);
 std::vector<std::uint8_t> build_movement_payload(std::uint64_t character_guid, MovementSample const& movement);
@@ -336,6 +373,7 @@ ActionButtonsSummary parse_action_buttons_summary(std::span<const std::uint8_t> 
 ItemTemplateSummary parse_item_query_single_response(std::span<const std::uint8_t> payload);
 AttackerStateUpdateSummary parse_attacker_state_update(std::span<const std::uint8_t> payload);
 SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::span<const std::uint8_t> payload);
+LootResponseSummary parse_loot_response(std::span<const std::uint8_t> payload);
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,

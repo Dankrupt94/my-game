@@ -1224,6 +1224,42 @@ Validation:
 - `godot-4 --headless --path . --quit` passed.
 - Local `qwen-agent` advisory review returned only checklist reminders; no actionable blocker was confirmed after the native and Godot validations.
 
+## 2026-07-01 - Add Stage 17 Loot Open Protocol Slice
+
+Goal: begin the real loot path needed for playable combat rewards by adding WotLK/AzerothCore loot-open packet support to the Godot client stack.
+
+Plan:
+
+- Read AzerothCore's loot handlers and `LootView` serialization.
+- Add client packet builders for loot open, loot release, and future autostore item pickup.
+- Add a parser for both `SMSG_LOOT_RESPONSE` error payloads and successful loot-window payloads.
+- Add a bounded live probe that resolves a nearby creature to a runtime GUID, moves into range, sends `CMSG_LOOT`, and records the server response.
+- Expose the probe through the Godot extension and script bridge.
+- Add a small Stage 17 loot scene for viewing the result and running a headless self-test.
+- Document the packet layout, current live evidence, and the remaining full-loot gameplay gap.
+
+Result:
+
+- Added `CMSG_LOOT` (`0x15D`), `CMSG_LOOT_RELEASE` (`0x15F`), `CMSG_LOOT_MONEY` (`0x15E`), `CMSG_AUTOSTORE_LOOT_ITEM` (`0x108`), and loot server opcode constants.
+- Added `LootResponseSummary` and `LootItemSummary`.
+- Added `parse_loot_response(...)` for AzerothCore `SMSG_LOOT_RESPONSE` payloads.
+- Added native `--loot-open-probe`.
+- Added `AcoreProtocolClient.loot_open_probe(...)` and `ProtocolClientBridge.loot_open_probe(...)`.
+- Added `scenes/stage17_loot_view.tscn` / `scripts/stage17_loot_view.gd`.
+- Updated the feature parity matrix, Stage 17 gate notes, and world-session packet spec.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed, including synthetic loot packet and parser checks.
+- Native `--loot-open-probe` passed for `Codexstage` against nearby creature entry `38` with `loot_open_sent=1`, `loot_release_response_seen=1`, `loot_release_success=1`, and response opcode `0x161`.
+- `cmake --build native/godot_protocol_extension/build` passed, but the direct local extension binary required host GLIBC `2.43`; the Ubuntu 22.04 Docker compatibility build refreshed the Godot-loadable extension and compatibility helper.
+- `native/protocol_client/build-compat/acore_protocol_client --self-test` passed.
+- `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with response opcode `0x161`, `loot_response=false`, and `release_response=true`.
+- `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
+- `ACORE_INTERACTION_COMBAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/interaction_combat_view.tscn` still passed with parsed combat damage opcode `0x14a`.
+- Current live response is a release response, not a loot-window success response, because the target was alive/not yet lootable. The next gameplay slice must connect combat death/corpse state to real loot pickup.
+
 ## 2026-07-01 - Add Stage 17 Reversible Stack Split Slice
 
 Goal: add a reversible stack split/merge item action so Stage 17 inventory mutation covers more than whole-item movement.

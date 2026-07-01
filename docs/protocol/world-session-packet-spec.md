@@ -375,6 +375,49 @@ Observed Stage 16 result:
 - Native `--combat-probe` against hostile entry `69` reached a live target, sent movement approach/facing, selected the target, sent `CMSG_ATTACKSWING`, and parsed `SMSG_ATTACKERSTATEUPDATE` opcode `0x14A`.
 - Godot scene `scenes/interaction_combat_view.tscn` uses hostile entry `38` for a stable stationary self-test and passed with `INTERACTION_COMBAT_SELF_TEST_OK gossip_opcode=0x17d combat_opcode=0x14a damage=2 attacker_state=true`.
 
+## Loot Open Slice
+
+Stage 17 adds the first loot protocol surface. This does not yet loot an item or money; it opens or attempts to open loot against a live server target and parses the server answer.
+
+| Opcode | Value | Stage 17 use |
+| --- | ---: | --- |
+| `CMSG_AUTOSTORE_LOOT_ITEM` | `0x108` | Builder support for future item pickup; payload is `uint8 loot_slot` |
+| `CMSG_LOOT` | `0x15D` | Opens loot for a creature GUID; payload is the raw 8-byte GUID |
+| `CMSG_LOOT_MONEY` | `0x15E` | Reserved for the next money pickup slice; payload is empty |
+| `CMSG_LOOT_RELEASE` | `0x15F` | Closes an accepted loot window; payload is the raw 8-byte GUID |
+| `SMSG_LOOT_RESPONSE` | `0x160` | Parsed as either a loot error or a loot window |
+| `SMSG_LOOT_RELEASE_RESPONSE` | `0x161` | Parsed as raw GUID plus success byte |
+
+`SMSG_LOOT_RESPONSE` error payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| target GUID | 8 | Raw little-endian object GUID |
+| loot type | 1 | `0` (`LOOT_NONE`) means the next byte is an error |
+| error code | 1 | AzerothCore `LootError`, such as `0` for did-not-kill or `4` for too-far |
+
+`SMSG_LOOT_RESPONSE` success payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| target GUID | 8 | Raw little-endian object GUID |
+| loot type | 1 | `1` for corpse loot in the normal creature path |
+| gold | 4 | Copper |
+| item count | 1 | Number of item rows |
+| item row slot | 1 each | Loot slot index, not bag slot |
+| item id | 4 each | Item entry |
+| count | 4 each | Stack count in the loot slot |
+| display id | 4 each | Item display info id from the server template |
+| random suffix | 4 each | Random suffix id |
+| random property id | 4 each | Random property id |
+| slot type | 1 each | `0` allow loot, `1` roll ongoing, `2` master, `3` locked, `4` owner |
+
+Observed Stage 17 loot-open result:
+
+- Native `--loot-open-probe` against nearby creature entry `38` resolved live GUID `0xf130000026000db9`, sent `CMSG_LOOT`, and received `SMSG_LOOT_RELEASE_RESPONSE` (`0x161`) with success byte `1`.
+- Godot `ACORE_LOOT_OPEN_SELF_TEST=1` passed through `scenes/stage17_loot_view.tscn` with release response opcode `0x161`.
+- The release response is expected for this first probe because the target was alive/not lootable. The next loot milestone must connect combat death/corpse state to a real `SMSG_LOOT_RESPONSE` success path, then add `CMSG_LOOT_MONEY` and `CMSG_AUTOSTORE_LOOT_ITEM`.
+
 ## Chat Say Slice
 
 Stage 16 starts the long client feature parity march with a minimal chat path.

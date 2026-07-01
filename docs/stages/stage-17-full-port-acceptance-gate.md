@@ -85,3 +85,14 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Validation: native `--split-inventory-stack` passed for `Codexstage` with `split_confirmed=1` and `merge_confirmed=1`.
 - Validation: `ACORE_STACK_SPLIT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `split_confirmed=true` and `merge_confirmed=true`.
 - Remaining work: player-selected split amounts, stackable-item discovery, drag/drop stack UI, nested bag support, failure-code UI, item locks/trade windows, and persistence checks over normal play sessions.
+
+### 2026-07-01 - Loot Open Protocol Probe
+
+- Added the first Stage 17 loot protocol slice.
+- The native packet layer now builds `CMSG_LOOT`, `CMSG_LOOT_RELEASE`, and `CMSG_AUTOSTORE_LOOT_ITEM`, and parses `SMSG_LOOT_RESPONSE` error and success payloads.
+- The live flow resolves a nearby creature entry to a runtime object GUID, moves within interaction range, selects the target, sends `CMSG_LOOT`, and records either `SMSG_LOOT_RESPONSE` or `SMSG_LOOT_RELEASE_RESPONSE`.
+- Added `scenes/stage17_loot_view.tscn` as the first Godot loot surface, with `ACORE_LOOT_OPEN_SELF_TEST=1` as its headless validation path.
+- Validation: native `--loot-open-probe` passed for `Codexstage` against entry `38` with `loot_open_sent=1`, `loot_release_response_seen=1`, `loot_release_success=1`, and response opcode `0x161`.
+- Validation: the Ubuntu 22.04 Docker compatibility build refreshed the Godot-loadable extension and compatibility helper.
+- Validation: `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with release response opcode `0x161`.
+- Remaining work: kill-to-corpse combat loop, real loot-window success response, money pickup, item pickup, inventory handoff, loot errors in UI, corpse release after looting, group loot/rolls, and persistence checks over normal play.

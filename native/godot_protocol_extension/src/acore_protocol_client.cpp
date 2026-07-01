@@ -270,6 +270,44 @@ Dictionary attacker_state_update_dictionary(AttackerStateUpdateSummary const& up
     return value;
 }
 
+Dictionary loot_item_dictionary(LootItemSummary const& item)
+{
+    Dictionary value;
+    value["slot"] = static_cast<int>(item.slot);
+    value["item_id"] = static_cast<int64_t>(item.item_id);
+    value["count"] = static_cast<int64_t>(item.count);
+    value["display_id"] = static_cast<int64_t>(item.display_id);
+    value["random_suffix"] = static_cast<int64_t>(item.random_suffix);
+    value["random_property_id"] = static_cast<int64_t>(item.random_property_id);
+    value["slot_type"] = static_cast<int>(item.slot_type);
+    return value;
+}
+
+Array loot_item_array(std::vector<LootItemSummary> const& items)
+{
+    Array values;
+    for (LootItemSummary const& item : items)
+    {
+        values.append(loot_item_dictionary(item));
+    }
+    return values;
+}
+
+Dictionary loot_response_dictionary(LootResponseSummary const& loot)
+{
+    Dictionary value;
+    value["parsed"] = loot.parsed;
+    value["payload_size"] = static_cast<int>(loot.payload_size);
+    value["guid"] = guid_to_hex(loot.guid);
+    value["loot_type"] = static_cast<int>(loot.loot_type);
+    value["error"] = loot.error;
+    value["error_code"] = static_cast<int>(loot.error_code);
+    value["gold"] = static_cast<int64_t>(loot.gold);
+    value["item_count"] = static_cast<int>(loot.item_count);
+    value["items"] = loot_item_array(loot.items);
+    return value;
+}
+
 Dictionary update_dictionary(UpdateObjectSummary const& update)
 {
     Dictionary value;
@@ -335,6 +373,9 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("combat_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
         &AcoreProtocolClient::combat_probe);
+    ClassDB::bind_method(
+        D_METHOD("loot_open_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
+        &AcoreProtocolClient::loot_open_probe);
     ClassDB::bind_method(
         D_METHOD("chat_say", "host", "port", "account", "password", "character_name", "message"),
         &AcoreProtocolClient::chat_say);
@@ -536,6 +577,73 @@ Dictionary AcoreProtocolClient::combat_probe(
         result["sub_damage_count"] = static_cast<int>(flow.attacker_state_update.sub_damage_count);
         result["target_state"] = static_cast<int>(flow.attacker_state_update.target_state);
         result["blocked_amount"] = static_cast<int64_t>(flow.attacker_state_update.blocked_amount);
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::loot_open_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    String const& target_name)
+{
+    try
+    {
+        if (target_entry <= 0)
+        {
+            return failure("loot target entry must be positive");
+        }
+
+        acore_protocol::LootOpenProbeResult flow = acore_protocol::loot_open_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<std::uint64_t>(target_entry),
+            to_std_string(target_name));
+
+        Dictionary result;
+        result["ok"] = flow.loot_open_sent && (flow.loot_response_seen || flow.loot_release_response_seen);
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["live_target_found"] = flow.live_target_found;
+        result["target_has_position"] = flow.target_has_position;
+        result["target_x"] = flow.target_x;
+        result["target_y"] = flow.target_y;
+        result["target_z"] = flow.target_z;
+        result["approach_movement_sent"] = flow.approach_movement_sent;
+        result["return_movement_sent"] = flow.return_movement_sent;
+        result["selection_sent"] = flow.selection_sent;
+        result["loot_open_sent"] = flow.loot_open_sent;
+        result["loot_response_seen"] = flow.loot_response_seen;
+        result["loot_release_sent"] = flow.loot_release_sent;
+        result["loot_release_response_seen"] = flow.loot_release_response_seen;
+        result["loot_release_success"] = flow.loot_release_success;
+        result["response_opcode"] = static_cast<int>(flow.response_opcode);
+        result["loot"] = loot_response_dictionary(flow.loot);
+        result["loot_parsed"] = flow.loot.parsed;
+        result["loot_error"] = flow.loot.error;
+        result["loot_error_code"] = static_cast<int>(flow.loot.error_code);
+        result["loot_type"] = static_cast<int>(flow.loot.loot_type);
+        result["gold"] = static_cast<int64_t>(flow.loot.gold);
+        result["item_count"] = static_cast<int>(flow.loot.item_count);
+        result["items"] = loot_item_array(flow.loot.items);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);

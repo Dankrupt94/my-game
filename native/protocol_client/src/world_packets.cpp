@@ -776,6 +776,23 @@ std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid)
     return payload;
 }
 
+std::vector<std::uint8_t> build_loot_payload(std::uint64_t raw_guid)
+{
+    return build_raw_guid_payload(raw_guid);
+}
+
+std::vector<std::uint8_t> build_loot_release_payload(std::uint64_t raw_guid)
+{
+    return build_raw_guid_payload(raw_guid);
+}
+
+std::vector<std::uint8_t> build_autostore_loot_item_payload(std::uint8_t loot_slot)
+{
+    std::vector<std::uint8_t> payload;
+    append_u8(payload, loot_slot);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_item_query_single_payload(std::uint32_t item_entry)
 {
     std::vector<std::uint8_t> payload;
@@ -1223,6 +1240,50 @@ SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::sp
     throw std::runtime_error("unsupported spell cast response opcode");
 }
 
+LootResponseSummary parse_loot_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    LootResponseSummary summary;
+    summary.payload_size = payload.size();
+    summary.guid = read_u64_le(payload, offset);
+    summary.loot_type = read_u8(payload, offset);
+
+    if (summary.loot_type == 0)
+    {
+        summary.error_code = read_u8(payload, offset);
+        if (offset != payload.size())
+        {
+            throw std::runtime_error("loot error response parser left trailing bytes");
+        }
+        summary.error = true;
+        summary.parsed = true;
+        return summary;
+    }
+
+    summary.gold = read_u32_le(payload, offset);
+    summary.item_count = read_u8(payload, offset);
+    summary.items.reserve(summary.item_count);
+    for (std::uint8_t i = 0; i < summary.item_count; ++i)
+    {
+        LootItemSummary item;
+        item.slot = read_u8(payload, offset);
+        item.item_id = read_u32_le(payload, offset);
+        item.count = read_u32_le(payload, offset);
+        item.display_id = read_u32_le(payload, offset);
+        item.random_suffix = read_u32_le(payload, offset);
+        item.random_property_id = read_u32_le(payload, offset);
+        item.slot_type = read_u8(payload, offset);
+        summary.items.push_back(item);
+    }
+
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("loot response parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,
@@ -1448,6 +1509,32 @@ bool world_packet_self_test()
     {
         return false;
     }
+    auto loot_payload = build_loot_payload(0xF130000026000001ULL);
+    auto loot_packet = build_client_packet(CMSG_LOOT, loot_payload);
+    if (loot_packet.size() != 14
+        || loot_packet[2] != 0x5D
+        || loot_packet[3] != 0x01
+        || loot_payload.size() != 8)
+    {
+        return false;
+    }
+    auto loot_release_payload = build_loot_release_payload(0xF130000026000001ULL);
+    auto loot_release_packet = build_client_packet(CMSG_LOOT_RELEASE, loot_release_payload);
+    if (loot_release_packet.size() != 14
+        || loot_release_packet[2] != 0x5F
+        || loot_release_packet[3] != 0x01)
+    {
+        return false;
+    }
+    auto loot_item_payload = build_autostore_loot_item_payload(3);
+    auto loot_item_packet = build_client_packet(CMSG_AUTOSTORE_LOOT_ITEM, loot_item_payload);
+    if (loot_item_packet.size() != 7
+        || loot_item_packet[2] != 0x08
+        || loot_item_packet[3] != 0x01
+        || loot_item_packet[6] != 3)
+    {
+        return false;
+    }
 
     auto create_payload = build_character_create_payload("Codextest");
     if (create_payload.empty() || create_payload.back() != 0)
@@ -1626,6 +1713,26 @@ bool world_packet_self_test()
     append_u8(cast_failed_payload, 2);
     SpellCastResponseSummary cast_failed = parse_spell_cast_response(SMSG_CAST_FAILED, cast_failed_payload);
 
+    std::vector<std::uint8_t> loot_error_payload;
+    append_u64_le(loot_error_payload, 0xF130000026000001ULL);
+    append_u8(loot_error_payload, 0);
+    append_u8(loot_error_payload, 4);
+    LootResponseSummary loot_error = parse_loot_response(loot_error_payload);
+
+    std::vector<std::uint8_t> loot_response_payload;
+    append_u64_le(loot_response_payload, 0xF130000026000001ULL);
+    append_u8(loot_response_payload, 1);
+    append_u32_le(loot_response_payload, 1234);
+    append_u8(loot_response_payload, 1);
+    append_u8(loot_response_payload, 0);
+    append_u32_le(loot_response_payload, 25);
+    append_u32_le(loot_response_payload, 2);
+    append_u32_le(loot_response_payload, 777);
+    append_u32_le(loot_response_payload, 0);
+    append_u32_le(loot_response_payload, 0);
+    append_u8(loot_response_payload, 0);
+    LootResponseSummary loot_response = parse_loot_response(loot_response_payload);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -1698,5 +1805,21 @@ bool world_packet_self_test()
         && cast_failed.parsed
         && cast_failed.cast_failed
         && cast_failed.spell_id == 78
-        && cast_failed.fail_reason == 2;
+        && cast_failed.fail_reason == 2
+        && loot_error.parsed
+        && loot_error.error
+        && loot_error.guid == 0xF130000026000001ULL
+        && loot_error.error_code == 4
+        && loot_response.parsed
+        && !loot_response.error
+        && loot_response.guid == 0xF130000026000001ULL
+        && loot_response.loot_type == 1
+        && loot_response.gold == 1234
+        && loot_response.item_count == 1
+        && loot_response.items.size() == 1
+        && loot_response.items[0].slot == 0
+        && loot_response.items[0].item_id == 25
+        && loot_response.items[0].count == 2
+        && loot_response.items[0].display_id == 777
+        && loot_response.items[0].slot_type == 0;
 }
