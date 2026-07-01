@@ -1,5 +1,16 @@
 # Task Log
 
+## 2026-06-30 - Stage 11 Godot-Native Protocol Boundary Checkpoint Started
+
+Goal: move the validated protocol flow toward a Godot-native loading boundary so the project can retire the blocking helper-process bridge.
+
+Plan:
+
+- Preserve the current helper bridge as the working fallback.
+- Add a small native bridge/library boundary around the reusable C++ protocol flow.
+- Document how Godot should prefer the native path once it is loadable.
+- Validate the native build and Godot startup without committing local credentials, packet captures, or proprietary files.
+
 ## 2026-06-30 - Stage 11 Reusable Protocol Flow Checkpoint Started
 
 Goal: refactor the validated native helper so the auth/realm/world-auth/character-enum flow is reusable by Godot-native integration instead of being trapped inside the CLI entrypoint.
