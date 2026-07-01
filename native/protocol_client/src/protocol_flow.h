@@ -116,6 +116,23 @@ struct CombatProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct ChatSayResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::string message;
+    std::string received_message;
+    std::uint64_t sender_guid = 0;
+    std::uint64_t receiver_guid = 0;
+    std::uint8_t chat_type = 0;
+    std::uint32_t language = 0;
+    bool message_sent = false;
+    bool chat_response_seen = false;
+    bool echoed_message_seen = false;
+    std::uint16_t response_opcode = 0;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct FlowOptions
 {
     bool trace_world_packets = false;
@@ -191,5 +208,14 @@ CombatProbeResult combat_probe(
     std::string const& character_name,
     std::uint64_t target_guid,
     std::string const& target_name,
+    FlowOptions options = {});
+
+ChatSayResult chat_say(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::string const& message,
     FlowOptions options = {});
 }

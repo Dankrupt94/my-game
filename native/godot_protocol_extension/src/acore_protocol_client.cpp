@@ -202,6 +202,9 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("combat_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
         &AcoreProtocolClient::combat_probe);
+    ClassDB::bind_method(
+        D_METHOD("chat_say", "host", "port", "account", "password", "character_name", "message"),
+        &AcoreProtocolClient::chat_say);
 }
 
 Dictionary AcoreProtocolClient::self_test()
@@ -361,6 +364,49 @@ Dictionary AcoreProtocolClient::combat_probe(
         result["response_opcode"] = static_cast<int>(flow.response_opcode);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::chat_say(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    String const& message)
+{
+    try
+    {
+        acore_protocol::ChatSayResult flow = acore_protocol::chat_say(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            to_std_string(message));
+
+        Dictionary result;
+        result["ok"] = flow.message_sent && flow.echoed_message_seen;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["message"] = String(flow.message.c_str());
+        result["received_message"] = String(flow.received_message.c_str());
+        result["message_sent"] = flow.message_sent;
+        result["chat_response_seen"] = flow.chat_response_seen;
+        result["echoed_message_seen"] = flow.echoed_message_seen;
+        result["response_opcode"] = static_cast<int>(flow.response_opcode);
+        result["chat_type"] = static_cast<int>(flow.chat_type);
+        result["language"] = static_cast<int>(flow.language);
+        result["sender_guid"] = guid_to_hex(flow.sender_guid);
+        result["receiver_guid"] = guid_to_hex(flow.receiver_guid);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

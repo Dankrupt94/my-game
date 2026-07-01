@@ -377,6 +377,43 @@ int combat_probe(
     return result.live_target_found && result.attack_sent && result.combat_response_seen ? 0 : 1;
 }
 
+int chat_say(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& message)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::ChatSayResult result = acore_protocol::chat_say(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        message,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "CHAT_SAY_SENT"
+              << " character=\"" << result.character.name << "\""
+              << " message_sent=" << (result.message_sent ? 1 : 0)
+              << " chat_response_seen=" << (result.chat_response_seen ? 1 : 0)
+              << " echoed_message_seen=" << (result.echoed_message_seen ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " chat_type=" << static_cast<int>(result.chat_type)
+              << " language=" << result.language
+              << " sender_guid=0x" << std::hex << result.sender_guid
+              << " receiver_guid=0x" << result.receiver_guid << std::dec
+              << " sent_len=" << result.message.size()
+              << " received_len=" << result.received_message.size()
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    return result.message_sent && result.echoed_message_seen ? 0 : 1;
+}
+
 int world_challenge(std::string const& host, std::string const& port)
 {
     acore_protocol::WorldChallengeSummary summary = acore_protocol::probe_world_challenge(host, port);
@@ -400,6 +437,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --move-heartbeat <host> <port> <account> <character-name> <delta-x> <delta-y> <delta-orientation>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --npc-interaction <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-say <host> <port> <account> <character-name> <message>\n"
               << "  acore_protocol_client --world-challenge <host> <port>\n";
 }
 }
@@ -456,6 +494,11 @@ int main(int argc, char** argv)
         if (argc == 8 && std::strcmp(argv[1], "--combat-probe") == 0)
         {
             return combat_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+        }
+
+        if (argc == 7 && std::strcmp(argv[1], "--chat-say") == 0)
+        {
+            return chat_say(argv[2], argv[3], argv[4], argv[5], argv[6]);
         }
 
         usage();

@@ -16,6 +16,7 @@ const ENTER_WORLD_SCENE := "res://scenes/enter_world_view.tscn"
 const MOVEMENT_SCENE := "res://scenes/movement_reconciliation_view.tscn"
 const OBJECT_VISIBILITY_SCENE := "res://scenes/object_visibility_view.tscn"
 const INTERACTION_COMBAT_SCENE := "res://scenes/interaction_combat_view.tscn"
+const CHAT_SCENE := "res://scenes/stage16_chat_view.tscn"
 const LOCAL_REPORTS := "res://local_reports"
 const LOGS_DIR := "/run/media/doodbro/New 1tb/AzerothCore/logs"
 const DATA_VIEWS := ["summary", "accounts", "characters", "online", "creatures", "items", "quests", "spells"]
@@ -89,6 +90,10 @@ func _register_command_actions() -> void:
 		"open_interaction_combat": {
 			"label": "Interact",
 			"handler": Callable(self, "_action_open_interaction_combat"),
+		},
+		"open_chat": {
+			"label": "Chat",
+			"handler": Callable(self, "_action_open_chat"),
 		},
 		"protocol_character_flow": {
 			"label": "Check Protocol",
@@ -165,6 +170,7 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("open_movement"))
 	actions.add_child(_action_button("open_object_visibility"))
 	actions.add_child(_action_button("open_interaction_combat"))
+	actions.add_child(_action_button("open_chat"))
 	actions.add_child(_action_button("protocol_character_flow"))
 	actions.add_child(_action_button("open_logs"))
 	actions.add_child(_action_button("open_reports"))
@@ -409,6 +415,12 @@ func _action_open_interaction_combat() -> void:
 	var error := get_tree().change_scene_to_file(INTERACTION_COMBAT_SCENE)
 	if error != OK:
 		_append_log("Could not open interaction scene. Error code: " + str(error))
+
+
+func _action_open_chat() -> void:
+	var error := get_tree().change_scene_to_file(CHAT_SCENE)
+	if error != OK:
+		_append_log("Could not open chat scene. Error code: " + str(error))
 
 
 func _action_launch_client() -> void:

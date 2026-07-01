@@ -698,6 +698,26 @@ bool is_combat_response_opcode(std::uint16_t opcode)
     }
 }
 
+std::uint32_t language_for_character(CharacterSummary const& character)
+{
+    switch (character.race)
+    {
+        case 2:  // orc
+        case 5:  // undead
+        case 6:  // tauren
+        case 8:  // troll
+        case 10: // blood elf
+            return LANG_ORCISH;
+        default:
+            return LANG_COMMON;
+    }
+}
+
+bool is_chat_response_opcode(std::uint16_t opcode)
+{
+    return opcode == SMSG_MESSAGECHAT || opcode == SMSG_GM_MESSAGECHAT;
+}
+
 LoginVerifyWorld login_selected_character(
     AuthenticatedWorldSession& session,
     CharacterSummary const& selected,
@@ -1336,6 +1356,89 @@ CombatProbeResult combat_probe(
     }
 
     write_world_packet(session->socket.get(), CMSG_ATTACKSTOP, {}, &session->crypt);
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+ChatSayResult chat_say(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::string const& message,
+    FlowOptions options)
+{
+    if (message.empty())
+    {
+        throw std::runtime_error("chat message must not be empty");
+    }
+    if (message.size() > 255)
+    {
+        throw std::runtime_error("chat message must be 255 bytes or shorter");
+    }
+    if (message.find_first_of("\n\r") != std::string::npos || message.find("|0") != std::string::npos)
+    {
+        throw std::runtime_error("chat message contains unsupported control text");
+    }
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    (void)login_selected_character(*session, selected, options);
+
+    bool const logged_in_world = wait_for_logged_in_world(*session, options, 650);
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before chat");
+    }
+
+    ChatSayResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.message = message;
+    result.language = language_for_character(selected);
+
+    write_world_packet(session->socket.get(), CMSG_MESSAGECHAT, build_chat_say_payload(result.language, message), &session->crypt);
+    result.message_sent = true;
+
+    for (int i = 0; i < 80; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (is_chat_response_opcode(packet->opcode))
+        {
+            ChatMessageSummary chat = parse_chat_message_summary(
+                packet->payload,
+                packet->opcode == SMSG_GM_MESSAGECHAT);
+            result.chat_response_seen = true;
+            result.response_opcode = packet->opcode;
+            result.chat_type = chat.chat_type;
+            result.language = chat.language;
+            result.sender_guid = chat.sender_guid;
+            result.receiver_guid = chat.receiver_guid;
+            result.received_message = chat.message;
+            result.echoed_message_seen = chat.message == message;
+            if (result.echoed_message_seen)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
     (void)request_graceful_logout(*session, options);
     return result;
 }

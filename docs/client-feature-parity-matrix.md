@@ -23,7 +23,7 @@ The target is not a companion dashboard, a partial client, or a reimagined MMO. 
 
 | Feature Area | Stage 16 Status | Protocol/Data Targets | Godot Surface | Validation Target | Current Notes |
 | --- | --- | --- | --- | --- | --- |
-| Chat | Next slice | Message chat send/receive, channel handling, system messages, language fields. | Chat frame with input, tabs, filters, and log history. | Send a say message through AzerothCore and observe server echo or response in Godot. | Begin with a narrow local say-message probe. |
+| Chat | Working first slice | `CMSG_MESSAGECHAT`, `SMSG_MESSAGECHAT`, basic say type, race language selection, server echo parse. | `scenes/stage16_chat_view.tscn` with chat log, input, and send button. | `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` returns server echo opcode `0x096`. | Say-message round trip works. Remaining chat parity includes whispers, channels, party/guild/raid chat, system filters, tabs, history, and social integration. |
 | Inventory | Planned | Bag inventory lists, item update fields, swap/split/use packets. | Backpack and bag grid. | Load inventory from live character and move/use a safe item. | Needs fuller item update-field parsing. |
 | Equipment | Planned | Equipment slots, durability, item stats, equip/unequip packets. | Character paper doll. | Equip or unequip a harmless item and confirm server state. | Depends on inventory parsing. |
 | Loot | Planned | Loot response packets, loot slots, money, roll flows. | Loot window. | Kill a creature and loot from Godot. | Depends on complete combat loop. |

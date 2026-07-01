@@ -299,6 +299,43 @@ Stage 15 native evidence:
 
 Stage 16 should parse gossip menu payloads, attack-state update fields, health updates, spell casts, threat/death state, and target frame deltas instead of treating response opcodes as the final state surface.
 
+## Chat Say Slice
+
+Stage 16 starts the long client feature parity march with a minimal chat path.
+
+Client say-message request:
+
+| Opcode | Value | Payload |
+| --- | ---: | --- |
+| `CMSG_MESSAGECHAT` | `0x095` | `uint32 chat_type`, `uint32 language`, null-terminated message |
+
+Initial Stage 16 request values:
+
+| Field | Value | Notes |
+| --- | ---: | --- |
+| `chat_type` | `1` | `CHAT_MSG_SAY` |
+| `language` | `7` for the current human test character | `LANG_COMMON`; Horde races should use Orcish (`1`) for the same first-slice behavior |
+| `message` | Local test string | Must be non-empty, 255 bytes or shorter, and must not contain control text rejected by AzerothCore |
+
+Server echo response:
+
+| Opcode | Value | Stage 16 parser |
+| --- | ---: | --- |
+| `SMSG_MESSAGECHAT` | `0x096` | Parses chat type, language, sender GUID, receiver GUID, message text, and chat tag |
+| `SMSG_GM_MESSAGECHAT` | `0x3B3` | Parser support exists for the extra sender-name field, but the Stage 16 validation used normal `SMSG_MESSAGECHAT` |
+
+Observed Stage 16 result:
+
+- Native helper command `--chat-say` sent `Codex Stage16 chat probe` as `Codexstage`.
+- AzerothCore echoed the message with `response_opcode=0x96`, `chat_type=1`, `language=7`, and matching sender/receiver GUIDs.
+- Godot scene `scenes/stage16_chat_view.tscn` passed the same path with `CHAT_SELF_TEST_OK response_opcode=0x096 chat_type=1 language=7`.
+
+Remaining chat packet work:
+
+- Parse and build whisper/channel/party/guild/raid/emote/AFK/DND variants.
+- Surface system messages and server notifications in the chat UI.
+- Add receiver-side tests with a second local character/session.
+
 ## Stage 11 First World Target
 
 Stage 11 should connect to worldserver, parse `SMSG_AUTH_CHALLENGE`, send `CMSG_AUTH_SESSION`, initialize header crypto, parse `SMSG_AUTH_RESPONSE`, send `CMSG_CHAR_ENUM`, and parse at least names/guid/race/class/level/map/position from `SMSG_CHAR_ENUM`.

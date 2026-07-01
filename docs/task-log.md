@@ -818,3 +818,34 @@ Result:
 - Marked Stage 16 as in progress.
 - Updated the master plan's current status from the stale Stage 11 checkpoint to Stage 16.
 - Selected chat as the first Stage 16 feature slice.
+
+## 2026-07-01 - Complete Stage 16 First Chat Slice
+
+Goal: prove Godot can send and receive an AzerothCore chat message through the WotLK world protocol without launching the original client.
+
+Plan:
+
+- Add `CMSG_MESSAGECHAT` packet building for a basic say message.
+- Parse `SMSG_MESSAGECHAT` enough to recover sender, receiver, language, chat type, and message text.
+- Add a native `--chat-say` probe.
+- Expose chat through the Godot native extension and script bridge.
+- Add a Godot chat scene with a headless self-test.
+- Keep the slice generic and local-only with no proprietary assets or client data.
+
+Result:
+
+- Added `build_chat_say_payload` and `parse_chat_message_summary` in the native protocol packet layer.
+- Added `acore_protocol::chat_say` and the `--chat-say` helper command.
+- Added `AcoreProtocolClient.chat_say(...)` to the Godot extension.
+- Added `ProtocolClientBridge.chat_say(...)`.
+- Added `scenes/stage16_chat_view.tscn` and `scripts/stage16_chat_view.gd`.
+- Added the dashboard `Chat` action.
+- Updated the Stage 16 matrix and world-session packet spec.
+
+Validation:
+
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--chat-say` passed with `response_opcode=0x96`, `chat_type=1`, `language=7`, and `echoed_message_seen=1`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_CHAT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_chat_view.tscn` passed with `CHAT_SELF_TEST_OK response_opcode=0x096 chat_type=1 language=7`.
+- Regression self-tests passed for enter-world, movement, object visibility, and interaction/combat when run sequentially.

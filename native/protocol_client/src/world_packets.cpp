@@ -180,6 +180,25 @@ std::string read_c_string(std::span<const std::uint8_t> bytes, std::size_t& offs
     return value;
 }
 
+std::string read_length_string(std::span<const std::uint8_t> bytes, std::size_t& offset)
+{
+    std::uint32_t const length = read_u32_le(bytes, offset);
+    if (offset + length > bytes.size())
+    {
+        throw std::runtime_error("not enough bytes for length-prefixed string");
+    }
+
+    std::size_t value_length = length;
+    if (value_length > 0 && bytes[offset + value_length - 1] == 0)
+    {
+        --value_length;
+    }
+
+    std::string value(reinterpret_cast<char const*>(bytes.data() + offset), value_length);
+    offset += length;
+    return value;
+}
+
 std::array<std::uint8_t, 20> sha1(std::initializer_list<std::span<const std::uint8_t>> parts)
 {
     MdPtr ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
@@ -590,6 +609,16 @@ std::vector<std::uint8_t> build_movement_payload(std::uint64_t character_guid, M
     return payload;
 }
 
+std::vector<std::uint8_t> build_chat_say_payload(std::uint32_t language, std::string const& message)
+{
+    std::vector<std::uint8_t> payload;
+    append_u32_le(payload, CHAT_MSG_SAY);
+    append_u32_le(payload, language);
+    payload.insert(payload.end(), message.begin(), message.end());
+    append_u8(payload, 0);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload)
 {
     std::vector<std::uint8_t> packet = build_client_header(opcode, payload.size());
@@ -657,6 +686,32 @@ LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload)
     position.z = read_float_le(payload, offset);
     position.orientation = read_float_le(payload, offset);
     return position;
+}
+
+ChatMessageSummary parse_chat_message_summary(std::span<const std::uint8_t> payload, bool gm_message)
+{
+    std::size_t offset = 0;
+    ChatMessageSummary summary;
+    summary.chat_type = read_u8(payload, offset);
+    summary.language = read_u32_le(payload, offset);
+    summary.sender_guid = read_u64_le(payload, offset);
+    (void)read_u32_le(payload, offset); // chat flags
+
+    if (gm_message)
+    {
+        summary.sender_name = read_length_string(payload, offset);
+    }
+
+    if (summary.chat_type == 0x11)
+    {
+        (void)read_c_string(payload, offset); // channel name
+    }
+
+    summary.receiver_guid = read_u64_le(payload, offset);
+    summary.message = read_length_string(payload, offset);
+    summary.chat_tag = read_u8(payload, offset);
+    summary.parsed = true;
+    return summary;
 }
 
 UpdateObjectSummary parse_update_object_summary(
@@ -785,6 +840,13 @@ bool world_packet_self_test()
         return false;
     }
 
+    auto chat_payload = build_chat_say_payload(LANG_COMMON, "hello");
+    auto chat_packet = build_client_packet(CMSG_MESSAGECHAT, chat_payload);
+    if (chat_packet.size() != 6 + 4 + 4 + 6 || chat_packet[2] != 0x95)
+    {
+        return false;
+    }
+
     auto create_payload = build_character_create_payload("Codextest");
     if (create_payload.empty() || create_payload.back() != 0)
     {
@@ -839,6 +901,17 @@ bool world_packet_self_test()
     append_u8(update_payload, 0); // empty value update mask
     auto update = parse_update_object_summary(update_payload, false, 0x1234);
 
+    std::vector<std::uint8_t> chat_response;
+    append_u8(chat_response, CHAT_MSG_SAY);
+    append_u32_le(chat_response, LANG_COMMON);
+    append_u64_le(chat_response, 0x1234);
+    append_u32_le(chat_response, 0);
+    append_u64_le(chat_response, 0x1234);
+    append_u32_le(chat_response, 6);
+    chat_response.insert(chat_response.end(), {'h', 'e', 'l', 'l', 'o', 0});
+    append_u8(chat_response, 0);
+    ChatMessageSummary chat = parse_chat_message_summary(chat_response, false);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -852,5 +925,11 @@ bool world_packet_self_test()
         && update.visible_objects[0].entry == 823
         && update.visible_objects[0].object_type == 3
         && update.visible_objects[0].has_position
-        && update.visible_objects[0].x < -8946.0f;
+        && update.visible_objects[0].x < -8946.0f
+        && chat.parsed
+        && chat.chat_type == CHAT_MSG_SAY
+        && chat.language == LANG_COMMON
+        && chat.sender_guid == 0x1234
+        && chat.receiver_guid == 0x1234
+        && chat.message == "hello";
 }
