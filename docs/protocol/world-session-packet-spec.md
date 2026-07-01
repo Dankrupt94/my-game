@@ -579,11 +579,13 @@ Observed Stage 17 result:
 - The latest live round trip changed coinage from `9965` to `9933` after buy, then `9939` after sell, for deltas `-32`, `+6`, and `-26`. This is expected because vendor buy and sell prices differ.
 - Godot scene `scenes/stage17_vendor_view.tscn` now exposes a `Buy + Sell` control and passed `ACORE_VENDOR_BUY_SELL_SELF_TEST=1` with buy opcode `0x1A4`, bought slot `34`, and `roundtrip=true`.
 - The vendor scene now stores metadata for each server-returned row, shows the selected row in the action area, exposes a quantity control, and routes `Buy + Sell` through the selected row instead of hardcoding the UI path. The self-test still selects the known local cheap item row so repeated validation stays bounded.
+- The buy/sell result now renders transaction status plus before, after-buy, and after-sell slot snapshots when the native extension returns them, and the self-test requires all three inventory snapshots to be observed.
+- `ACORE_VENDOR_UI_SELF_TEST=1` renders the selected-row and transaction feedback UI with synthetic local dictionaries only, so UI layout/formatting can be checked without entering the bridge or live-session lane.
 - The scene uses generic labels and item ids only. Committed data does not include proprietary NPC names, item names, icons, or extracted client data.
 
 Remaining vendor packet work:
 
-- Turn the selected-row buy/sell proof into a normal player vendor window with persistent inventory refresh after purchase/sale, failure-code UI, and stock refresh.
+- Turn the selected-row buy/sell proof into a normal player vendor window with persistent inventory panel refresh after purchase/sale, failure-code UI, and stock refresh.
 - Add repair support and repair-cost/failure handling.
 - Resolve item names/icons/tooltips through the local-only data/asset pipeline.
 - Replace the target scan/list picker with normal in-world click targeting and persistent-session flow.

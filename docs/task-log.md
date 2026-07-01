@@ -1,5 +1,27 @@
 # Task Log
 
+## 2026-07-01 - Stage 17 Vendor Transaction Inventory Feedback Started
+
+Goal: make the vendor buy/sell proof show visible inventory state evidence instead of only reporting a roundtrip flag.
+
+Plan:
+
+- Reuse the existing native vendor buy/sell result because it already includes before, after-buy, and after-sell inventory snapshots.
+- Add a transaction status line to the vendor scene.
+- Render the bought slot state before buy, after buy, and after sell when slot dictionaries are available.
+- Tighten the headless self-test so it requires all three inventory snapshots to be observed.
+
+Result:
+
+- `scenes/stage17_vendor_view.tscn` now shows transaction success state, inventory snapshot presence, money deltas, and bought-slot state changes after the selected-row buy/sell proof.
+- `ACORE_VENDOR_BUY_SELL_SELF_TEST=1` now requires `inventory_before_seen`, `inventory_after_buy_seen`, and `inventory_after_sell_seen`.
+- Added `ACORE_VENDOR_UI_SELF_TEST=1` so the selected-row and transaction feedback UI can be validated with synthetic dictionaries only, without invoking bridge or live-session code.
+- Validation: `godot-4 --headless --path . --quit` passed.
+- Validation: `ACORE_VENDOR_UI_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with selected slot `8`, item id `17184`, 7 rendered result rows, and transaction snapshots `true/true/true`.
+- Validation: `ACORE_VENDOR_BUY_SELL_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with selected item id `17184`, buy opcode `0x1A4`, bought slot `34`, `roundtrip=true`, and coinage delta `-26`.
+- Validation: `ACORE_VENDOR_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed after the feedback change.
+- Remaining work: replace the proof-list display with a persistent vendor/inventory layout, refresh the actual inventory panel after buy/sell, add stock refresh and failure-code UI, add repair, and move the vendor interaction into a persistent session.
+
 ## 2026-07-01 - Stage 17 Vendor Selected Row Buy/Sell UI Started
 
 Goal: move the vendor buy/sell proof closer to normal player use by making the Godot scene act on the selected server-returned vendor row instead of a hidden fixed row.
