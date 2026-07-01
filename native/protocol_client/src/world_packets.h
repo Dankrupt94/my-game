@@ -18,6 +18,7 @@ constexpr std::uint32_t CMSG_MESSAGECHAT = 0x095;
 constexpr std::uint32_t CMSG_SET_ACTION_BUTTON = 0x128;
 constexpr std::uint32_t CMSG_CAST_SPELL = 0x12E;
 constexpr std::uint32_t CMSG_SWAP_INV_ITEM = 0x10D;
+constexpr std::uint32_t CMSG_SPLIT_ITEM = 0x10E;
 constexpr std::uint32_t CMSG_SET_SELECTION = 0x13D;
 constexpr std::uint32_t CMSG_ATTACKSWING = 0x141;
 constexpr std::uint32_t CMSG_ATTACKSTOP = 0x142;
@@ -319,6 +320,12 @@ std::vector<std::uint8_t> build_set_action_button_payload(
 std::vector<std::uint8_t> build_swap_inventory_item_payload(
     std::uint8_t source_slot,
     std::uint8_t destination_slot);
+std::vector<std::uint8_t> build_split_item_payload(
+    std::uint8_t source_bag,
+    std::uint8_t source_slot,
+    std::uint8_t destination_bag,
+    std::uint8_t destination_slot,
+    std::uint32_t count);
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload);
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);

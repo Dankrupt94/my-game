@@ -354,6 +354,9 @@ void AcoreProtocolClient::_bind_methods()
         D_METHOD("swap_inventory_slots", "host", "port", "account", "password", "character_name", "source_slot", "destination_slot"),
         &AcoreProtocolClient::swap_inventory_slots);
     ClassDB::bind_method(
+        D_METHOD("split_inventory_stack", "host", "port", "account", "password", "character_name", "source_slot", "destination_slot", "split_count"),
+        &AcoreProtocolClient::split_inventory_stack);
+    ClassDB::bind_method(
         D_METHOD("set_action_button", "host", "port", "account", "password", "character_name", "button", "action", "type"),
         &AcoreProtocolClient::set_action_button);
     ClassDB::bind_method(
@@ -866,6 +869,70 @@ Dictionary AcoreProtocolClient::swap_inventory_slots(
         result["destination_after_swap"] = inventory_slot_dictionary(flow.destination_after_swap);
         result["source_after_restore"] = inventory_slot_dictionary(flow.source_after_restore);
         result["destination_after_restore"] = inventory_slot_dictionary(flow.destination_after_restore);
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::split_inventory_stack(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t source_slot,
+    int64_t destination_slot,
+    int64_t split_count)
+{
+    try
+    {
+        if (source_slot < 0 || source_slot >= static_cast<int64_t>(PlayerInventorySnapshotSlots))
+        {
+            return failure("source inventory slot must be from 0 to 38");
+        }
+        if (destination_slot < 0 || destination_slot >= static_cast<int64_t>(PlayerInventorySnapshotSlots))
+        {
+            return failure("destination inventory slot must be from 0 to 38");
+        }
+        if (split_count <= 0 || split_count > 999)
+        {
+            return failure("split count must be from 1 to 999");
+        }
+
+        acore_protocol::InventorySplitProbeResult flow = acore_protocol::split_inventory_stack_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<std::uint8_t>(source_slot),
+            static_cast<std::uint8_t>(destination_slot),
+            static_cast<std::uint32_t>(split_count));
+
+        Dictionary result;
+        result["ok"] = flow.split_sent && flow.split_confirmed && flow.merge_sent && flow.merge_confirmed;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["source_slot"] = static_cast<int>(flow.source_slot);
+        result["destination_slot"] = static_cast<int>(flow.destination_slot);
+        result["split_count"] = static_cast<int>(flow.split_count);
+        result["before_seen"] = flow.before_seen;
+        result["split_sent"] = flow.split_sent;
+        result["split_confirmed"] = flow.split_confirmed;
+        result["merge_sent"] = flow.merge_sent;
+        result["merge_confirmed"] = flow.merge_confirmed;
+        result["source_before"] = inventory_slot_dictionary(flow.source_before);
+        result["destination_before"] = inventory_slot_dictionary(flow.destination_before);
+        result["source_after_split"] = inventory_slot_dictionary(flow.source_after_split);
+        result["destination_after_split"] = inventory_slot_dictionary(flow.destination_after_split);
+        result["source_after_merge"] = inventory_slot_dictionary(flow.source_after_merge);
+        result["destination_after_merge"] = inventory_slot_dictionary(flow.destination_after_merge);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

@@ -82,6 +82,12 @@ func _build_view() -> void:
 	equipment_button.pressed.connect(_run_equipment_probe)
 	action_row.add_child(equipment_button)
 
+	var split_button := Button.new()
+	split_button.text = "Test Split"
+	split_button.tooltip_text = "Backpack 1 stack -> Backpack 3"
+	split_button.pressed.connect(_run_stack_split_probe)
+	action_row.add_child(split_button)
+
 	swap_label = Label.new()
 	swap_label.text = "Move: idle"
 	swap_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -128,6 +134,9 @@ func _load_inventory() -> void:
 		return
 	if OS.get_environment("ACORE_EQUIPMENT_SWAP_SELF_TEST") == "1" and not mutation_self_test_finished:
 		call_deferred("_run_equipment_probe")
+		return
+	if OS.get_environment("ACORE_STACK_SPLIT_SELF_TEST") == "1" and not mutation_self_test_finished:
+		call_deferred("_run_stack_split_probe")
 		return
 	_finish_self_test(slots.size() == 39, result)
 
@@ -239,6 +248,30 @@ func _run_equipment_probe() -> void:
 	_run_swap_probe(15, 26, "Unequip", "equipment")
 
 
+func _run_stack_split_probe() -> void:
+	swap_label.text = "Split: running"
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.split_inventory_stack(TEST_CHARACTER_NAME, 23, 25, 1)
+	var ok := bool(result.get("ok", false))
+	if ok:
+		swap_label.text = "Split: merged"
+	else:
+		swap_label.text = "Split: failed"
+		detail_label.text = str(result.get("error", result.get("output", "Inventory split failed")))
+	print("INVENTORY_SPLIT_READY source=%s destination=%s count=%s split_confirmed=%s merge_confirmed=%s" % [
+		str(result.get("source_slot", 23)),
+		str(result.get("destination_slot", 25)),
+		str(result.get("split_count", 1)),
+		str(result.get("split_confirmed", false)),
+		str(result.get("merge_confirmed", false)),
+	])
+	if OS.get_environment("ACORE_STACK_SPLIT_SELF_TEST") == "1":
+		_finish_stack_split_self_test(ok, result)
+		return
+	if ok:
+		call_deferred("_load_inventory")
+
+
 func _section_for_slot(index: int) -> String:
 	if index < 19:
 		return "equipment"
@@ -301,4 +334,21 @@ func _finish_swap_self_test(ok: bool, result: Dictionary, self_test_kind: String
 		if self_test_kind == "equipment":
 			marker = "EQUIPMENT_SWAP_SELF_TEST_FAILED"
 		push_error(marker + ": " + str(result.get("error", result.get("output", "unknown"))))
+		get_tree().quit(1)
+
+
+func _finish_stack_split_self_test(ok: bool, result: Dictionary) -> void:
+	if mutation_self_test_finished:
+		return
+	mutation_self_test_finished = true
+
+	if ok:
+		print("STACK_SPLIT_SELF_TEST_OK source=%s destination=%s count=%s" % [
+			str(result.get("source_slot", 23)),
+			str(result.get("destination_slot", 25)),
+			str(result.get("split_count", 1)),
+		])
+		get_tree().quit(0)
+	else:
+		push_error("STACK_SPLIT_SELF_TEST_FAILED: " + str(result.get("error", result.get("output", "unknown"))))
 		get_tree().quit(1)

@@ -488,6 +488,53 @@ func swap_inventory_slots(
 	return parsed
 
 
+func split_inventory_stack(
+	character_name: String = "Codexstage",
+	source_slot: int = 23,
+	destination_slot: int = 25,
+	split_count: int = 1,
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_split_inventory_stack(character_name, source_slot, destination_slot, split_count, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--split-inventory-stack",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			str(source_slot),
+			str(destination_slot),
+			str(split_count),
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_inventory_split_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("split_confirmed", false)) \
+		and bool(parsed.get("merge_confirmed", false))
+	return parsed
+
+
 func set_action_button(
 	character_name: String = "Codexstage",
 	button: int = 0,
@@ -1001,6 +1048,41 @@ func _run_native_swap_inventory_slots(
 		destination_slot)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected inventory swap result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
+func _run_native_split_inventory_stack(
+	character_name: String,
+	source_slot: int,
+	destination_slot: int,
+	split_count: int,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("split_inventory_stack"):
+		return {}
+
+	var result = client.call(
+		"split_inventory_stack",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		source_slot,
+		destination_slot,
+		split_count)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected inventory split result")
 
 	var parsed: Dictionary = result
 	parsed["source"] = "Godot native extension"
@@ -1632,6 +1714,42 @@ func _parse_inventory_swap_output(output: String) -> Dictionary:
 			result["destination_after_swap"] = _parse_inventory_swap_slot(line, "destination_after_swap", result["destination_slot"])
 			result["source_after_restore"] = _parse_inventory_swap_slot(line, "source_after_restore", result["source_slot"])
 			result["destination_after_restore"] = _parse_inventory_swap_slot(line, "destination_after_restore", result["destination_slot"])
+	return result
+
+
+func _parse_inventory_split_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"source_slot": 0,
+		"destination_slot": 0,
+		"split_count": 0,
+		"before_seen": false,
+		"split_sent": false,
+		"split_confirmed": false,
+		"merge_sent": false,
+		"merge_confirmed": false,
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("INVENTORY_SPLIT_PROBE"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["source_slot"] = _extract_int_field(line, "source_slot=")
+			result["destination_slot"] = _extract_int_field(line, "destination_slot=")
+			result["split_count"] = _extract_int_field(line, "split_count=")
+			result["before_seen"] = _extract_int_field(line, "before_seen=") == 1
+			result["split_sent"] = _extract_int_field(line, "split_sent=") == 1
+			result["split_confirmed"] = _extract_int_field(line, "split_confirmed=") == 1
+			result["merge_sent"] = _extract_int_field(line, "merge_sent=") == 1
+			result["merge_confirmed"] = _extract_int_field(line, "merge_confirmed=") == 1
+			result["source_before"] = _parse_inventory_swap_slot(line, "source_before", result["source_slot"])
+			result["destination_before"] = _parse_inventory_swap_slot(line, "destination_before", result["destination_slot"])
+			result["source_after_split"] = _parse_inventory_swap_slot(line, "source_after_split", result["source_slot"])
+			result["destination_after_split"] = _parse_inventory_swap_slot(line, "destination_after_split", result["destination_slot"])
+			result["source_after_merge"] = _parse_inventory_swap_slot(line, "source_after_merge", result["source_slot"])
+			result["destination_after_merge"] = _parse_inventory_swap_slot(line, "destination_after_merge", result["destination_slot"])
 	return result
 
 

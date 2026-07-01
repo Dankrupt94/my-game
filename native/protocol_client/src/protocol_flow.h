@@ -193,6 +193,27 @@ struct InventorySwapProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct InventorySplitProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint8_t source_slot = 0;
+    std::uint8_t destination_slot = 0;
+    std::uint32_t split_count = 0;
+    InventorySlotSummary source_before;
+    InventorySlotSummary destination_before;
+    InventorySlotSummary source_after_split;
+    InventorySlotSummary destination_after_split;
+    InventorySlotSummary source_after_merge;
+    InventorySlotSummary destination_after_merge;
+    bool before_seen = false;
+    bool split_sent = false;
+    bool split_confirmed = false;
+    bool merge_sent = false;
+    bool merge_confirmed = false;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct SetActionButtonProbeResult
 {
     RealmInfo realm;
@@ -371,6 +392,17 @@ InventorySwapProbeResult swap_inventory_slots_probe(
     std::string const& character_name,
     std::uint8_t source_slot,
     std::uint8_t destination_slot,
+    FlowOptions options = {});
+
+InventorySplitProbeResult split_inventory_stack_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint8_t source_slot,
+    std::uint8_t destination_slot,
+    std::uint32_t split_count,
     FlowOptions options = {});
 
 SetActionButtonProbeResult set_action_button_probe(

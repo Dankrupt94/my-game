@@ -268,9 +268,11 @@ Base inventory swap:
 | Direction | Opcode | Payload | Stage 17 use |
 | --- | ---: | --- | --- |
 | Client to server | `CMSG_SWAP_INV_ITEM` (`0x10D`) | `uint8 destination_slot`, then `uint8 source_slot` | Moves or swaps items inside `INVENTORY_SLOT_BAG_0`, including equipped inventory slots and base backpack slots. Stage 17 uses backpack source slot `23` to destination slot `25`, then restores `25` back to `23`; it also uses equipment source slot `15` to backpack slot `26`, then restores `26` back to `15`. |
+| Client to server | `CMSG_SPLIT_ITEM` (`0x10E`) | `uint8 source_bag`, `uint8 source_slot`, `uint8 destination_bag`, `uint8 destination_slot`, `uint32 count` | Splits a stack. For base inventory slots, AzerothCore expects bag id `255`. Stage 17 splits count `1` from slot `23` into slot `25`, then uses `CMSG_SWAP_INV_ITEM` to merge slot `25` back into slot `23`. |
 | Server to client | `SMSG_INVENTORY_CHANGE_FAILURE` (`0x112`) | Failure payload varies by reason | Treated as a failed move during the bounded probe. |
 
 The AzerothCore handler reads destination first, then source, and calls `Player::SwapItem` with `INVENTORY_SLOT_BAG_0`. Stage 17 confirms the mutation by reading inventory snapshots before the move, after the move, and after the restore.
+The split handler reads source bag and slot first, then destination bag and slot, then count. The base player inventory bag id is `255`; `0` is `NULL_BAG` and fails explicit-position validation for this packet.
 
 Stage 17 inventory snapshot behavior:
 
@@ -283,6 +285,7 @@ Stage 17 inventory snapshot behavior:
 - Local validation observed 39 slots, 7 populated item GUIDs, 7 item-detail rows, and 7 resolved item names for `Codexstage`; coinage was `0`, and the zero-valued coinage field was not included in that live update packet.
 - Local validation also moved the slot `23` item to slot `25`, confirmed the destination held the same GUID, restored the item to slot `23`, and confirmed slot `25` was empty again.
 - A follow-up validation moved the equipped slot `15` item to backpack slot `26`, confirmed the destination held the same GUID, restored the item to slot `15`, and confirmed slot `26` was empty again.
+- Stack-split validation split one item from slot `23` into slot `25`, confirmed source stack `3` and destination stack `1`, merged slot `25` back into slot `23`, and confirmed source stack `4` with slot `25` empty.
 
 Important Stage 15 correction: database spawn GUIDs are not live packet GUIDs. AzerothCore creates runtime object counters when the map instantiates creatures/gameobjects. Client actions must target the live `ObjectGuid` from the update stream.
 

@@ -1217,6 +1217,68 @@ bool send_swap_inventory_item_once(
     (void)request_graceful_logout(*session, options);
     return !failed;
 }
+
+bool send_split_item_once(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint8_t source_slot,
+    std::uint8_t destination_slot,
+    std::uint32_t split_count,
+    FlowOptions options,
+    std::vector<std::uint16_t>& skipped_opcodes)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    (void)login_selected_character(*session, selected, options);
+
+    bool const logged_in_world = wait_for_logged_in_world(*session, options, 650);
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before splitting inventory stack");
+    }
+
+    write_world_packet(
+        session->socket.get(),
+        CMSG_SPLIT_ITEM,
+        build_split_item_payload(255, source_slot, 255, destination_slot, split_count),
+        &session->crypt);
+
+    bool failed = false;
+    for (int i = 0; i < 24; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            continue;
+        }
+        if (packet->opcode == SMSG_INVENTORY_CHANGE_FAILURE)
+        {
+            failed = true;
+            break;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        skipped_opcodes.push_back(packet->opcode);
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return !failed;
+}
 }
 
 std::vector<std::uint8_t> build_auth_logon_challenge(std::string const& account)
@@ -2344,6 +2406,147 @@ InventorySwapProbeResult swap_inventory_slots_probe(
         && after_restore.inventory_seen
         && inventory_slot_matches(result.source_after_restore, result.source_before)
         && inventory_slot_matches(result.destination_after_restore, result.destination_before);
+
+    return result;
+}
+
+InventorySplitProbeResult split_inventory_stack_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint8_t source_slot,
+    std::uint8_t destination_slot,
+    std::uint32_t split_count,
+    FlowOptions options)
+{
+    if (source_slot == destination_slot)
+    {
+        throw std::runtime_error("source and destination inventory slots must be different");
+    }
+    if (source_slot >= PlayerInventorySnapshotSlots || destination_slot >= PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error("inventory slots must be from 0 to 38");
+    }
+    if (split_count == 0)
+    {
+        throw std::runtime_error("split count must be greater than zero");
+    }
+
+    InventorySplitProbeResult result;
+    result.source_slot = source_slot;
+    result.destination_slot = destination_slot;
+    result.split_count = split_count;
+
+    InventorySnapshotResult before = read_inventory_snapshot(host, port, account, password, character_name, options);
+    result.realm = before.realm;
+    result.character = before.character;
+    result.before_seen = before.inventory_seen;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), before.skipped_opcodes.begin(), before.skipped_opcodes.end());
+    if (!before.inventory_seen || before.inventory.slots.size() != PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error("did not observe inventory before split probe");
+    }
+
+    result.source_before = inventory_slot_at(before.inventory, source_slot);
+    result.destination_before = inventory_slot_at(before.inventory, destination_slot);
+    if (!result.source_before.populated)
+    {
+        throw std::runtime_error("source inventory slot is empty; refusing to run split probe");
+    }
+    if (result.destination_before.populated)
+    {
+        throw std::runtime_error("destination inventory slot is not empty; refusing to run split probe");
+    }
+    if (result.source_before.stack_count <= split_count)
+    {
+        throw std::runtime_error("source inventory stack is not large enough for a reversible split probe");
+    }
+
+    result.split_sent = send_split_item_once(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        source_slot,
+        destination_slot,
+        split_count,
+        options,
+        result.skipped_opcodes);
+
+    InventorySnapshotResult after_split;
+    try
+    {
+        after_split = read_inventory_snapshot(host, port, account, password, character_name, options);
+    }
+    catch (...)
+    {
+        (void)send_swap_inventory_item_once(
+            host,
+            port,
+            account,
+            password,
+            character_name,
+            destination_slot,
+            source_slot,
+            options,
+            result.skipped_opcodes);
+        throw;
+    }
+
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), after_split.skipped_opcodes.begin(), after_split.skipped_opcodes.end());
+    result.source_after_split = inventory_slot_at(after_split.inventory, source_slot);
+    result.destination_after_split = inventory_slot_at(after_split.inventory, destination_slot);
+    result.split_confirmed = result.split_sent
+        && after_split.inventory_seen
+        && result.source_after_split.populated
+        && result.source_after_split.item_guid == result.source_before.item_guid
+        && result.source_after_split.item_entry == result.source_before.item_entry
+        && result.source_after_split.stack_count + split_count == result.source_before.stack_count
+        && result.destination_after_split.populated
+        && result.destination_after_split.item_entry == result.source_before.item_entry
+        && result.destination_after_split.stack_count == split_count;
+
+    if (!result.split_confirmed)
+    {
+        if (result.destination_after_split.populated
+            && result.destination_after_split.item_entry == result.source_before.item_entry)
+        {
+            (void)send_swap_inventory_item_once(
+                host,
+                port,
+                account,
+                password,
+                character_name,
+                destination_slot,
+                source_slot,
+                options,
+                result.skipped_opcodes);
+        }
+        throw std::runtime_error("inventory split was sent but not confirmed by the next inventory snapshot");
+    }
+
+    result.merge_sent = send_swap_inventory_item_once(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        destination_slot,
+        source_slot,
+        options,
+        result.skipped_opcodes);
+
+    InventorySnapshotResult after_merge = read_inventory_snapshot(host, port, account, password, character_name, options);
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), after_merge.skipped_opcodes.begin(), after_merge.skipped_opcodes.end());
+    result.source_after_merge = inventory_slot_at(after_merge.inventory, source_slot);
+    result.destination_after_merge = inventory_slot_at(after_merge.inventory, destination_slot);
+    result.merge_confirmed = result.merge_sent
+        && after_merge.inventory_seen
+        && inventory_slot_matches(result.source_after_merge, result.source_before)
+        && inventory_slot_matches(result.destination_after_merge, result.destination_before);
 
     return result;
 }

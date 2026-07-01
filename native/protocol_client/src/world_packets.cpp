@@ -879,6 +879,22 @@ std::vector<std::uint8_t> build_swap_inventory_item_payload(
     return payload;
 }
 
+std::vector<std::uint8_t> build_split_item_payload(
+    std::uint8_t source_bag,
+    std::uint8_t source_slot,
+    std::uint8_t destination_bag,
+    std::uint8_t destination_slot,
+    std::uint32_t count)
+{
+    std::vector<std::uint8_t> payload;
+    append_u8(payload, source_bag);
+    append_u8(payload, source_slot);
+    append_u8(payload, destination_bag);
+    append_u8(payload, destination_slot);
+    append_u32_le(payload, count);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload)
 {
     std::vector<std::uint8_t> packet = build_client_header(opcode, payload.size());
@@ -1413,6 +1429,22 @@ bool world_packet_self_test()
         || swap_inventory_packet[3] != 0x01
         || swap_inventory_packet[6] != 25
         || swap_inventory_packet[7] != 23)
+    {
+        return false;
+    }
+    auto split_item_payload = build_split_item_payload(255, 23, 255, 25, 1);
+    auto split_item_packet = build_client_packet(CMSG_SPLIT_ITEM, split_item_payload);
+    if (split_item_packet.size() != 14
+        || split_item_packet[2] != 0x0E
+        || split_item_packet[3] != 0x01
+        || split_item_packet[6] != 255
+        || split_item_packet[7] != 23
+        || split_item_packet[8] != 255
+        || split_item_packet[9] != 25
+        || split_item_packet[10] != 1
+        || split_item_packet[11] != 0
+        || split_item_packet[12] != 0
+        || split_item_packet[13] != 0)
     {
         return false;
     }

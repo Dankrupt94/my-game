@@ -75,3 +75,13 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Validation: native `--swap-inventory-slots` passed for `Codexstage` with `before_seen=1`, `swap_confirmed=1`, and `restore_confirmed=1` for slots `15` and `26`.
 - Validation: `ACORE_EQUIPMENT_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `swap_confirmed=true` and `restore_confirmed=true`.
 - Remaining work: paper doll UI, arbitrary equip/unequip, item requirements, stat/aura display changes, weapon/offhand rules, failure-code UI, repair/durability workflows, and long-session persistence checks after normal player-driven equipment changes.
+
+### 2026-07-01 - Reversible Stack Split/Merge Probe
+
+- Added `CMSG_SPLIT_ITEM` support for a bounded stack mutation from the Godot client path.
+- The packet uses AzerothCore's base inventory bag id `255` for source and destination bag fields, then source slot, destination slot, and split count.
+- The live probe splits one item from backpack slot `23` into empty backpack slot `25`, confirms the source stack decreases from `4` to `3` and the destination stack becomes `1`, then merges slot `25` back into slot `23`.
+- The Stage 17 inventory scene now exposes this as a `Test Split` control plus `ACORE_STACK_SPLIT_SELF_TEST=1`.
+- Validation: native `--split-inventory-stack` passed for `Codexstage` with `split_confirmed=1` and `merge_confirmed=1`.
+- Validation: `ACORE_STACK_SPLIT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `split_confirmed=true` and `merge_confirmed=true`.
+- Remaining work: player-selected split amounts, stackable-item discovery, drag/drop stack UI, nested bag support, failure-code UI, item locks/trade windows, and persistence checks over normal play sessions.

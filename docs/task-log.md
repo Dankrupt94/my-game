@@ -1223,3 +1223,39 @@ Validation:
 - `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
 - `godot-4 --headless --path . --quit` passed.
 - Local `qwen-agent` advisory review returned only checklist reminders; no actionable blocker was confirmed after the native and Godot validations.
+
+## 2026-07-01 - Add Stage 17 Reversible Stack Split Slice
+
+Goal: add a reversible stack split/merge item action so Stage 17 inventory mutation covers more than whole-item movement.
+
+Plan:
+
+- Read AzerothCore's `CMSG_SPLIT_ITEM` packet and handler shape.
+- Add a split packet builder and native split/merge probe.
+- Use backpack slot `23` as the source stack, slot `25` as the empty split destination, and count `1`.
+- Merge the split item back into the source stack with `CMSG_SWAP_INV_ITEM`.
+- Expose the probe through the Godot extension, script bridge, and Stage 17 inventory scene.
+- Document the base inventory bag id detail so future item packets do not repeat the `NULL_BAG` mistake.
+
+Result:
+
+- Added `CMSG_SPLIT_ITEM` (`0x10E`) packet support.
+- Added `--split-inventory-stack` to the native helper.
+- Added `InventorySplitProbeResult` and split/merge confirmation logic.
+- Added `AcoreProtocolClient.split_inventory_stack(...)` and `ProtocolClientBridge.split_inventory_stack(...)`.
+- Added a `Test Split` control and `ACORE_STACK_SPLIT_SELF_TEST=1` path to `scenes/stage17_inventory_view.tscn`.
+- Updated the feature parity matrix, Stage 17 gate notes, world-session packet spec, and task log.
+
+Validation:
+
+- Initial live split attempt with bag id `0` failed confirmation and left the character state clean; inventory snapshot showed slot `23` still stack `4` and slot `25` empty.
+- `cmake --build native/protocol_client/build` passed after correcting the base inventory bag id to `255`.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed, including the `CMSG_SPLIT_ITEM` byte-order check.
+- Native `--split-inventory-stack` passed for `Codexstage` with `split_sent=1`, `split_confirmed=1`, `merge_sent=1`, and `merge_confirmed=1`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_STACK_SPLIT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` passed with `split_confirmed=true` and `merge_confirmed=true`.
+- `ACORE_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `slots=39`, `populated=7`, `details=7`, and `names=7`.
+- `ACORE_INVENTORY_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `swap_confirmed=true` and `restore_confirmed=true`.
+- `ACORE_EQUIPMENT_SWAP_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_inventory_view.tscn` still passed with `swap_confirmed=true` and `restore_confirmed=true`.
+- `godot-4 --headless --path . --quit` passed.
+- Local `qwen-agent` advisory review returned only checklist reminders; no actionable blocker was confirmed after the native and Godot validations.

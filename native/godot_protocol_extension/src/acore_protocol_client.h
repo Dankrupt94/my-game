@@ -95,6 +95,15 @@ public:
         godot::String const& character_name,
         int64_t source_slot,
         int64_t destination_slot);
+    godot::Dictionary split_inventory_stack(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        int64_t source_slot,
+        int64_t destination_slot,
+        int64_t split_count);
     godot::Dictionary set_action_button(
         godot::String const& host,
         godot::String const& port,
