@@ -188,3 +188,15 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `ACORE_TRAINER_BUY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `succeeded=false`, `failed=true`, `failure_reason=1`, and response opcode `0x1B4`.
 - Local `qwen-agent` advisory review reported no blockers for the native protocol changes or the Godot bridge/UI changes.
 - Remaining work: prepare a money-backed local test fixture, prove `SMSG_TRAINER_BUY_SUCCEEDED`, verify spellbook and coinage refresh after learning, then replace the fixed test button with normal player trainer interaction.
+
+### 2026-07-01 - Trainer Buy Success And Spellbook Proof
+
+- Added `tools/prepare_trainer_buy_fixture.py` as an audited local-only fixture that prepares the disposable test character for repeatable trainer-buy success checks.
+- The fixture ensures enough copper, resets only spell `6673` from `character_spell`, refuses online-character mutation by default, and writes to ignored `local_runtime/database-transactions.log`.
+- Removed the native spellbook CLI print cap so helper fallback output can include newly learned spells even when they are not in the first rows.
+- Added `ACORE_TRAINER_BUY_SUCCESS_SELF_TEST=1` to `scenes/stage17_trainer_view.tscn`; it snapshots spellbook and coinage before the trainer buy, learns through AzerothCore, then snapshots spellbook and coinage again.
+- Validation: `python3 tools/prepare_trainer_buy_fixture.py --dry-run` passed with `online=0`, `before_money=2`, and `spell_rows_before=0`.
+- Validation: `python3 tools/prepare_trainer_buy_fixture.py` passed, raising `Codexstage` to `10000` copper and leaving spell `6673` unlearned before the Godot test.
+- Validation: `ACORE_TRAINER_BUY_SUCCESS_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `succeeded=true`, `before_known=false`, `after_known=true`, `coinage_delta=-9`, and response opcode `0x1B3`.
+- Local `qwen-agent` advisory review reported no blockers for the fixture or Godot success self-test changes.
+- Remaining work: replace fixed target/test-spell controls with normal trainer click flow, add spell names/icons/ranks and disabled-state details, and fold trainer learning into a persistent world session.

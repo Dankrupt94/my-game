@@ -757,18 +757,12 @@ int spellbook(
               << " skipped=" << result.skipped_opcodes.size()
               << "\n";
 
-    std::size_t printed = 0;
     for (InitialSpellSummary const& spell : result.spellbook.spells)
     {
-        if (printed >= 24)
-        {
-            break;
-        }
         std::cout << "SPELL"
                   << " id=" << spell.spell_id
                   << " slot=" << spell.slot
                   << "\n";
-        ++printed;
     }
     return result.initial_spells_seen && !result.spellbook.spells.empty() ? 0 : 1;
 }

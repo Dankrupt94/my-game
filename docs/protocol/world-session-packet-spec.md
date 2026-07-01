@@ -502,12 +502,14 @@ Observed Stage 17 result:
 - Godot scene `scenes/stage17_trainer_view.tscn` passed `ACORE_TRAINER_LIST_SELF_TEST=1` with `moved_close=true`, `returned=true`, `spell_count=6`, and response opcode `0x1B1`.
 - Native helper command `--trainer-buy` then opened the same trainer list, sent `CMSG_TRAINER_BUY_SPELL` for spell `6673`, and parsed `SMSG_TRAINER_BUY_FAILED` with failure reason `1` because the current test character only had 2 copper.
 - Godot scene `scenes/stage17_trainer_view.tscn` passed `ACORE_TRAINER_BUY_SELF_TEST=1` with `buy_spell_sent=true`, `buy_response_seen=true`, `failed=true`, `failure_reason=1`, and response opcode `0x1B4`.
+- Local fixture tool `tools/prepare_trainer_buy_fixture.py` prepared the disposable character by ensuring enough copper and resetting only spell `6673` in the local character database.
+- Godot scene `scenes/stage17_trainer_view.tscn` passed `ACORE_TRAINER_BUY_SUCCESS_SELF_TEST=1` with `SMSG_TRAINER_BUY_SUCCEEDED` opcode `0x1B3`, `before_known=false`, `after_known=true`, and coinage changing from `10000` to `9991`.
 
 Remaining trainer packet work:
 
-- Verify `SMSG_TRAINER_BUY_SUCCEEDED`, money updates, and learned-spell updates after a safe local learn action with enough copper.
 - Surface disabled-state explanations, spell ranks/names/icons, and failure reasons in the Godot trainer UI.
 - Replace fixed local target entry controls with normal visible-object click targeting and persistent-session flow.
+- Keep the local trainer-buy fixture documented and rerun it before repeat success-path validations.
 
 ## Chat Say Slice
 

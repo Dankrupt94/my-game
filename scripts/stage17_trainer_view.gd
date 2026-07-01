@@ -20,7 +20,9 @@ var spell_list: ItemList
 
 func _ready() -> void:
 	_build_view()
-	if OS.get_environment("ACORE_TRAINER_BUY_SELF_TEST") == "1":
+	if OS.get_environment("ACORE_TRAINER_BUY_SUCCESS_SELF_TEST") == "1":
+		call_deferred("_run_trainer_buy_success_probe")
+	elif OS.get_environment("ACORE_TRAINER_BUY_SELF_TEST") == "1":
 		call_deferred("_run_trainer_buy_probe")
 	else:
 		call_deferred("_run_trainer_list_probe")
@@ -101,6 +103,12 @@ func _build_view() -> void:
 	learn_button.custom_minimum_size = Vector2(108, 34)
 	learn_button.pressed.connect(_run_trainer_buy_probe)
 	target_row.add_child(learn_button)
+
+	var verify_button := Button.new()
+	verify_button.text = "Verify Learn"
+	verify_button.custom_minimum_size = Vector2(120, 34)
+	verify_button.pressed.connect(_run_trainer_buy_success_probe)
+	target_row.add_child(verify_button)
 
 	trainer_label = Label.new()
 	trainer_label.text = "Trainer: idle"
@@ -185,6 +193,96 @@ func _run_trainer_buy_probe() -> void:
 	_finish_buy_self_test(true, result)
 
 
+func _run_trainer_buy_success_probe() -> void:
+	status_label.text = "Running"
+	trainer_label.text = "Trainer: verifying spell learn"
+	spell_list.clear()
+
+	var bridge := ProtocolClientBridge.new()
+	var before_inventory := bridge.inventory_snapshot(TEST_CHARACTER_NAME)
+	if not bool(before_inventory.get("ok", false)):
+		var inventory_failure := {
+			"ok": false,
+			"error": "before inventory snapshot failed",
+			"before_inventory": before_inventory,
+		}
+		status_label.text = "Failed"
+		target_label.text = _failure_summary("Trainer buy success probe failed", inventory_failure)
+		_finish_buy_success_self_test(false, inventory_failure)
+		return
+
+	var before_spellbook := bridge.spellbook(TEST_CHARACTER_NAME)
+	if not bool(before_spellbook.get("ok", false)):
+		var spellbook_failure := {
+			"ok": false,
+			"error": "before spellbook snapshot failed",
+			"before_spellbook": before_spellbook,
+		}
+		status_label.text = "Failed"
+		target_label.text = _failure_summary("Trainer buy success probe failed", spellbook_failure)
+		_finish_buy_success_self_test(false, spellbook_failure)
+		return
+
+	var spell_known_before := _spellbook_has_spell(before_spellbook, TRAINER_BUY_TEST_SPELL_ID)
+	if spell_known_before:
+		var learned_failure := {
+			"ok": false,
+			"error": "test spell is already learned; run tools/prepare_trainer_buy_fixture.py first",
+			"spell_id": TRAINER_BUY_TEST_SPELL_ID,
+			"spell_known_before": true,
+			"before_coinage": int(before_inventory.get("coinage", 0)),
+		}
+		status_label.text = "Failed"
+		target_label.text = _failure_summary("Trainer buy success probe failed", learned_failure)
+		_finish_buy_success_self_test(false, learned_failure)
+		return
+
+	var buy_result := bridge.trainer_buy_spell_probe(
+		TEST_CHARACTER_NAME,
+		_target_entry(),
+		_target_name(),
+		TRAINER_BUY_TEST_SPELL_ID)
+	var after_inventory := bridge.inventory_snapshot(TEST_CHARACTER_NAME)
+	var after_spellbook := bridge.spellbook(TEST_CHARACTER_NAME)
+
+	var result := buy_result.duplicate(true)
+	result["before_coinage"] = int(before_inventory.get("coinage", 0))
+	result["after_coinage"] = int(after_inventory.get("coinage", 0))
+	result["coinage_delta"] = int(result["after_coinage"]) - int(result["before_coinage"])
+	result["before_coinage_seen"] = bool(before_inventory.get("coinage_seen", false))
+	result["after_coinage_seen"] = bool(after_inventory.get("coinage_seen", false))
+	result["spell_known_before"] = spell_known_before
+	result["spell_known_after"] = _spellbook_has_spell(after_spellbook, TRAINER_BUY_TEST_SPELL_ID)
+	result["after_inventory_ok"] = bool(after_inventory.get("ok", false))
+	result["after_spellbook_ok"] = bool(after_spellbook.get("ok", false))
+	result["success_verified"] = bool(result.get("buy_succeeded", false)) \
+		and not bool(result["spell_known_before"]) \
+		and bool(result["spell_known_after"]) \
+		and bool(result["before_coinage_seen"]) \
+		and bool(result["after_coinage_seen"]) \
+		and int(result["coinage_delta"]) < 0
+
+	status_label.text = "Ready" if bool(result["success_verified"]) else "Failed"
+	target_label.text = "Spell %s learned=%s, money %s -> %s." % [
+		str(TRAINER_BUY_TEST_SPELL_ID),
+		str(result["spell_known_after"]),
+		_money_text(int(result["before_coinage"])),
+		_money_text(int(result["after_coinage"])),
+	]
+	_render_trainer_buy_success(result)
+	print("TRAINER_BUY_SUCCESS_SELF_TEST_READY spell_id=%s succeeded=%s before_known=%s after_known=%s before_coinage=%s after_coinage=%s coinage_delta=%s opcode=0x%s" % [
+		str(TRAINER_BUY_TEST_SPELL_ID),
+		str(result.get("buy_succeeded", false)),
+		str(result["spell_known_before"]),
+		str(result["spell_known_after"]),
+		str(result["before_coinage"]),
+		str(result["after_coinage"]),
+		str(result["coinage_delta"]),
+		_opcode_hex(int(result.get("response_opcode", 0))),
+	])
+	_finish_buy_success_self_test(bool(result["success_verified"]), result)
+
+
 func _target_entry() -> int:
 	if target_entry_input == null:
 		return TRAINER_TARGET_ENTRY
@@ -248,6 +346,18 @@ func _render_trainer_buy(result: Dictionary) -> void:
 		spell_list.add_item("Trainer list was visible with %s spell row(s)" % str(result.get("spell_count", 0)))
 
 
+func _render_trainer_buy_success(result: Dictionary) -> void:
+	trainer_label.text = "Learned spell %s, money changed by %s." % [
+		str(TRAINER_BUY_TEST_SPELL_ID),
+		_money_text(abs(int(result.get("coinage_delta", 0)))),
+	]
+	spell_list.add_item("Spell known before: %s" % str(result.get("spell_known_before", false)))
+	spell_list.add_item("Spell known after: %s" % str(result.get("spell_known_after", false)))
+	spell_list.add_item("Money before: %s" % _money_text(int(result.get("before_coinage", 0))))
+	spell_list.add_item("Money after: %s" % _money_text(int(result.get("after_coinage", 0))))
+	spell_list.add_item("Trainer response opcode: 0x%s" % _opcode_hex(int(result.get("response_opcode", 0))))
+
+
 func _finish_self_test(ok: bool, result: Dictionary) -> void:
 	if OS.get_environment("ACORE_TRAINER_LIST_SELF_TEST") != "1":
 		return
@@ -289,6 +399,25 @@ func _finish_buy_self_test(ok: bool, result: Dictionary) -> void:
 	get_tree().quit(1)
 
 
+func _finish_buy_success_self_test(ok: bool, result: Dictionary) -> void:
+	if OS.get_environment("ACORE_TRAINER_BUY_SUCCESS_SELF_TEST") != "1":
+		return
+	if ok \
+			and bool(result.get("success_verified", false)) \
+			and bool(result.get("buy_succeeded", false)) \
+			and int(result.get("response_opcode", 0)) == SMSG_TRAINER_BUY_SUCCEEDED:
+		print("TRAINER_BUY_SUCCESS_SELF_TEST_OK spell_id=%s coinage_delta=%s response_opcode=0x%s" % [
+			str(TRAINER_BUY_TEST_SPELL_ID),
+			str(result.get("coinage_delta", 0)),
+			_opcode_hex(int(result.get("response_opcode", 0))),
+		])
+		get_tree().quit(0)
+		return
+
+	push_error("TRAINER_BUY_SUCCESS_SELF_TEST_FAILED " + JSON.stringify(result))
+	get_tree().quit(1)
+
+
 func _failure_summary(prefix: String, result: Dictionary) -> String:
 	var source := str(result.get("source", "unknown source"))
 	var output := str(result.get("output", "")).strip_edges()
@@ -320,6 +449,16 @@ func _money_text(copper: int) -> String:
 	if silver > 0:
 		return "%ss %sc" % [str(silver), str(copper_only)]
 	return "%sc" % str(copper_only)
+
+
+func _spellbook_has_spell(result: Dictionary, spell_id: int) -> bool:
+	var spells: Array = result.get("spells", [])
+	for spell in spells:
+		if typeof(spell) != TYPE_DICTIONARY:
+			continue
+		if int(spell.get("id", spell.get("spell_id", 0))) == spell_id:
+			return true
+	return false
 
 
 func _opcode_hex(value: int) -> String:

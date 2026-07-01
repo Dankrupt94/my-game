@@ -1575,3 +1575,35 @@ Remaining work:
 - Prove `SMSG_TRAINER_BUY_SUCCEEDED` and verify the learned spell appears in the spellbook.
 - Verify coinage decreases after a successful learn.
 - Add final trainer UI details: names, ranks, icons, richer disabled-state text, and player-driven trainer target selection.
+
+## 2026-07-01 - Add Stage 17 Trainer Buy Success Proof
+
+Goal: prove the successful trainer-buy path through Godot, including the server success opcode, learned-spell refresh, and coinage decrease.
+
+Plan:
+
+- Add a local-only audited fixture that prepares the disposable test character without committing secrets or proprietary data.
+- Keep the fixture separate from the protocol client so the actual learn action still happens through AzerothCore packets.
+- Extend the trainer scene with a success self-test that snapshots spellbook and coinage before and after the buy.
+- Update the Stage 17 docs and parity matrix with the success evidence.
+
+Result:
+
+- Added `tools/prepare_trainer_buy_fixture.py`.
+- The fixture ensures `Codexstage` has enough copper, deletes only test spell `6673` from `character_spell`, refuses online-character mutation by default, and writes an ignored audit entry to `local_runtime/database-transactions.log`.
+- Removed the native spellbook CLI print cap so helper fallback output can include the learned spell.
+- Added `ACORE_TRAINER_BUY_SUCCESS_SELF_TEST=1` and a `Verify Learn` path to `scenes/stage17_trainer_view.tscn`.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `python3 tools/prepare_trainer_buy_fixture.py --dry-run` passed with `online=0`, `before_money=2`, and `spell_rows_before=0`.
+- `python3 tools/prepare_trainer_buy_fixture.py` passed, setting `Codexstage` to `10000` copper and leaving spell `6673` unlearned before the Godot test.
+- `ACORE_TRAINER_BUY_SUCCESS_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `succeeded=true`, `before_known=false`, `after_known=true`, `before_coinage=10000`, `after_coinage=9991`, `coinage_delta=-9`, and response opcode `0x1B3`.
+- Local `qwen-agent` advisory review reported no blockers for the fixture or Godot success self-test changes.
+
+Remaining work:
+
+- Replace the fixed trainer/test-spell controls with normal player target selection.
+- Add trainer spell names, ranks, icons, and richer disabled-state reasons.
+- Move trainer learning from one-shot probes into the persistent world-session/HUD path.

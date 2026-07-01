@@ -25,6 +25,10 @@ The disposable protocol account is `CODEXPROTO`.
 
 Its password is stored only in the ignored local file `local_runtime/protocol-test-account.env`. Do not commit or print that file.
 
+## Local Test Fixtures
+
+`tools/prepare_trainer_buy_fixture.py` prepares `Codexstage` for the repeatable trainer-buy success check by ensuring enough copper and clearing only the Stage 17 test spell from `character_spell`. The tool refuses to mutate an online character by default and writes an ignored audit entry to `local_runtime/database-transactions.log`.
+
 ## Current Validation
 
 With this smoke profile active, the native helper completed:

@@ -141,3 +141,13 @@ godot-4 --headless --path . --script res://tools/stage17_visible_targets_report.
 ```
 
 The report logs visible creature candidates with entry, exact GUID, distance, health, and flags. Use it to diagnose loot/combat target selection without mutating server state.
+
+## Stage 17 Trainer Buy Fixture
+
+Run before repeating the trainer-buy success self-test:
+
+```bash
+python3 tools/prepare_trainer_buy_fixture.py
+```
+
+The fixture only touches the disposable local test character. It ensures enough copper for the trainer spell and removes the one test spell so the next Godot run can learn it through the normal AzerothCore trainer packet path. Each run writes an ignored JSONL audit entry to `local_runtime/database-transactions.log`.
