@@ -157,6 +157,11 @@ These optimizations and visual enhancements can be introduced in later stages or
 - **VRAM Optimizations:** Compress converted assets to BPTC (Vulkan Desktop) format. Batch repetitive town/dungeon props (barrels, crates, fences) via `MultiMeshInstance3D` to minimize draw calls, and configure automatic mesh LODs.
 - **Zone-Based VRAM Streaming:** Implement a chunked asset-streaming system aligned with the client’s ADT map grid. Unload meshes and textures beyond a 2-chunk radius to maintain a stable, lightweight VRAM footprint.
 - **Rust GDExtension Parser:** Implement the core network stream reader, opcode decryption, and the heavy packet parsing logic (`SMSG_UPDATE_OBJECT`) in Rust via a GDExtension helper (`godot-rust`). This achieves native C++ execution speeds with zero-copy packet deserialization, eliminating GDScript garbage collection spikes while guaranteeing memory safety.
+- **Asynchronous Resource Loader:** Use non-blocking resource loaders (`ResourceLoader.load_threaded_request`) combined with strict cleanup of unused dynamic Viewport/Mesh RIDs to guarantee leak-free asset transitions.
+- **Occlusion Culling (OccluderInstance3D):** Use CPU-based raster culling by nesting simplified occluder shapes inside large structure walls (WMOs) and mountains, entirely skipping geometry processing of hidden props and entities.
+- **Hierarchical LODs (HLODs):** Group distant scenery chunks under visibility-range-bound parent nodes to dynamically swap cluster props for a single pre-baked low-poly proxy mesh.
+- **Shader Pipeline Warm-up:** Pre-compile pipeline states during loading screens (Pipeline State Cache) and instance major spell/shader particles for 1 frame out-of-camera to prevent Vulkan shader-compilation stutters during play.
+- **Renderer Clamping & Scalability:** Cap maximum dynamic lights per cluster, restrict shadow cascade far-clips, and configure a fallback Mobile Vulkan renderer path to ensure playable frame rates on legacy hardware.
 
 ## Current Status
 
