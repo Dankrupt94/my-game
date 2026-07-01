@@ -200,3 +200,13 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `ACORE_TRAINER_BUY_SUCCESS_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `succeeded=true`, `before_known=false`, `after_known=true`, `coinage_delta=-9`, and response opcode `0x1B3`.
 - Local `qwen-agent` advisory review reported no blockers for the fixture or Godot success self-test changes.
 - Remaining work: replace fixed target/test-spell controls with normal trainer click flow, add spell names/icons/ranks and disabled-state details, and fold trainer learning into a persistent world session.
+
+### 2026-07-01 - Trainer Visible Target Picker
+
+- Reused the Stage 17 visible-target snapshot path in `scenes/stage17_trainer_view.tscn`.
+- Added a trainer target scan list, exact runtime GUID selection, and selector-aware trainer list/buy calls.
+- The scene now prefers trainer entry `911` when visible, while still allowing manual target entry/name edits.
+- Validation: `ACORE_TRAINER_TARGET_PICKER_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `target_count=143`, selected entry `911`, and selected GUID `0xf13000038f000d00`.
+- Validation: `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` still passed after routing the trainer list through the selector-aware bridge path.
+- Local `qwen-agent` advisory review reported no blockers for the trainer selector changes.
+- Remaining work: replace the scan list with true in-world click selection, keep trainer interaction in a persistent session, and add spell names/icons/ranks.

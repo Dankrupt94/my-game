@@ -1607,3 +1607,32 @@ Remaining work:
 - Replace the fixed trainer/test-spell controls with normal player target selection.
 - Add trainer spell names, ranks, icons, and richer disabled-state reasons.
 - Move trainer learning from one-shot probes into the persistent world-session/HUD path.
+
+## 2026-07-01 - Add Stage 17 Trainer Visible Target Picker
+
+Goal: reduce fixed trainer setup by selecting the trainer from live visible world objects and passing the exact runtime GUID into trainer list/buy calls.
+
+Plan:
+
+- Reuse `ProtocolClientBridge.visible_targets_snapshot(...)` in the trainer scene.
+- Add a live target scan list and prefer the known local trainer entry when visible.
+- Preserve manual target controls for fallback and diagnostics.
+- Route trainer list and trainer buy calls through selector-aware bridge methods.
+
+Result:
+
+- Added a `Scan` target list to `scenes/stage17_trainer_view.tscn`.
+- Added exact GUID selector state so trainer list/buy calls can use a live selected object instead of only a template entry id.
+- Updated trainer list, trainer buy, and trainer buy success paths to call the selector-aware bridge methods.
+
+Validation:
+
+- `ACORE_TRAINER_TARGET_PICKER_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` passed with `target_count=143`, selected entry `911`, and selected GUID `0xf13000038f000d00`.
+- `ACORE_TRAINER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_trainer_view.tscn` still passed after the selector change.
+- Local `qwen-agent` advisory review reported no blockers for the trainer selector changes.
+
+Remaining work:
+
+- Replace the scan list with true in-world click selection.
+- Keep trainer interaction in a persistent world session instead of one-shot probes.
+- Add trainer spell names, ranks, icons, and richer disabled-state reasons.

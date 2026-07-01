@@ -15,17 +15,25 @@ var target_label: Label
 var trainer_label: Label
 var target_entry_input: SpinBox
 var target_name_input: LineEdit
+var target_picker: ItemList
 var spell_list: ItemList
+var visible_targets: Array = []
+var selected_target_selector := ""
+var applying_scanned_target := false
 
 
 func _ready() -> void:
 	_build_view()
-	if OS.get_environment("ACORE_TRAINER_BUY_SUCCESS_SELF_TEST") == "1":
+	if OS.get_environment("ACORE_TRAINER_TARGET_PICKER_SELF_TEST") == "1":
+		call_deferred("_run_target_picker_self_test")
+	elif OS.get_environment("ACORE_TRAINER_BUY_SUCCESS_SELF_TEST") == "1":
 		call_deferred("_run_trainer_buy_success_probe")
 	elif OS.get_environment("ACORE_TRAINER_BUY_SELF_TEST") == "1":
 		call_deferred("_run_trainer_buy_probe")
-	else:
+	elif OS.get_environment("ACORE_TRAINER_LIST_SELF_TEST") == "1":
 		call_deferred("_run_trainer_list_probe")
+	else:
+		call_deferred("_scan_visible_targets")
 
 
 func _build_view() -> void:
@@ -84,13 +92,21 @@ func _build_view() -> void:
 	target_entry_input.step = 1
 	target_entry_input.value = TRAINER_TARGET_ENTRY
 	target_entry_input.custom_minimum_size = Vector2(130, 34)
+	target_entry_input.value_changed.connect(_on_target_manual_changed)
 	target_row.add_child(target_entry_input)
 
 	target_name_input = LineEdit.new()
 	target_name_input.text = TRAINER_TARGET_NAME
 	target_name_input.custom_minimum_size = Vector2(210, 34)
 	target_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	target_name_input.text_changed.connect(_on_target_name_changed)
 	target_row.add_child(target_name_input)
+
+	var scan_button := Button.new()
+	scan_button.text = "Scan"
+	scan_button.custom_minimum_size = Vector2(82, 34)
+	scan_button.pressed.connect(_scan_visible_targets)
+	target_row.add_child(scan_button)
 
 	var refresh_button := Button.new()
 	refresh_button.text = "Refresh"
@@ -110,6 +126,11 @@ func _build_view() -> void:
 	verify_button.pressed.connect(_run_trainer_buy_success_probe)
 	target_row.add_child(verify_button)
 
+	target_picker = ItemList.new()
+	target_picker.custom_minimum_size = Vector2(0, 110)
+	target_picker.item_selected.connect(_on_target_selected)
+	stack.add_child(target_picker)
+
 	trainer_label = Label.new()
 	trainer_label.text = "Trainer: idle"
 	trainer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -126,7 +147,7 @@ func _run_trainer_list_probe() -> void:
 	spell_list.clear()
 
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.trainer_list_probe(TEST_CHARACTER_NAME, _target_entry(), _target_name())
+	var result := bridge.trainer_list_probe_selector(TEST_CHARACTER_NAME, _target_selector(), _target_name())
 	var ok := bool(result.get("ok", false))
 	if not ok:
 		status_label.text = "Failed"
@@ -159,9 +180,9 @@ func _run_trainer_buy_probe() -> void:
 	spell_list.clear()
 
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.trainer_buy_spell_probe(
+	var result := bridge.trainer_buy_spell_probe_selector(
 		TEST_CHARACTER_NAME,
-		_target_entry(),
+		_target_selector(),
 		_target_name(),
 		TRAINER_BUY_TEST_SPELL_ID)
 	var ok := bool(result.get("ok", false))
@@ -237,9 +258,9 @@ func _run_trainer_buy_success_probe() -> void:
 		_finish_buy_success_self_test(false, learned_failure)
 		return
 
-	var buy_result := bridge.trainer_buy_spell_probe(
+	var buy_result := bridge.trainer_buy_spell_probe_selector(
 		TEST_CHARACTER_NAME,
-		_target_entry(),
+		_target_selector(),
 		_target_name(),
 		TRAINER_BUY_TEST_SPELL_ID)
 	var after_inventory := bridge.inventory_snapshot(TEST_CHARACTER_NAME)
@@ -283,6 +304,70 @@ func _run_trainer_buy_success_probe() -> void:
 	_finish_buy_success_self_test(bool(result["success_verified"]), result)
 
 
+func _run_target_picker_self_test() -> void:
+	_scan_visible_targets(true)
+
+
+func _scan_visible_targets(finish_self_test := false) -> Dictionary:
+	status_label.text = "Scanning"
+	trainer_label.text = "Trainer: scanning"
+	spell_list.clear()
+	target_picker.clear()
+	target_picker.add_item("Scanning live visible units...")
+
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.visible_targets_snapshot(TEST_CHARACTER_NAME)
+	var ok := bool(result.get("ok", false))
+	if not ok:
+		status_label.text = "Failed"
+		target_label.text = _failure_summary("Trainer target scan failed", result)
+		target_picker.clear()
+		target_picker.add_item("Target scan failed")
+		if finish_self_test:
+			_finish_target_picker_self_test(false, result)
+		return result
+
+	visible_targets = _extract_visible_targets(result)
+	target_picker.clear()
+	if visible_targets.is_empty():
+		status_label.text = "Failed"
+		target_label.text = "No visible unit targets were available in the login update."
+		target_picker.add_item("No visible unit targets")
+		result["target_picker_count"] = 0
+		if finish_self_test:
+			_finish_target_picker_self_test(false, result)
+		return result
+
+	for target in visible_targets:
+		if typeof(target) != TYPE_DICTIONARY:
+			continue
+		var index := target_picker.add_item(_target_picker_text(target))
+		target_picker.set_item_metadata(index, target)
+
+	var selected_index := _default_target_index(visible_targets)
+	target_picker.select(selected_index)
+	var selected: Dictionary = visible_targets[selected_index]
+	_apply_target(selected)
+	status_label.text = "Ready"
+	trainer_label.text = "Trainer: target selected"
+	target_label.text = "Selected %s from %s visible unit target(s)." % [
+		_target_picker_text(selected),
+		str(visible_targets.size()),
+	]
+
+	result["target_picker_count"] = visible_targets.size()
+	result["selected_target"] = selected
+	print("TRAINER_TARGET_PICKER_SELF_TEST_READY target_count=%s selected_entry=%s selected_guid=%s distance=%s" % [
+		str(visible_targets.size()),
+		str(selected.get("entry", 0)),
+		str(selected.get("guid", "0x0")),
+		str(selected.get("distance", 0.0)),
+	])
+	if finish_self_test:
+		_finish_target_picker_self_test(true, result)
+	return result
+
+
 func _target_entry() -> int:
 	if target_entry_input == null:
 		return TRAINER_TARGET_ENTRY
@@ -294,6 +379,106 @@ func _target_name() -> String:
 		return TRAINER_TARGET_NAME
 	var value := target_name_input.text.strip_edges()
 	return TRAINER_TARGET_NAME if value.is_empty() else value
+
+
+func _target_selector() -> String:
+	if not selected_target_selector.is_empty():
+		return selected_target_selector
+	return str(_target_entry())
+
+
+func _on_target_manual_changed(_value: float) -> void:
+	if not applying_scanned_target:
+		selected_target_selector = ""
+
+
+func _on_target_name_changed(_value: String) -> void:
+	if not applying_scanned_target:
+		selected_target_selector = ""
+
+
+func _on_target_selected(index: int) -> void:
+	if target_picker == null or index < 0 or index >= target_picker.item_count:
+		return
+	var metadata = target_picker.get_item_metadata(index)
+	if typeof(metadata) != TYPE_DICTIONARY:
+		return
+	var target: Dictionary = metadata
+	_apply_target(target)
+	target_label.text = "Selected " + _target_picker_text(target) + "."
+
+
+func _apply_target(target: Dictionary) -> void:
+	applying_scanned_target = true
+	selected_target_selector = str(target.get("guid", "")).strip_edges()
+	target_entry_input.value = int(target.get("entry", TRAINER_TARGET_ENTRY))
+	target_name_input.text = _target_name_from_visible(target)
+	applying_scanned_target = false
+
+
+func _extract_visible_targets(result: Dictionary) -> Array:
+	var login: Dictionary = result.get("login", {})
+	var update: Dictionary = result.get("update", {})
+	var objects: Array = []
+	if typeof(update.get("visible_objects", [])) == TYPE_ARRAY and not update.get("visible_objects", []).is_empty():
+		objects = update.get("visible_objects", [])
+	elif typeof(result.get("visible_objects", [])) == TYPE_ARRAY:
+		objects = result.get("visible_objects", [])
+
+	var targets: Array = []
+	var seen := {}
+	for object in objects:
+		if typeof(object) != TYPE_DICTIONARY:
+			continue
+		var entry := int(object.get("entry", 0))
+		var object_type := int(object.get("object_type", object.get("type", 0)))
+		var guid := str(object.get("guid", ""))
+		if entry <= 0 or object_type != 3 or not bool(object.get("has_position", false)):
+			continue
+		if seen.has(guid):
+			continue
+		seen[guid] = true
+		var target: Dictionary = object.duplicate(true)
+		target["distance"] = _distance_from_login(login, object)
+		targets.append(target)
+
+	targets.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("distance", 999999.0)) < float(b.get("distance", 999999.0)))
+	return targets
+
+
+func _default_target_index(targets: Array) -> int:
+	for index in range(targets.size()):
+		var target: Dictionary = targets[index]
+		if int(target.get("entry", 0)) == TRAINER_TARGET_ENTRY:
+			return index
+	return 0
+
+
+func _distance_from_login(login: Dictionary, object: Dictionary) -> float:
+	if login.is_empty():
+		return 0.0
+	var dx := float(object.get("x", 0.0)) - float(login.get("x", 0.0))
+	var dy := float(object.get("y", 0.0)) - float(login.get("y", 0.0))
+	var dz := float(object.get("z", 0.0)) - float(login.get("z", 0.0))
+	return sqrt(dx * dx + dy * dy + dz * dz)
+
+
+func _target_picker_text(target: Dictionary) -> String:
+	return "%s, %.1fm" % [
+		_target_name_from_visible(target),
+		float(target.get("distance", 0.0)),
+	]
+
+
+func _target_name_from_visible(target: Dictionary) -> String:
+	var name := str(target.get("name", "")).strip_edges()
+	if not name.is_empty():
+		return name
+	var entry := int(target.get("entry", 0))
+	if entry == TRAINER_TARGET_ENTRY:
+		return TRAINER_TARGET_NAME
+	return "Unit " + str(entry)
 
 
 func _render_trainer(result: Dictionary) -> void:
@@ -396,6 +581,26 @@ func _finish_buy_self_test(ok: bool, result: Dictionary) -> void:
 		return
 
 	push_error("TRAINER_BUY_SELF_TEST_FAILED " + JSON.stringify(result))
+	get_tree().quit(1)
+
+
+func _finish_target_picker_self_test(ok: bool, result: Dictionary) -> void:
+	if OS.get_environment("ACORE_TRAINER_TARGET_PICKER_SELF_TEST") != "1":
+		return
+	var selected: Dictionary = result.get("selected_target", {})
+	if ok \
+			and int(result.get("target_picker_count", 0)) > 0 \
+			and int(selected.get("entry", 0)) == TRAINER_TARGET_ENTRY \
+			and not str(selected.get("guid", "")).is_empty():
+		print("TRAINER_TARGET_PICKER_SELF_TEST_OK target_count=%s selected_entry=%s selected_guid=%s" % [
+			str(result.get("target_picker_count", 0)),
+			str(selected.get("entry", 0)),
+			str(selected.get("guid", "0x0")),
+		])
+		get_tree().quit(0)
+		return
+
+	push_error("TRAINER_TARGET_PICKER_SELF_TEST_FAILED " + JSON.stringify(result))
 	get_tree().quit(1)
 
 
