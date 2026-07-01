@@ -61,10 +61,16 @@ The first implementation checkpoint should be a safe local smoke harness that ca
 - Reduced `native/protocol_client/src/main.cpp` to a thin CLI wrapper around the reusable flow layer while preserving the existing commands and output.
 - Added the reusable flow implementation to the CMake target so it can be linked by a future Godot-native extension/module.
 - The Godot dashboard still uses the helper-process bridge for this checkpoint; the next port-relevant step is replacing that bridge with a true native Godot integration.
+- Split the native CMake build into `acore_protocol_core`, `acore_protocol_client`, and `acore_protocol_bridge`.
+- Added `native/protocol_client/src/protocol_c_api.h` and `native/protocol_client/src/protocol_c_api.cpp` as a C-compatible shared-library boundary around the reusable flow.
+- Added `tools/protocol_bridge_ctypes_smoke.py` to prove the shared library can be loaded locally and can return JSON without exposing passwords.
+- Documented the Godot-native boundary in `docs/protocol/godot-native-boundary.md`.
+- Confirmed the dashboard still uses the helper-process bridge until a true Godot wrapper is built.
 
 ## Next Checkpoint
 
-- Replace the blocking helper process bridge with a true asynchronous GDExtension or native Godot TCP module.
+- Build a true Godot load path for `acore_protocol_bridge`, most likely a GDExtension wrapper around the C++ core or another Godot-supported native call path.
+- Replace the blocking helper process bridge with that native Godot call path once it can run the same character-flow check from a worker thread.
 - Track Warden handling separately before claiming full default-server compatibility.
 - Decide when to restore random bot autologin for gameplay-load testing after protocol smoke tests are stable.
 
@@ -89,6 +95,11 @@ Completed on 2026-06-30:
 - Missing-password guards still failed safely after the reusable-flow refactor.
 - Live ignored `CODEXPROTO` character flow still printed `AUTH_FLOW_OK`, `WORLD_AUTH_OK`, and `CHAR_ENUM_OK count=0` after the reusable-flow refactor.
 - `godot-4 --headless --path . --scene res://main.tscn --quit-after 1` still succeeded after the reusable-flow refactor.
+- `cmake -S native/protocol_client -B native/protocol_client/build` succeeded after adding the shared-library target.
+- `cmake --build native/protocol_client/build` built `acore_protocol_core`, `acore_protocol_client`, and `libacore_protocol_bridge.so`.
+- `python3 tools/protocol_bridge_ctypes_smoke.py` loaded the shared library, printed self-test JSON, and skipped character flow safely when no local credentials were present.
+- With `local_runtime/protocol-test-account.env` loaded, `python3 tools/protocol_bridge_ctypes_smoke.py` returned character-flow JSON with `auth_flow_ok`, `world_auth_ok`, and `char_enum_ok` all true.
+- Local `qwen-agent` reviewed the narrow C ABI/CMake wrapper and reported no concrete issues; final acceptance came from the build and smoke checks.
 - No account credentials, session keys, packet captures, proprietary client files, or local runtime files were committed.
 
 ## Done Criteria

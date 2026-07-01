@@ -11,6 +11,17 @@ Plan:
 - Document how Godot should prefer the native path once it is loadable.
 - Validate the native build and Godot startup without committing local credentials, packet captures, or proprietary files.
 
+Result:
+
+- Split the native build into a reusable static core, CLI helper, and shared-library bridge target.
+- Added a C-compatible JSON API in `protocol_c_api.h` and `protocol_c_api.cpp` around the validated protocol flow.
+- Added `tools/protocol_bridge_ctypes_smoke.py` to load `libacore_protocol_bridge.so` locally and verify the exported functions.
+- Documented the native boundary and Godot wrapper plan in `docs/protocol/godot-native-boundary.md`.
+- Confirmed the no-secret smoke path loads the library and skips character flow safely without credentials.
+- Confirmed the ignored local `CODEXPROTO` account path returns character-flow JSON with auth, world auth, and character enum marked true.
+- Kept the dashboard helper-process bridge as the working fallback while this native loading boundary is prepared.
+- Used local `qwen-agent` as a narrow advisory reviewer; final acceptance came from CMake, CLI, shared-library, and Godot startup checks.
+
 ## 2026-06-30 - Stage 11 Reusable Protocol Flow Checkpoint Started
 
 Goal: refactor the validated native helper so the auth/realm/world-auth/character-enum flow is reusable by Godot-native integration instead of being trapped inside the CLI entrypoint.
