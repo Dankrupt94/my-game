@@ -547,6 +547,76 @@ int action_buttons(
     return result.action_buttons_seen && result.action_buttons.buttons.size() == MaxActionButtons ? 0 : 1;
 }
 
+int set_action_button(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& button_text,
+    std::string const& action_text,
+    std::string const& type_text)
+{
+    std::size_t parsed = 0;
+    unsigned long button_value = std::stoul(button_text, &parsed, 10);
+    if (parsed != button_text.size() || button_value >= MaxActionButtons)
+    {
+        throw std::runtime_error("button must be an integer from 0 to 143");
+    }
+    parsed = 0;
+    unsigned long action_value = std::stoul(action_text, &parsed, 10);
+    if (parsed != action_text.size() || action_value >= 0x01000000ul)
+    {
+        throw std::runtime_error("action must be an integer below 16777216");
+    }
+    parsed = 0;
+    unsigned long type_value = std::stoul(type_text, &parsed, 10);
+    if (parsed != type_text.size() || type_value > 255)
+    {
+        throw std::runtime_error("type must be an integer from 0 to 255");
+    }
+
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::SetActionButtonProbeResult result = acore_protocol::set_action_button_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        static_cast<std::uint8_t>(button_value),
+        static_cast<std::uint32_t>(action_value),
+        static_cast<std::uint8_t>(type_value),
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "SET_ACTION_BUTTON_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " button=" << static_cast<int>(result.button)
+              << " action=" << result.action
+              << " type=" << static_cast<int>(result.type)
+              << " before_seen=" << (result.before_seen ? 1 : 0)
+              << " original_populated=" << (result.original.populated ? 1 : 0)
+              << " original_action=" << result.original.action
+              << " original_type=" << static_cast<int>(result.original.type)
+              << " original_packed=0x" << std::hex << result.original.packed << std::dec
+              << " set_sent=" << (result.set_sent ? 1 : 0)
+              << " set_confirmed=" << (result.set_confirmed ? 1 : 0)
+              << " after_set_populated=" << (result.after_set.populated ? 1 : 0)
+              << " after_set_action=" << result.after_set.action
+              << " after_set_type=" << static_cast<int>(result.after_set.type)
+              << " after_set_packed=0x" << std::hex << result.after_set.packed << std::dec
+              << " restore_sent=" << (result.restore_sent ? 1 : 0)
+              << " restore_confirmed=" << (result.restore_confirmed ? 1 : 0)
+              << " after_restore_populated=" << (result.after_restore.populated ? 1 : 0)
+              << " after_restore_action=" << result.after_restore.action
+              << " after_restore_type=" << static_cast<int>(result.after_restore.type)
+              << " after_restore_packed=0x" << std::hex << result.after_restore.packed << std::dec
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    return result.set_sent && result.set_confirmed && result.restore_sent && result.restore_confirmed ? 0 : 1;
+}
+
 int cast_spell(
     std::string const& host,
     std::string const& port,
@@ -681,6 +751,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --chat-whisper-self <host> <port> <account> <character-name> <message>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --spellbook <host> <port> <account> <character-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --action-buttons <host> <port> <account> <character-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --set-action-button <host> <port> <account> <character-name> <button> <action> <type>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --cast-spell <host> <port> <account> <character-name> <spell-id>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --cast-spell-target <host> <port> <account> <character-name> <spell-id> <target-guid-or-entry> <target-name>\n"
               << "  acore_protocol_client --world-challenge <host> <port>\n";
@@ -759,6 +830,11 @@ int main(int argc, char** argv)
         if (argc == 6 && std::strcmp(argv[1], "--action-buttons") == 0)
         {
             return action_buttons(argv[2], argv[3], argv[4], argv[5]);
+        }
+
+        if (argc == 9 && std::strcmp(argv[1], "--set-action-button") == 0)
+        {
+            return set_action_button(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
         }
 
         if (argc == 7 && std::strcmp(argv[1], "--cast-spell") == 0)

@@ -7,14 +7,21 @@ const SLOT_COUNT := 144
 const DEFAULT_TARGETED_SPELL_ID := 78
 const DEFAULT_TARGET_ENTRY := 721
 const DEFAULT_TARGET_NAME := "Nearby Creature"
+const DEFAULT_SET_SLOT := 0
+const DEFAULT_SET_ACTION_TYPE := 0
 
 var status_label: Label
 var target_entry_input: SpinBox
 var target_name_input: LineEdit
+var set_slot_input: SpinBox
+var set_action_input: SpinBox
+var set_type_input: SpinBox
+var set_probe_button: Button
 var slot_grid: GridContainer
 var detail_log: TextEdit
 var last_buttons: Array = []
 var last_cast_result := {}
+var last_set_result := {}
 var self_test_finished := false
 
 
@@ -81,6 +88,40 @@ func _build_view() -> void:
 	target_name_input.custom_minimum_size = Vector2(180, 34)
 	target_controls.add_child(target_name_input)
 
+	var set_controls := HBoxContainer.new()
+	set_controls.add_theme_constant_override("separation", 10)
+	stack.add_child(set_controls)
+
+	set_slot_input = SpinBox.new()
+	set_slot_input.min_value = 0
+	set_slot_input.max_value = SLOT_COUNT - 1
+	set_slot_input.step = 1
+	set_slot_input.value = DEFAULT_SET_SLOT
+	set_slot_input.custom_minimum_size = Vector2(96, 34)
+	set_controls.add_child(set_slot_input)
+
+	set_action_input = SpinBox.new()
+	set_action_input.min_value = 0
+	set_action_input.max_value = 16777215
+	set_action_input.step = 1
+	set_action_input.value = DEFAULT_TARGETED_SPELL_ID
+	set_action_input.custom_minimum_size = Vector2(130, 34)
+	set_controls.add_child(set_action_input)
+
+	set_type_input = SpinBox.new()
+	set_type_input.min_value = 0
+	set_type_input.max_value = 255
+	set_type_input.step = 1
+	set_type_input.value = DEFAULT_SET_ACTION_TYPE
+	set_type_input.custom_minimum_size = Vector2(96, 34)
+	set_controls.add_child(set_type_input)
+
+	set_probe_button = Button.new()
+	set_probe_button.text = "Set Slot"
+	set_probe_button.custom_minimum_size = Vector2(120, 34)
+	set_probe_button.pressed.connect(_run_set_action_button_probe)
+	set_controls.add_child(set_probe_button)
+
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.custom_minimum_size = Vector2(0, 300)
@@ -119,7 +160,9 @@ func _load_action_buttons() -> void:
 		str(populated_count),
 		str(result.get("state", 0)),
 	])
-	if OS.get_environment("ACORE_ACTION_BAR_CAST_SELF_TEST") == "1":
+	if OS.get_environment("ACORE_ACTION_BAR_SET_SELF_TEST") == "1":
+		call_deferred("_run_set_action_button_probe")
+	elif OS.get_environment("ACORE_ACTION_BAR_CAST_SELF_TEST") == "1":
 		call_deferred("_cast_default_action_button")
 	else:
 		_finish_self_test(true, result)
@@ -186,6 +229,19 @@ func _render_details(result: Dictionary, buttons: Array) -> void:
 		lines.append("Response spell id: " + str(last_cast_result.get("response_spell_id", 0)))
 		lines.append("Spell start: " + str(last_cast_result.get("spell_start", false)))
 		lines.append("Spell go: " + str(last_cast_result.get("spell_go", false)))
+	if not last_set_result.is_empty():
+		lines.append("")
+		lines.append("Last set-action probe")
+		lines.append("Button: " + str(last_set_result.get("button", DEFAULT_SET_SLOT)))
+		lines.append("Action: " + str(last_set_result.get("action", DEFAULT_TARGETED_SPELL_ID)))
+		lines.append("Type: " + str(last_set_result.get("type", DEFAULT_SET_ACTION_TYPE)))
+		lines.append("Original populated: " + str(last_set_result.get("original_populated", false)))
+		lines.append("Set sent: " + str(last_set_result.get("set_sent", false)))
+		lines.append("Set confirmed: " + str(last_set_result.get("set_confirmed", false)))
+		lines.append("After set action: " + str(last_set_result.get("after_set_action", 0)))
+		lines.append("Restore sent: " + str(last_set_result.get("restore_sent", false)))
+		lines.append("Restore confirmed: " + str(last_set_result.get("restore_confirmed", false)))
+		lines.append("After restore action: " + str(last_set_result.get("after_restore_action", 0)))
 	detail_log.text = "\n".join(lines)
 
 
@@ -249,6 +305,33 @@ func _cast_action_button(action_button: Dictionary) -> void:
 		_finish_self_test(false, result)
 
 
+func _run_set_action_button_probe() -> void:
+	status_label.text = "Setting slot"
+	set_probe_button.disabled = true
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.set_action_button(
+		TEST_CHARACTER_NAME,
+		int(set_slot_input.value),
+		int(set_action_input.value),
+		int(set_type_input.value))
+	set_probe_button.disabled = false
+	last_set_result = result
+	status_label.text = "Set restored" if bool(result.get("ok", false)) else "Set failed"
+	_render_details({"action_buttons_seen": true}, last_buttons)
+
+	if bool(result.get("ok", false)):
+		print("ACTION_BAR_SET_READY button=%s action=%s type=%s set_confirmed=%s restore_confirmed=%s" % [
+			str(result.get("button", DEFAULT_SET_SLOT)),
+			str(result.get("action", DEFAULT_TARGETED_SPELL_ID)),
+			str(result.get("type", DEFAULT_SET_ACTION_TYPE)),
+			str(result.get("set_confirmed", false)),
+			str(result.get("restore_confirmed", false)),
+		])
+		_finish_self_test(true, result)
+	else:
+		_finish_self_test(false, result)
+
+
 func _count_populated(buttons: Array) -> int:
 	var count := 0
 	for button in buttons:
@@ -278,14 +361,23 @@ func _action_type_name(action_type: int) -> String:
 func _finish_self_test(ok: bool, result: Dictionary) -> void:
 	var load_self_test := OS.get_environment("ACORE_ACTION_BAR_SELF_TEST") == "1"
 	var cast_self_test := OS.get_environment("ACORE_ACTION_BAR_CAST_SELF_TEST") == "1"
-	if not load_self_test and not cast_self_test:
+	var set_self_test := OS.get_environment("ACORE_ACTION_BAR_SET_SELF_TEST") == "1"
+	if not load_self_test and not cast_self_test and not set_self_test:
 		return
 	if self_test_finished:
 		return
 	self_test_finished = true
 
 	if ok:
-		if cast_self_test:
+		if set_self_test:
+			print("ACTION_BAR_SET_SELF_TEST_OK button=%s action=%s type=%s set_confirmed=%s restore_confirmed=%s" % [
+				str(result.get("button", DEFAULT_SET_SLOT)),
+				str(result.get("action", DEFAULT_TARGETED_SPELL_ID)),
+				str(result.get("type", DEFAULT_SET_ACTION_TYPE)),
+				str(result.get("set_confirmed", false)),
+				str(result.get("restore_confirmed", false)),
+			])
+		elif cast_self_test:
 			print("ACTION_BAR_CAST_SELF_TEST_OK button=%s spell_id=%s opcode=0x%s accepted=%s" % [
 				str(result.get("button", "?")),
 				str(result.get("spell_id", DEFAULT_TARGETED_SPELL_ID)),

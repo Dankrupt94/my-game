@@ -14,6 +14,7 @@ constexpr std::uint32_t CMSG_CHAR_ENUM = 0x037;
 constexpr std::uint32_t CMSG_PLAYER_LOGIN = 0x03D;
 constexpr std::uint32_t CMSG_LOGOUT_REQUEST = 0x04B;
 constexpr std::uint32_t CMSG_MESSAGECHAT = 0x095;
+constexpr std::uint32_t CMSG_SET_ACTION_BUTTON = 0x128;
 constexpr std::uint32_t CMSG_CAST_SPELL = 0x12E;
 constexpr std::uint32_t CMSG_SET_SELECTION = 0x13D;
 constexpr std::uint32_t CMSG_ATTACKSWING = 0x141;
@@ -213,6 +214,10 @@ std::vector<std::uint8_t> build_cast_spell_unit_payload(
     std::uint32_t spell_id,
     std::uint8_t cast_flags,
     std::uint64_t target_guid);
+std::vector<std::uint8_t> build_set_action_button_payload(
+    std::uint8_t button,
+    std::uint32_t action,
+    std::uint8_t type);
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload);
 std::vector<CharacterSummary> parse_char_enum(std::span<const std::uint8_t> payload);
 LoginVerifyWorld parse_login_verify_world(std::span<const std::uint8_t> payload);

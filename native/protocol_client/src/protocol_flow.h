@@ -155,6 +155,24 @@ struct ActionButtonsResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct SetActionButtonProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint8_t button = 0;
+    std::uint32_t action = 0;
+    std::uint8_t type = 0;
+    ActionButtonSummary original;
+    ActionButtonSummary after_set;
+    ActionButtonSummary after_restore;
+    bool before_seen = false;
+    bool set_sent = false;
+    bool set_confirmed = false;
+    bool restore_sent = false;
+    bool restore_confirmed = false;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct SpellCastProbeResult
 {
     RealmInfo realm;
@@ -297,6 +315,17 @@ ActionButtonsResult read_action_buttons(
     std::string const& account,
     std::string const& password,
     std::string const& character_name,
+    FlowOptions options = {});
+
+SetActionButtonProbeResult set_action_button_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint8_t button,
+    std::uint32_t action,
+    std::uint8_t type,
     FlowOptions options = {});
 
 SpellCastProbeResult cast_spell_probe(

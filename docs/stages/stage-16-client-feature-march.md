@@ -56,6 +56,7 @@ This stage is not a loose inspiration pass. It is the long feature-parity march 
 - 2026-07-01: First spell-cast slice is working. Godot sends `CMSG_CAST_SPELL` for the local warrior stance spell `2457` and receives `SMSG_SPELL_GO` opcode `0x132`.
 - 2026-07-01: Targeted spell-cast slice is working. Godot selects a live creature, sends a unit-target `CMSG_CAST_SPELL` for spell `78`, and receives `SMSG_SPELL_START` opcode `0x131`.
 - 2026-07-01: Action-button spell-cast slice is working. Godot renders all 144 action slots, clicks server action button `73`, casts spell `78`, and receives `SMSG_SPELL_START` opcode `0x131`.
+- 2026-07-01: Action-button edit slice is working. Godot sends `CMSG_SET_ACTION_BUTTON`, confirms slot `0` can be set to spell `78`, restores the original empty slot, and confirms the restore.
 
 ## Active Slice: Chat
 
@@ -105,11 +106,12 @@ Completed first target:
 - [x] Render all 144 action slots in Godot.
 - [x] Connect populated spell slots to the no-target and unit-target cast paths.
 - [x] Add a Godot action-button cast self-test that casts server button `73`.
+- [x] Build and validate `CMSG_SET_ACTION_BUTTON` against a controlled local character.
+- [x] Add a reversible Godot set-action-button self-test that restores the original slot state.
 
 Remaining action-bar parity work:
 
 - Resolve spell/item/macro/equipment-set actions to display names and local-only icons.
 - Add drag/drop placement, remove-slot behavior, paging, and keybinds.
-- Build and validate `CMSG_SET_ACTION_BUTTON` against a controlled local character.
 - Preserve exact server persistence behavior and document any Godot UI compatibility tweaks.
 - Add item use, macro, equipment set, paging, and non-spell action behavior.

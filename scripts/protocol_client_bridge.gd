@@ -402,6 +402,53 @@ func action_buttons(
 	return parsed
 
 
+func set_action_button(
+	character_name: String = "Codexstage",
+	button: int = 0,
+	action: int = 78,
+	action_type: int = 0,
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_set_action_button(character_name, button, action, action_type, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--set-action-button",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			str(button),
+			str(action),
+			str(action_type),
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_set_action_button_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("set_confirmed", false)) \
+		and bool(parsed.get("restore_confirmed", false))
+	return parsed
+
+
 func cast_spell(
 	character_name: String = "Codexstage",
 	spell_id: int = 2457,
@@ -806,6 +853,41 @@ func _run_native_action_buttons(
 		character_name)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected action-button result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
+func _run_native_set_action_button(
+	character_name: String,
+	button: int,
+	action: int,
+	action_type: int,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("set_action_button"):
+		return {}
+
+	var result = client.call(
+		"set_action_button",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		button,
+		action,
+		action_type)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected set-action-button result")
 
 	var parsed: Dictionary = result
 	parsed["source"] = "Godot native extension"
@@ -1269,6 +1351,82 @@ func _parse_action_buttons_output(output: String) -> Dictionary:
 				"packed": _extract_hex_field(line, "packed=0x"),
 				"populated": true,
 			})
+	return result
+
+
+func _parse_set_action_button_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"button": 0,
+		"action": 0,
+		"type": 0,
+		"before_seen": false,
+		"original_populated": false,
+		"original_action": 0,
+		"original_type": 0,
+		"original_packed": 0,
+		"set_sent": false,
+		"set_confirmed": false,
+		"after_set_populated": false,
+		"after_set_action": 0,
+		"after_set_type": 0,
+		"after_set_packed": 0,
+		"restore_sent": false,
+		"restore_confirmed": false,
+		"after_restore_populated": false,
+		"after_restore_action": 0,
+		"after_restore_type": 0,
+		"after_restore_packed": 0,
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("SET_ACTION_BUTTON_PROBE"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["button"] = _extract_int_field(line, "button=")
+			result["action"] = _extract_int_field(line, "action=")
+			result["type"] = _extract_int_field(line, "type=")
+			result["before_seen"] = _extract_int_field(line, "before_seen=") == 1
+			result["original_populated"] = _extract_int_field(line, "original_populated=") == 1
+			result["original_action"] = _extract_int_field(line, "original_action=")
+			result["original_type"] = _extract_int_field(line, "original_type=")
+			result["original_packed"] = _extract_hex_field(line, "original_packed=0x")
+			result["set_sent"] = _extract_int_field(line, "set_sent=") == 1
+			result["set_confirmed"] = _extract_int_field(line, "set_confirmed=") == 1
+			result["after_set_populated"] = _extract_int_field(line, "after_set_populated=") == 1
+			result["after_set_action"] = _extract_int_field(line, "after_set_action=")
+			result["after_set_type"] = _extract_int_field(line, "after_set_type=")
+			result["after_set_packed"] = _extract_hex_field(line, "after_set_packed=0x")
+			result["restore_sent"] = _extract_int_field(line, "restore_sent=") == 1
+			result["restore_confirmed"] = _extract_int_field(line, "restore_confirmed=") == 1
+			result["after_restore_populated"] = _extract_int_field(line, "after_restore_populated=") == 1
+			result["after_restore_action"] = _extract_int_field(line, "after_restore_action=")
+			result["after_restore_type"] = _extract_int_field(line, "after_restore_type=")
+			result["after_restore_packed"] = _extract_hex_field(line, "after_restore_packed=0x")
+
+	result["original"] = {
+		"button": result["button"],
+		"action": result["original_action"],
+		"type": result["original_type"],
+		"packed": result["original_packed"],
+		"populated": result["original_populated"],
+	}
+	result["after_set"] = {
+		"button": result["button"],
+		"action": result["after_set_action"],
+		"type": result["after_set_type"],
+		"packed": result["after_set_packed"],
+		"populated": result["after_set_populated"],
+	}
+	result["after_restore"] = {
+		"button": result["button"],
+		"action": result["after_restore_action"],
+		"type": result["after_restore_type"],
+		"packed": result["after_restore_packed"],
+		"populated": result["after_restore_populated"],
+	}
 	return result
 
 

@@ -1034,3 +1034,33 @@ Validation:
 
 - `ACORE_ACTION_BAR_CAST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed with `button=73`, `spell_id=78`, `opcode=0x131`, and `accepted=true`.
 - Local `qwen-agent` advisory review found no concrete blockers for the bounded action-button cast slice.
+
+## 2026-07-01 - Add Stage 16 Set-Action-Button Slice
+
+Goal: prove Godot can send `CMSG_SET_ACTION_BUTTON` and verify the server persisted the action-bar edit, while restoring the test character afterward.
+
+Plan:
+
+- Confirm the AzerothCore handler payload order from source.
+- Add a packet builder for `button + packed action/type`.
+- Add a native reversible set-action-button probe.
+- Expose the probe through the Godot extension and script bridge.
+- Extend the action-bar scene with a set-slot control and headless set/restore self-test.
+
+Result:
+
+- Added `build_set_action_button_payload`.
+- Added `acore_protocol::set_action_button_probe` and the `--set-action-button` helper command.
+- Added `AcoreProtocolClient.set_action_button(...)`.
+- Added `ProtocolClientBridge.set_action_button(...)`.
+- Extended `scripts/stage16_action_bar_view.gd` with reversible set-slot controls and `ACORE_ACTION_BAR_SET_SELF_TEST=1`.
+
+Validation:
+
+- `cmake --build native/protocol_client/build` passed.
+- `native/protocol_client/build/acore_protocol_client --self-test` passed.
+- Native `--set-action-button` passed by setting slot `0` to spell `78`, confirming `set_confirmed=1`, restoring the original empty slot, and confirming `restore_confirmed=1`.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `ACORE_ACTION_BAR_SET_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed with `button=0`, `action=78`, `type=0`, `set_confirmed=true`, and `restore_confirmed=true`.
+- `ACORE_ACTION_BAR_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage16_action_bar_view.tscn` passed afterward with `slots=144` and `populated=3`, confirming the test character was restored.
+- Local `qwen-agent` advisory review found no concrete blockers for the bounded set-action-button slice.

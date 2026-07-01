@@ -81,6 +81,15 @@ public:
         godot::String const& account,
         godot::String const& password,
         godot::String const& character_name);
+    godot::Dictionary set_action_button(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        int64_t button,
+        int64_t action,
+        int64_t type);
     godot::Dictionary cast_spell(
         godot::String const& host,
         godot::String const& port,

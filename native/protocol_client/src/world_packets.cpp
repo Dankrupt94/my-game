@@ -660,6 +660,17 @@ std::vector<std::uint8_t> build_cast_spell_unit_payload(
     return payload;
 }
 
+std::vector<std::uint8_t> build_set_action_button_payload(
+    std::uint8_t button,
+    std::uint32_t action,
+    std::uint8_t type)
+{
+    std::vector<std::uint8_t> payload;
+    append_u8(payload, button);
+    append_u32_le(payload, (action & 0x00FFFFFFu) | (static_cast<std::uint32_t>(type) << 24));
+    return payload;
+}
+
 std::vector<std::uint8_t> build_client_packet(std::uint32_t opcode, std::span<const std::uint8_t> payload)
 {
     std::vector<std::uint8_t> packet = build_client_header(opcode, payload.size());
@@ -1017,6 +1028,16 @@ bool world_packet_self_test()
     auto targeted_cast_payload = build_cast_spell_unit_payload(2, 78, 0, 0xF1300002D1000CEFULL);
     auto targeted_cast_packet = build_client_packet(CMSG_CAST_SPELL, targeted_cast_payload);
     if (targeted_cast_packet.size() <= cast_packet.size() || targeted_cast_packet[2] != 0x2E || targeted_cast_packet[3] != 0x01)
+    {
+        return false;
+    }
+    auto set_action_payload = build_set_action_button_payload(0, 78, 0);
+    auto set_action_packet = build_client_packet(CMSG_SET_ACTION_BUTTON, set_action_payload);
+    if (set_action_packet.size() != 6 + 1 + 4
+        || set_action_packet[2] != 0x28
+        || set_action_packet[3] != 0x01
+        || set_action_packet[6] != 0
+        || set_action_packet[7] != 78)
     {
         return false;
     }

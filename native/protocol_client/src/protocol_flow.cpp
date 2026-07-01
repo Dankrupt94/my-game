@@ -727,6 +727,29 @@ bool is_spell_cast_response_opcode(std::uint16_t opcode)
         || opcode == SMSG_SPELL_FAILED_OTHER;
 }
 
+ActionButtonSummary action_button_at(ActionButtonsSummary const& summary, std::uint8_t button)
+{
+    if (button < summary.buttons.size())
+    {
+        return summary.buttons[button];
+    }
+
+    ActionButtonSummary empty;
+    empty.button = button;
+    return empty;
+}
+
+bool action_button_matches(ActionButtonSummary const& actual, ActionButtonSummary const& expected)
+{
+    if (!expected.populated)
+    {
+        return !actual.populated;
+    }
+    return actual.populated
+        && actual.action == expected.action
+        && actual.type == expected.type;
+}
+
 void validate_chat_message(std::string const& message)
 {
     if (message.empty())
@@ -819,6 +842,38 @@ bool request_graceful_logout(AuthenticatedWorldSession& session, FlowOptions opt
         }
     }
     return logout_allowed;
+}
+
+bool send_set_action_button_once(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint8_t button,
+    std::uint32_t action,
+    std::uint8_t type,
+    FlowOptions options)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    (void)login_selected_character(*session, selected, options);
+
+    bool const logged_in_world = wait_for_logged_in_world(*session, options, 650);
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before setting action button");
+    }
+
+    write_world_packet(
+        session->socket.get(),
+        CMSG_SET_ACTION_BUTTON,
+        build_set_action_button_payload(button, action, type),
+        &session->crypt);
+
+    (void)request_graceful_logout(*session, options);
+    return true;
 }
 }
 
@@ -1662,6 +1717,102 @@ ActionButtonsResult read_action_buttons(
     }
 
     (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+SetActionButtonProbeResult set_action_button_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint8_t button,
+    std::uint32_t action,
+    std::uint8_t type,
+    FlowOptions options)
+{
+    if (button >= MaxActionButtons)
+    {
+        throw std::runtime_error("action button must be less than 144");
+    }
+    if (action >= 0x01000000u)
+    {
+        throw std::runtime_error("action id must fit in 24 bits");
+    }
+
+    SetActionButtonProbeResult result;
+    result.button = button;
+    result.action = action;
+    result.type = type;
+
+    ActionButtonsResult before = read_action_buttons(host, port, account, password, character_name, options);
+    result.realm = before.realm;
+    result.character = before.character;
+    result.before_seen = before.action_buttons_seen;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), before.skipped_opcodes.begin(), before.skipped_opcodes.end());
+    if (!before.action_buttons_seen || before.action_buttons.buttons.size() != MaxActionButtons)
+    {
+        throw std::runtime_error("did not observe action buttons before set probe");
+    }
+    result.original = action_button_at(before.action_buttons, button);
+
+    result.set_sent = send_set_action_button_once(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        button,
+        action,
+        type,
+        options);
+
+    std::uint32_t restore_action = result.original.populated ? result.original.action : 0;
+    std::uint8_t restore_type = result.original.populated ? result.original.type : 0;
+
+    ActionButtonsResult after_set;
+    try
+    {
+        after_set = read_action_buttons(host, port, account, password, character_name, options);
+    }
+    catch (...)
+    {
+        (void)send_set_action_button_once(
+            host,
+            port,
+            account,
+            password,
+            character_name,
+            button,
+            restore_action,
+            restore_type,
+            options);
+        throw;
+    }
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), after_set.skipped_opcodes.begin(), after_set.skipped_opcodes.end());
+    result.after_set = action_button_at(after_set.action_buttons, button);
+    result.set_confirmed = after_set.action_buttons_seen
+        && result.after_set.populated
+        && result.after_set.action == action
+        && result.after_set.type == type;
+
+    result.restore_sent = send_set_action_button_once(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        button,
+        restore_action,
+        restore_type,
+        options);
+
+    ActionButtonsResult after_restore = read_action_buttons(host, port, account, password, character_name, options);
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), after_restore.skipped_opcodes.begin(), after_restore.skipped_opcodes.end());
+    result.after_restore = action_button_at(after_restore.action_buttons, button);
+    result.restore_confirmed = after_restore.action_buttons_seen
+        && action_button_matches(result.after_restore, result.original);
+
     return result;
 }
 

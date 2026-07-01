@@ -451,7 +451,7 @@ Relevant opcodes:
 | Opcode | Value | Stage 16 support |
 | --- | ---: | --- |
 | `SMSG_ACTION_BUTTONS` | `0x129` | Parses all initial action slots from the login stream |
-| `CMSG_SET_ACTION_BUTTON` | `0x128` | Documented from AzerothCore source; not sent yet in Stage 16 |
+| `CMSG_SET_ACTION_BUTTON` | `0x128` | Sends controlled set/remove packets and verifies them by re-reading `SMSG_ACTION_BUTTONS` |
 
 Payload from `Player::SendActionButtons`:
 
@@ -478,6 +478,13 @@ Known action button types from AzerothCore:
 | `65` | character macro |
 | `128` | item |
 
+Client set-action-button request:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| button | 1 | Slot id, `0` through `143` |
+| packed action button | 4 | Same `action | (type << 24)` layout used by `SMSG_ACTION_BUTTONS`; `0` removes the slot |
+
 Observed Stage 16 result:
 
 - Native helper command `--action-buttons` observed `SMSG_ACTION_BUTTONS` for `Codexstage`.
@@ -485,11 +492,13 @@ Observed Stage 16 result:
 - Observed populated slots were button `72` action `6603` type `0`, button `73` action `78` type `0`, and button `83` action `117` type `128`.
 - Godot scene `scenes/stage16_action_bar_view.tscn` passed with `ACTION_BAR_SELF_TEST_OK slots=144 populated=3 state=1`.
 - Godot scene `scenes/stage16_action_bar_view.tscn` rendered all 144 slots and passed `ACORE_ACTION_BAR_CAST_SELF_TEST=1` by casting button `73` spell `78` through the unit-target spell-cast path, receiving `ACTION_BAR_CAST_SELF_TEST_OK button=73 spell_id=78 opcode=0x131 accepted=true`.
+- Native helper command `--set-action-button` set empty slot `0` to spell `78` type `0`, confirmed `after_set_action=78`, restored the original empty slot with packed value `0`, and confirmed `after_restore_populated=0`.
+- Godot scene `scenes/stage16_action_bar_view.tscn` passed `ACORE_ACTION_BAR_SET_SELF_TEST=1` with `ACTION_BAR_SET_SELF_TEST_OK button=0 action=78 type=0 set_confirmed=true restore_confirmed=true`; a follow-up action-button read still showed `populated=3`.
 
 Remaining action-button packet work:
 
-- Build and validate `CMSG_SET_ACTION_BUTTON` for controlled local edits.
-- Confirm persistence by re-reading `SMSG_ACTION_BUTTONS` after logout/login.
+- Replace the reversible probe with final drag/drop, remove-slot, paging, and keybind UX.
+- Add broader persistence checks for multiple slots and action types.
 - Connect action buttons to item use, macros, equipment sets, paging, and keybinds.
 
 ## Stage 11 First World Target

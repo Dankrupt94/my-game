@@ -150,18 +150,23 @@ Array spell_array(std::vector<InitialSpellSummary> const& spells)
     return values;
 }
 
+Dictionary action_button_dictionary(ActionButtonSummary const& button)
+{
+    Dictionary value;
+    value["button"] = static_cast<int>(button.button);
+    value["action"] = static_cast<int>(button.action);
+    value["type"] = static_cast<int>(button.type);
+    value["packed"] = static_cast<int64_t>(button.packed);
+    value["populated"] = button.populated;
+    return value;
+}
+
 Array action_button_array(std::vector<ActionButtonSummary> const& buttons)
 {
     Array values;
     for (ActionButtonSummary const& button : buttons)
     {
-        Dictionary value;
-        value["button"] = static_cast<int>(button.button);
-        value["action"] = static_cast<int>(button.action);
-        value["type"] = static_cast<int>(button.type);
-        value["packed"] = static_cast<int64_t>(button.packed);
-        value["populated"] = button.populated;
-        values.append(value);
+        values.append(action_button_dictionary(button));
     }
     return values;
 }
@@ -261,6 +266,9 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("action_buttons", "host", "port", "account", "password", "character_name"),
         &AcoreProtocolClient::action_buttons);
+    ClassDB::bind_method(
+        D_METHOD("set_action_button", "host", "port", "account", "password", "character_name", "button", "action", "type"),
+        &AcoreProtocolClient::set_action_button);
     ClassDB::bind_method(
         D_METHOD("cast_spell", "host", "port", "account", "password", "character_name", "spell_id"),
         &AcoreProtocolClient::cast_spell);
@@ -588,6 +596,76 @@ Dictionary AcoreProtocolClient::action_buttons(
         result["slot_count"] = static_cast<int>(flow.action_buttons.buttons.size());
         result["populated_count"] = static_cast<int>(flow.action_buttons.populated_count);
         result["buttons"] = action_button_array(flow.action_buttons.buttons);
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::set_action_button(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t button,
+    int64_t action,
+    int64_t type)
+{
+    try
+    {
+        if (button < 0 || button >= static_cast<int64_t>(MaxActionButtons))
+        {
+            return failure("action button must be from 0 to 143");
+        }
+        if (action < 0 || action >= 0x01000000)
+        {
+            return failure("action id must fit in 24 bits");
+        }
+        if (type < 0 || type > 255)
+        {
+            return failure("action type must be from 0 to 255");
+        }
+
+        acore_protocol::SetActionButtonProbeResult flow = acore_protocol::set_action_button_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            static_cast<std::uint8_t>(button),
+            static_cast<std::uint32_t>(action),
+            static_cast<std::uint8_t>(type));
+
+        Dictionary result;
+        result["ok"] = flow.set_sent && flow.set_confirmed && flow.restore_sent && flow.restore_confirmed;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["button"] = static_cast<int>(flow.button);
+        result["action"] = static_cast<int>(flow.action);
+        result["type"] = static_cast<int>(flow.type);
+        result["before_seen"] = flow.before_seen;
+        result["original"] = action_button_dictionary(flow.original);
+        result["original_populated"] = flow.original.populated;
+        result["original_action"] = static_cast<int>(flow.original.action);
+        result["original_type"] = static_cast<int>(flow.original.type);
+        result["set_sent"] = flow.set_sent;
+        result["set_confirmed"] = flow.set_confirmed;
+        result["after_set"] = action_button_dictionary(flow.after_set);
+        result["after_set_populated"] = flow.after_set.populated;
+        result["after_set_action"] = static_cast<int>(flow.after_set.action);
+        result["after_set_type"] = static_cast<int>(flow.after_set.type);
+        result["restore_sent"] = flow.restore_sent;
+        result["restore_confirmed"] = flow.restore_confirmed;
+        result["after_restore"] = action_button_dictionary(flow.after_restore);
+        result["after_restore_populated"] = flow.after_restore.populated;
+        result["after_restore_action"] = static_cast<int>(flow.after_restore.action);
+        result["after_restore_type"] = static_cast<int>(flow.after_restore.type);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;
