@@ -404,6 +404,73 @@ int trainer_list_probe(
         && result.trainer_list_response_seen && result.trainer_list.spell_count > 0 ? 0 : 1;
 }
 
+int questgiver_list_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_guid,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::QuestGiverListProbeResult result = acore_protocol::questgiver_list_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_guid),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "QUESTGIVER_LIST_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " target_name=\"" << result.target_name << "\""
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " target_has_position=" << (result.target_has_position ? 1 : 0)
+              << " visible_objects=" << result.visible_objects.size()
+              << " approach_movement_sent=" << (result.approach_movement_sent ? 1 : 0)
+              << " return_movement_sent=" << (result.return_movement_sent ? 1 : 0)
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " questgiver_hello_sent=" << (result.questgiver_hello_sent ? 1 : 0)
+              << " quest_list_response_seen=" << (result.quest_list_response_seen ? 1 : 0)
+              << " gossip_fallback_seen=" << (result.gossip_fallback_seen ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " greeting=\"" << result.quest_list.greeting << "\""
+              << " quest_count=" << result.quest_list.quest_count
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    std::size_t printed = 0;
+    for (QuestGiverQuestSummary const& quest : result.quest_list.quests)
+    {
+        if (printed >= 40)
+        {
+            break;
+        }
+        // Quest IDs/icons/levels/flags only. Titles are proprietary text and are
+        // deliberately not printed or committed.
+        std::cout << "QUESTGIVER_QUEST"
+                  << " quest_id=" << quest.quest_id
+                  << " icon=" << quest.quest_icon
+                  << " level=" << quest.quest_level
+                  << " flags=" << quest.quest_flags
+                  << " repeatable=" << static_cast<int>(quest.repeatable)
+                  << "\n";
+        ++printed;
+    }
+    // Live AzerothCore quest givers answer CMSG_QUESTGIVER_HELLO with gossip-embedded
+    // quests (SMSG_GOSSIP_MESSAGE); the standalone SMSG_QUESTGIVER_QUEST_LIST is rarer.
+    // A successful probe means the quest giver was reached and responded via either
+    // path. The 0x185 quest-list parser itself is covered by --self-test.
+    return result.live_target_found && result.selection_sent && result.questgiver_hello_sent
+        && (result.quest_list_response_seen || result.gossip_fallback_seen) ? 0 : 1;
+}
+
 int trainer_buy_spell_probe(
     std::string const& host,
     std::string const& port,
@@ -1503,6 +1570,11 @@ int main(int argc, char** argv)
         if (argc == 8 && std::strcmp(argv[1], "--trainer-list") == 0)
         {
             return trainer_list_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+        }
+
+        if (argc == 8 && std::strcmp(argv[1], "--questgiver-list") == 0)
+        {
+            return questgiver_list_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
         }
 
         if (argc == 9 && std::strcmp(argv[1], "--trainer-buy") == 0)
