@@ -71,6 +71,17 @@ struct EnterWorldResult
     std::vector<std::uint16_t> skipped_login_opcodes;
 };
 
+struct VisibleTargetsSnapshotResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    LoginVerifyWorld login;
+    bool logged_in_world = false;
+    std::uint32_t update_packet_count = 0;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct MovementHeartbeatResult
 {
     RealmInfo realm;
@@ -395,6 +406,14 @@ CharacterCreateResult create_character(
     FlowOptions options = {});
 
 EnterWorldResult enter_world(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    FlowOptions options = {});
+
+VisibleTargetsSnapshotResult visible_targets_snapshot(
     std::string const& host,
     std::string const& port,
     std::string const& account,

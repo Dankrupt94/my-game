@@ -127,3 +127,17 @@ Verify that the Godot client is a fully functional WotLK port for AzerothCore, n
 - Validation: `ACORE_LOOT_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `changed_slots=1`, `stack_changed=1`, `handoff=true`, and response opcode `0x160`.
 - Validation: `ACORE_LOOT_OPEN_SELF_TEST=1` passed, and a rerun of `ACORE_CORPSE_LOOT_SELF_TEST=1` passed after a transient live-target miss.
 - Remaining work: replace target-entry controls with in-world click targeting, keep a persistent session instead of one-shot probes, and merge the loot/inventory surfaces into the normal gameplay HUD.
+
+### 2026-07-01 - Loot Visible Target Snapshot Picker
+
+- Added a reusable native `visible_targets_snapshot` flow that logs into the world, waits for update packets, captures visible objects, answers time sync, and logs out cleanly without combat or loot mutation.
+- Exposed the snapshot through the Godot extension and `ProtocolClientBridge.visible_targets_snapshot(...)`.
+- `scenes/stage17_loot_view.tscn` now starts with a non-mutating target scan outside self-test mode, lists live visible creature targets, selects entry `299` when present, and fills the loot target controls from the chosen row.
+- The helper fallback parser now preserves `VISIBLE_OBJECT` rows from the enter-world helper output when the native extension is unavailable.
+- Validation: `./tools/build_godot_protocol_extension_compat.sh` passed after the native protocol and extension changes.
+- Validation: `godot-4 --headless --path . --quit` passed.
+- Validation: `ACORE_LOOT_TARGET_PICKER_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `target_count=144`, selected entry `299`, and selected GUID `0xf13000012b006e67`.
+- Validation: `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` still passed with release response opcode `0x161`.
+- Validation: `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `dead=true`, `lootable=true`, `loot_response=true`, `item_removed=1`, `release_response=true`, and opcode `0x160`.
+- Caveat: `ACORE_LOOT_INVENTORY_SELF_TEST=1` was rerun three times in this checkpoint and failed to confirm a new inventory handoff (`changed_slots=0`). The narrower corpse-loot proof still passed, so the next handoff task should stabilize target choice/session timing and then restore this regression to green.
+- Remaining work: exact GUID selection from the visible target list, real in-world click picking, persistent session reuse across target/combat/loot/inventory, and a stabilized loot-to-bag proof.

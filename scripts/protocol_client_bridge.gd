@@ -100,6 +100,13 @@ func enter_world(character_name: String = "", host: String = "127.0.0.1", port: 
 	return parsed
 
 
+func visible_targets_snapshot(character_name: String = "Codexstage", host: String = "127.0.0.1", port: String = "3724") -> Dictionary:
+	var native_result := _run_native_visible_targets_snapshot(character_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+	return enter_world(character_name, host, port)
+
+
 func move_heartbeat(
 	character_name: String = "Codexstage",
 	delta_x: float = 0.05,
@@ -910,6 +917,32 @@ func _run_native_enter_world(character_name: String, host: String, port: String)
 	return parsed
 
 
+func _run_native_visible_targets_snapshot(character_name: String, host: String, port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("visible_targets_snapshot"):
+		return {}
+
+	var result = client.call(
+		"visible_targets_snapshot",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected visible-target result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
 func _run_native_move_heartbeat(
 	character_name: String,
 	delta_x: float,
@@ -1598,6 +1631,7 @@ func _parse_enter_world_output(output: String) -> Dictionary:
 		"login_verify_ok": false,
 		"update_object_seen": false,
 		"login": {},
+		"update": {"visible_objects": [], "visible_object_count": 0},
 		"character_line": "",
 	}
 	for raw_line in output.split("\n"):
@@ -1615,6 +1649,31 @@ func _parse_enter_world_output(output: String) -> Dictionary:
 		elif line.begins_with("UPDATE_OBJECT_"):
 			result["update_object_seen"] = line.begins_with("UPDATE_OBJECT_SEEN")
 			result["update_line"] = line
+			result["update"] = {
+				"seen": result["update_object_seen"],
+				"compressed": _extract_int_field(line, "compressed=") == 1,
+				"block_count": _extract_int_field(line, "blocks="),
+				"visible_parse_complete": _extract_int_field(line, "visible_parse_complete=") == 1,
+				"visible_object_count": _extract_int_field(line, "visible_objects="),
+				"visible_objects": result["update"].get("visible_objects", []),
+			}
+		elif line.begins_with("VISIBLE_OBJECT"):
+			var position := _parse_vector_field(line, "pos=(")
+			var object := {
+				"guid": _extract_token_after(line, "guid="),
+				"entry": _extract_int_field(line, "entry="),
+				"object_type": _extract_int_field(line, "type="),
+				"has_position": _extract_int_field(line, "has_position=") == 1,
+				"x": float(position.get("x", 0.0)),
+				"y": float(position.get("y", 0.0)),
+				"z": float(position.get("z", 0.0)),
+			}
+			var update: Dictionary = result["update"]
+			var visible_objects: Array = update.get("visible_objects", [])
+			visible_objects.append(object)
+			update["visible_objects"] = visible_objects
+			update["visible_object_count"] = visible_objects.size()
+			result["update"] = update
 	return result
 
 

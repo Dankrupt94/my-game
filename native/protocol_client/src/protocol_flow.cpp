@@ -1673,6 +1673,79 @@ EnterWorldResult enter_world(
     return result;
 }
 
+VisibleTargetsSnapshotResult visible_targets_snapshot(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    FlowOptions options)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+
+    VisibleTargetsSnapshotResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.login = login;
+
+    int idle_after_login = 0;
+    for (int i = 0; i < 120; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (result.logged_in_world)
+            {
+                ++idle_after_login;
+                if ((idle_after_login >= 8 && !result.visible_objects.empty()) || idle_after_login >= 16)
+                {
+                    break;
+                }
+            }
+            continue;
+        }
+
+        idle_after_login = 0;
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            ++result.update_packet_count;
+            result.visible_objects.insert(
+                result.visible_objects.end(),
+                update.visible_objects.begin(),
+                update.visible_objects.end());
+            continue;
+        }
+
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            result.logged_in_world = true;
+            continue;
+        }
+
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
 MovementHeartbeatResult move_heartbeat(
     std::string const& host,
     std::string const& port,

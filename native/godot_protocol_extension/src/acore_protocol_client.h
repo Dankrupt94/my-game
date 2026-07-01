@@ -30,6 +30,12 @@ public:
         godot::String const& account,
         godot::String const& password,
         godot::String const& character_name);
+    godot::Dictionary visible_targets_snapshot(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name);
     godot::Dictionary move_heartbeat(
         godot::String const& host,
         godot::String const& port,

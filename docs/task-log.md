@@ -1423,3 +1423,42 @@ Remaining work:
 - Prove new empty-slot placement, full-bag failure handling, locked-item behavior, and bind prompts.
 - Collect nonzero-money loot evidence for `CMSG_LOOT_MONEY` / `SMSG_LOOT_MONEY_NOTIFY`.
 - Add group loot, roll, master-loot, quest-loot, and long-session persistence checks.
+
+## 2026-07-01 - Add Stage 17 Visible Target Picker
+
+Goal: replace the loot scene's purely manual target-entry workflow with a Godot-facing scan of live visible creature targets, while keeping the existing loot probes intact.
+
+Plan:
+
+- Add a native snapshot flow that logs in, waits for visible-object update packets, and logs out without mutating combat or loot state.
+- Expose that flow through the Godot extension and script bridge.
+- Add a target scan list to `scenes/stage17_loot_view.tscn`.
+- Let the scene fill the current target entry/name controls from the selected visible creature.
+- Add a headless picker self-test and rerun the existing loot checks sequentially.
+
+Result:
+
+- Added `VisibleTargetsSnapshotResult` and `visible_targets_snapshot(...)` in the native protocol layer.
+- Added `AcoreProtocolClient.visible_targets_snapshot(...)`.
+- Added `ProtocolClientBridge.visible_targets_snapshot(...)`.
+- Updated the enter-world helper fallback parser to preserve `VISIBLE_OBJECT` rows as update-visible objects.
+- Added a `Scan` control and live target `ItemList` to the Stage 17 loot scene.
+- The scene now starts with a non-mutating target scan during normal viewing, while explicit self-test environment variables still run the requested test paths.
+- The picker prefers entry `299` when it is visible, then falls back to the nearest visible creature.
+
+Validation:
+
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `godot-4 --headless --path . --quit` passed.
+- `ACORE_LOOT_TARGET_PICKER_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `target_count=144`, selected entry `299`, and selected GUID `0xf13000012b006e67`.
+- `ACORE_LOOT_OPEN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with release response opcode `0x161`.
+- `ACORE_CORPSE_LOOT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` passed with `dead=true`, `lootable=true`, `loot_response=true`, `item_removed=1`, `release_response=true`, and opcode `0x160`.
+- `ACORE_LOOT_INVENTORY_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_loot_view.tscn` failed three times in this checkpoint with `changed_slots=0`; the narrower corpse-loot path passed, so this is tracked as a handoff-stabilization follow-up rather than a blocker for the visible-target picker.
+- Local `qwen-agent` advisory review reported no obvious bugs or validation gaps in the narrow patch.
+
+Remaining work:
+
+- Stabilize the loot-to-bag handoff regression after the visible-target picker change.
+- Let the scene send exact visible target GUIDs instead of only target entries.
+- Replace the list selection with actual in-world click picking.
+- Reuse a persistent world session across target scan, combat, loot, and inventory refresh.

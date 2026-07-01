@@ -11,19 +11,25 @@ var target_label: Label
 var loot_label: Label
 var target_entry_input: SpinBox
 var target_name_input: LineEdit
+var target_picker: ItemList
 var item_list: ItemList
 var inventory_list: ItemList
+var visible_targets: Array = []
 var self_test_finished := false
 
 
 func _ready() -> void:
 	_build_view()
-	if OS.get_environment("ACORE_LOOT_INVENTORY_SELF_TEST") == "1":
+	if OS.get_environment("ACORE_LOOT_TARGET_PICKER_SELF_TEST") == "1":
+		call_deferred("_run_target_picker_self_test")
+	elif OS.get_environment("ACORE_LOOT_INVENTORY_SELF_TEST") == "1":
 		call_deferred("_run_loot_inventory_handoff_probe")
 	elif OS.get_environment("ACORE_CORPSE_LOOT_SELF_TEST") == "1":
 		call_deferred("_run_corpse_loot_probe")
-	else:
+	elif OS.get_environment("ACORE_LOOT_OPEN_SELF_TEST") == "1":
 		call_deferred("_run_loot_probe")
+	else:
+		call_deferred("_scan_visible_targets")
 
 
 func _build_view() -> void:
@@ -90,6 +96,17 @@ func _build_view() -> void:
 	target_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	target_row.add_child(target_name_input)
 
+	var scan_button := Button.new()
+	scan_button.text = "Scan"
+	scan_button.custom_minimum_size = Vector2(86, 34)
+	scan_button.pressed.connect(_scan_visible_targets)
+	target_row.add_child(scan_button)
+
+	target_picker = ItemList.new()
+	target_picker.custom_minimum_size = Vector2(0, 118)
+	target_picker.item_selected.connect(_on_target_selected)
+	stack.add_child(target_picker)
+
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 10)
 	stack.add_child(action_row)
@@ -129,7 +146,12 @@ func _run_loot_probe() -> void:
 	item_list.clear()
 	inventory_list.clear()
 	var bridge := ProtocolClientBridge.new()
-	var result := bridge.loot_open_probe(TEST_CHARACTER_NAME, LOOT_OPEN_TARGET_ENTRY, "Nearby Creature")
+	var target_entry := LOOT_OPEN_TARGET_ENTRY
+	var target_name := "Nearby Creature"
+	if OS.get_environment("ACORE_LOOT_OPEN_SELF_TEST") != "1":
+		target_entry = _target_entry()
+		target_name = _target_name()
+	var result := bridge.loot_open_probe(TEST_CHARACTER_NAME, target_entry, target_name)
 	var ok := bool(result.get("ok", false))
 	if not ok:
 		status_label.text = "Failed"
@@ -232,6 +254,70 @@ func _run_loot_inventory_handoff_probe() -> void:
 	_finish_loot_inventory_self_test(true, result)
 
 
+func _run_target_picker_self_test() -> void:
+	_scan_visible_targets(true)
+
+
+func _scan_visible_targets(finish_self_test := false) -> Dictionary:
+	status_label.text = "Scanning"
+	loot_label.text = "Loot: idle"
+	item_list.clear()
+	inventory_list.clear()
+	target_picker.clear()
+	target_picker.add_item("Scanning live visible creatures...")
+
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.visible_targets_snapshot(TEST_CHARACTER_NAME)
+	var ok := bool(result.get("ok", false))
+	if not ok:
+		status_label.text = "Failed"
+		target_label.text = _failure_summary("Target scan failed", result)
+		target_picker.clear()
+		target_picker.add_item("Target scan failed")
+		if finish_self_test:
+			_finish_target_picker_self_test(false, result)
+		return result
+
+	visible_targets = _extract_visible_targets(result)
+	target_picker.clear()
+	if visible_targets.is_empty():
+		status_label.text = "Failed"
+		target_label.text = "No live creature targets were visible in the login update."
+		target_picker.add_item("No visible creature targets")
+		result["target_picker_count"] = 0
+		if finish_self_test:
+			_finish_target_picker_self_test(false, result)
+		return result
+
+	for target in visible_targets:
+		if typeof(target) != TYPE_DICTIONARY:
+			continue
+		var index := target_picker.add_item(_target_picker_text(target))
+		target_picker.set_item_metadata(index, target)
+
+	var selected_index := _default_target_index(visible_targets)
+	target_picker.select(selected_index)
+	var selected: Dictionary = visible_targets[selected_index]
+	_apply_target(selected)
+	status_label.text = "Ready"
+	target_label.text = "Selected %s from %s visible creature target(s)." % [
+		_target_picker_text(selected),
+		str(visible_targets.size()),
+	]
+
+	result["target_picker_count"] = visible_targets.size()
+	result["selected_target"] = selected
+	print("LOOT_TARGET_PICKER_SELF_TEST_READY target_count=%s selected_entry=%s selected_guid=%s distance=%s" % [
+		str(visible_targets.size()),
+		str(selected.get("entry", 0)),
+		str(selected.get("guid", "0x0")),
+		str(selected.get("distance", 0.0)),
+	])
+	if finish_self_test:
+		_finish_target_picker_self_test(true, result)
+	return result
+
+
 func _target_entry() -> int:
 	if target_entry_input == null:
 		return CORPSE_LOOT_TARGET_ENTRY
@@ -243,6 +329,91 @@ func _target_name() -> String:
 		return "Nearby Creature"
 	var value := target_name_input.text.strip_edges()
 	return "Nearby Creature" if value.is_empty() else value
+
+
+func _on_target_selected(index: int) -> void:
+	if target_picker == null or index < 0 or index >= target_picker.item_count:
+		return
+	var metadata = target_picker.get_item_metadata(index)
+	if typeof(metadata) != TYPE_DICTIONARY:
+		return
+	var target: Dictionary = metadata
+	_apply_target(target)
+	target_label.text = "Selected " + _target_picker_text(target) + "."
+
+
+func _apply_target(target: Dictionary) -> void:
+	target_entry_input.value = int(target.get("entry", CORPSE_LOOT_TARGET_ENTRY))
+	target_name_input.text = _target_name_from_visible(target)
+
+
+func _extract_visible_targets(result: Dictionary) -> Array:
+	var login: Dictionary = result.get("login", {})
+	var update: Dictionary = result.get("update", {})
+	var objects: Array = []
+	if typeof(update.get("visible_objects", [])) == TYPE_ARRAY and not update.get("visible_objects", []).is_empty():
+		objects = update.get("visible_objects", [])
+	elif typeof(result.get("visible_objects", [])) == TYPE_ARRAY:
+		objects = result.get("visible_objects", [])
+
+	var targets: Array = []
+	var seen := {}
+	for object in objects:
+		if typeof(object) != TYPE_DICTIONARY:
+			continue
+		var entry := int(object.get("entry", 0))
+		var object_type := int(object.get("object_type", object.get("type", 0)))
+		var guid := str(object.get("guid", ""))
+		if entry <= 0 or object_type != 3 or not bool(object.get("has_position", false)):
+			continue
+		if seen.has(guid):
+			continue
+		seen[guid] = true
+		var target: Dictionary = object.duplicate(true)
+		target["distance"] = _distance_from_login(login, object)
+		targets.append(target)
+
+	targets.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("distance", 999999.0)) < float(b.get("distance", 999999.0)))
+	return targets
+
+
+func _default_target_index(targets: Array) -> int:
+	for index in range(targets.size()):
+		var target: Dictionary = targets[index]
+		if int(target.get("entry", 0)) == CORPSE_LOOT_TARGET_ENTRY:
+			return index
+	return 0
+
+
+func _distance_from_login(login: Dictionary, object: Dictionary) -> float:
+	if login.is_empty():
+		return 0.0
+	var dx := float(object.get("x", 0.0)) - float(login.get("x", 0.0))
+	var dy := float(object.get("y", 0.0)) - float(login.get("y", 0.0))
+	var dz := float(object.get("z", 0.0)) - float(login.get("z", 0.0))
+	return sqrt(dx * dx + dy * dy + dz * dz)
+
+
+func _target_picker_text(target: Dictionary) -> String:
+	var health_text := ""
+	if bool(target.get("health_seen", false)):
+		health_text = " hp %s/%s" % [
+			str(target.get("health", 0)),
+			str(target.get("max_health", 0)),
+		]
+	return "%s, %.1fm%s" % [
+		_target_name_from_visible(target),
+		float(target.get("distance", 0.0)),
+		health_text,
+	]
+
+
+func _target_name_from_visible(target: Dictionary) -> String:
+	var name := str(target.get("name", "")).strip_edges()
+	if not name.is_empty():
+		return name
+	return "Creature " + str(target.get("entry", 0))
 
 
 func _render_loot(result: Dictionary) -> void:
@@ -418,4 +589,24 @@ func _finish_loot_inventory_self_test(ok: bool, result: Dictionary) -> void:
 		get_tree().quit(0)
 	else:
 		push_error("LOOT_INVENTORY_SELF_TEST_FAILED: " + _failure_summary("Loot inventory probe failed", result))
+		get_tree().quit(1)
+
+
+func _finish_target_picker_self_test(ok: bool, result: Dictionary) -> void:
+	if OS.get_environment("ACORE_LOOT_TARGET_PICKER_SELF_TEST") != "1":
+		return
+	if self_test_finished:
+		return
+	self_test_finished = true
+
+	if ok:
+		var selected: Dictionary = result.get("selected_target", {})
+		print("LOOT_TARGET_PICKER_SELF_TEST_OK target_count=%s selected_entry=%s selected_guid=%s" % [
+			str(result.get("target_picker_count", 0)),
+			str(selected.get("entry", 0)),
+			str(selected.get("guid", "0x0")),
+		])
+		get_tree().quit(0)
+	else:
+		push_error("LOOT_TARGET_PICKER_SELF_TEST_FAILED: " + _failure_summary("Target picker failed", result))
 		get_tree().quit(1)

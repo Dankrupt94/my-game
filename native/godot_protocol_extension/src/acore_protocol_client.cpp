@@ -373,6 +373,9 @@ void AcoreProtocolClient::_bind_methods()
         D_METHOD("enter_world", "host", "port", "account", "password", "character_name"),
         &AcoreProtocolClient::enter_world);
     ClassDB::bind_method(
+        D_METHOD("visible_targets_snapshot", "host", "port", "account", "password", "character_name"),
+        &AcoreProtocolClient::visible_targets_snapshot);
+    ClassDB::bind_method(
         D_METHOD("move_heartbeat", "host", "port", "account", "password", "character_name", "delta_x", "delta_y", "delta_orientation"),
         &AcoreProtocolClient::move_heartbeat);
     ClassDB::bind_method(
@@ -1413,6 +1416,42 @@ Dictionary AcoreProtocolClient::enter_world(
         result["login"] = login_verify_dictionary(flow.login);
         result["update"] = update_dictionary(flow.update);
         result["skipped_login_opcodes"] = opcode_array(flow.skipped_login_opcodes);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::visible_targets_snapshot(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name)
+{
+    try
+    {
+        acore_protocol::VisibleTargetsSnapshotResult flow = acore_protocol::visible_targets_snapshot(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name));
+
+        Dictionary result;
+        result["ok"] = flow.logged_in_world;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["login"] = login_verify_dictionary(flow.login);
+        result["logged_in_world"] = flow.logged_in_world;
+        result["update_packet_count"] = static_cast<int>(flow.update_packet_count);
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
         return result;
     }
     catch (std::exception const& exc)
