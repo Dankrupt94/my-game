@@ -5,7 +5,11 @@ const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
 const TEST_CHARACTER_NAME := "Codexstage"
 const VENDOR_TARGET_ENTRY := 1213
 const VENDOR_TARGET_NAME := "Nearby Vendor"
+const VENDOR_BUY_SELL_TEST_SLOT := 8
+const VENDOR_BUY_SELL_TEST_ITEM_ID := 17184
+const VENDOR_BUY_SELL_TEST_COUNT := 1
 const SMSG_LIST_INVENTORY := 0x19F
+const SMSG_BUY_ITEM := 0x1A4
 const INFINITE_STOCK := 0xFFFFFFFF
 
 var status_label: Label
@@ -24,6 +28,8 @@ func _ready() -> void:
 	_build_view()
 	if OS.get_environment("ACORE_VENDOR_TARGET_PICKER_SELF_TEST") == "1":
 		call_deferred("_run_target_picker_self_test")
+	elif OS.get_environment("ACORE_VENDOR_BUY_SELL_SELF_TEST") == "1":
+		call_deferred("_run_vendor_buy_sell_self_test")
 	elif OS.get_environment("ACORE_VENDOR_LIST_SELF_TEST") == "1":
 		call_deferred("_run_vendor_list_self_test")
 	else:
@@ -108,6 +114,12 @@ func _build_view() -> void:
 	refresh_button.pressed.connect(_run_vendor_list_probe)
 	target_row.add_child(refresh_button)
 
+	var buy_sell_button := Button.new()
+	buy_sell_button.text = "Buy + Sell"
+	buy_sell_button.custom_minimum_size = Vector2(112, 34)
+	buy_sell_button.pressed.connect(_run_vendor_buy_sell_probe)
+	target_row.add_child(buy_sell_button)
+
 	target_picker = ItemList.new()
 	target_picker.custom_minimum_size = Vector2(0, 110)
 	target_picker.item_selected.connect(_on_target_selected)
@@ -162,6 +174,62 @@ func _run_vendor_list_probe() -> void:
 		_opcode_hex(int(result.get("response_opcode", 0))),
 	])
 	_finish_vendor_list_self_test(true, result)
+
+
+func _run_vendor_buy_sell_self_test() -> void:
+	var scan_result := _scan_visible_targets(false)
+	if not bool(scan_result.get("ok", false)):
+		_finish_vendor_buy_sell_self_test(false, scan_result)
+		return
+	_run_vendor_buy_sell_probe(true)
+
+
+func _run_vendor_buy_sell_probe(finish_self_test := false) -> void:
+	status_label.text = "Running"
+	vendor_label.text = "Vendor: buying and selling"
+	item_list.clear()
+
+	if selected_target_selector.is_empty():
+		var scan_result := _scan_visible_targets(false)
+		if not bool(scan_result.get("ok", false)):
+			status_label.text = "Failed"
+			target_label.text = _failure_summary("Vendor transaction target scan failed", scan_result)
+			_finish_vendor_buy_sell_self_test(false, scan_result)
+			return
+
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.vendor_buy_sell_probe_selector(
+		TEST_CHARACTER_NAME,
+		_target_selector(),
+		_target_name(),
+		VENDOR_BUY_SELL_TEST_SLOT,
+		VENDOR_BUY_SELL_TEST_ITEM_ID,
+		VENDOR_BUY_SELL_TEST_COUNT)
+	var ok := bool(result.get("ok", false))
+	if not ok:
+		status_label.text = "Failed"
+		target_label.text = _failure_summary("Vendor buy/sell probe failed", result)
+		_render_vendor_buy_sell(result)
+		_finish_vendor_buy_sell_self_test(false, result)
+		return
+
+	status_label.text = "Ready"
+	target_label.text = "Target %s sold item %s after buying it in slot %s; roundtrip=%s." % [
+		str(result.get("target_guid", "0x0")),
+		str(result.get("item_id", VENDOR_BUY_SELL_TEST_ITEM_ID)),
+		str(result.get("bought_slot", 0)),
+		str(result.get("roundtrip_confirmed", false)),
+	]
+	_render_vendor_buy_sell(result)
+	print("VENDOR_BUY_SELL_SELF_TEST_READY target_entry=%s item_id=%s bought_slot=%s buy_opcode=0x%s roundtrip=%s coin_delta=%s" % [
+		str(result.get("target_entry", _target_entry())),
+		str(result.get("item_id", VENDOR_BUY_SELL_TEST_ITEM_ID)),
+		str(result.get("bought_slot", 0)),
+		_opcode_hex(int(result.get("buy_response_opcode", 0))),
+		str(result.get("roundtrip_confirmed", false)),
+		str(result.get("roundtrip_coinage_delta", 0)),
+	])
+	_finish_vendor_buy_sell_self_test(true, result)
 
 
 func _run_target_picker_self_test() -> void:
@@ -353,6 +421,36 @@ func _render_vendor(result: Dictionary) -> void:
 		item_list.add_item(_vendor_item_row(item))
 
 
+func _render_vendor_buy_sell(result: Dictionary) -> void:
+	item_list.clear()
+	item_list.add_item("Buy sent %s | response %s | opcode 0x%s | failed reason %s" % [
+		str(result.get("buy_sent", false)),
+		str(result.get("buy_response_seen", false)),
+		_opcode_hex(int(result.get("buy_response_opcode", 0))),
+		str(result.get("buy_failure_reason", 0)),
+	])
+	item_list.add_item("Bought item %s x%s | slot %s | guid %s" % [
+		str(result.get("item_id", VENDOR_BUY_SELL_TEST_ITEM_ID)),
+		str(result.get("count", VENDOR_BUY_SELL_TEST_COUNT)),
+		str(result.get("bought_slot", 0)),
+		str(result.get("bought_guid", "0x0")),
+	])
+	item_list.add_item("Sell sent %s | sell error %s | sell confirmed %s | roundtrip %s" % [
+		str(result.get("sell_sent", false)),
+		str(result.get("sell_error_seen", false)),
+		str(result.get("sell_confirmed", false)),
+		str(result.get("roundtrip_confirmed", false)),
+	])
+	item_list.add_item("Money %s -> %s -> %s | buy %s | sell %s | total %s" % [
+		_money_text(int(result.get("before_coinage", 0))),
+		_money_text(int(result.get("after_buy_coinage", 0))),
+		_money_text(int(result.get("after_sell_coinage", 0))),
+		_money_delta_text(int(result.get("buy_coinage_delta", 0))),
+		_money_delta_text(int(result.get("sell_coinage_delta", 0))),
+		_money_delta_text(int(result.get("roundtrip_coinage_delta", 0))),
+	])
+
+
 func _finish_vendor_list_self_test(ok: bool, result: Dictionary) -> void:
 	if OS.get_environment("ACORE_VENDOR_LIST_SELF_TEST") != "1":
 		return
@@ -368,6 +466,31 @@ func _finish_vendor_list_self_test(ok: bool, result: Dictionary) -> void:
 		return
 
 	push_error("VENDOR_LIST_SELF_TEST_FAILED " + JSON.stringify(result))
+	get_tree().quit(1)
+
+
+func _finish_vendor_buy_sell_self_test(ok: bool, result: Dictionary) -> void:
+	if OS.get_environment("ACORE_VENDOR_BUY_SELL_SELF_TEST") != "1":
+		return
+	if ok \
+			and bool(result.get("buy_response_seen", false)) \
+			and bool(result.get("buy_succeeded", false)) \
+			and int(result.get("buy_response_opcode", 0)) == SMSG_BUY_ITEM \
+			and bool(result.get("bought_item_found", false)) \
+			and bool(result.get("sell_sent", false)) \
+			and not bool(result.get("sell_error_seen", false)) \
+			and bool(result.get("sell_confirmed", false)) \
+			and bool(result.get("roundtrip_confirmed", false)):
+		print("VENDOR_BUY_SELL_SELF_TEST_OK item_id=%s bought_slot=%s buy_opcode=0x%s roundtrip_delta=%s" % [
+			str(result.get("item_id", VENDOR_BUY_SELL_TEST_ITEM_ID)),
+			str(result.get("bought_slot", 0)),
+			_opcode_hex(int(result.get("buy_response_opcode", 0))),
+			str(result.get("roundtrip_coinage_delta", 0)),
+		])
+		get_tree().quit(0)
+		return
+
+	push_error("VENDOR_BUY_SELL_SELF_TEST_FAILED " + JSON.stringify(result))
 	get_tree().quit(1)
 
 
@@ -428,6 +551,11 @@ func _money_text(copper: int) -> String:
 	if silver > 0:
 		return "%ss %sc" % [str(silver), str(copper_only)]
 	return "%sc" % str(copper_only)
+
+
+func _money_delta_text(copper: int) -> String:
+	var prefix := "+" if copper >= 0 else "-"
+	return prefix + _money_text(abs(copper))
 
 
 func _opcode_hex(value: int) -> String:

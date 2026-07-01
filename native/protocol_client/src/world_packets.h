@@ -28,6 +28,8 @@ constexpr std::uint32_t CMSG_LOOT_MONEY = 0x15E;
 constexpr std::uint32_t CMSG_LOOT_RELEASE = 0x15F;
 constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
 constexpr std::uint32_t CMSG_LIST_INVENTORY = 0x19E;
+constexpr std::uint32_t CMSG_SELL_ITEM = 0x1A0;
+constexpr std::uint32_t CMSG_BUY_ITEM = 0x1A2;
 constexpr std::uint32_t CMSG_TRAINER_LIST = 0x1B0;
 constexpr std::uint32_t CMSG_TRAINER_BUY_SPELL = 0x1B2;
 constexpr std::uint32_t CMSG_TIME_SYNC_RESP = 0x391;
@@ -66,6 +68,9 @@ constexpr std::uint16_t SMSG_LOOT_CLEAR_MONEY = 0x165;
 constexpr std::uint16_t SMSG_COMPRESSED_UPDATE_OBJECT = 0x1F6;
 constexpr std::uint16_t SMSG_GOSSIP_MESSAGE = 0x17D;
 constexpr std::uint16_t SMSG_LIST_INVENTORY = 0x19F;
+constexpr std::uint16_t SMSG_SELL_ITEM = 0x1A1;
+constexpr std::uint16_t SMSG_BUY_ITEM = 0x1A4;
+constexpr std::uint16_t SMSG_BUY_FAILED = 0x1A5;
 constexpr std::uint16_t SMSG_TRAINER_LIST = 0x1B1;
 constexpr std::uint16_t SMSG_TRAINER_BUY_SUCCEEDED = 0x1B3;
 constexpr std::uint16_t SMSG_TRAINER_BUY_FAILED = 0x1B4;
@@ -376,6 +381,31 @@ struct VendorListSummary
     std::vector<VendorItemSummary> items;
 };
 
+struct VendorBuyResponseSummary
+{
+    bool parsed = false;
+    bool succeeded = false;
+    bool failed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t vendor_guid = 0;
+    std::uint32_t vendor_slot = 0;
+    std::uint32_t item_id = 0;
+    std::uint32_t left_in_stock = 0;
+    std::uint32_t count = 0;
+    std::uint32_t failure_param = 0;
+    std::uint8_t failure_reason = 0;
+};
+
+struct VendorSellErrorSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t vendor_guid = 0;
+    std::uint64_t item_guid = 0;
+    std::uint32_t param = 0;
+    std::uint8_t reason = 0;
+};
+
 struct LootResponseSummary
 {
     bool parsed = false;
@@ -401,6 +431,15 @@ std::vector<std::uint8_t> build_character_create_payload(std::string const& name
 std::vector<std::uint8_t> build_player_login_payload(std::uint64_t character_guid);
 std::vector<std::uint8_t> build_raw_guid_payload(std::uint64_t raw_guid);
 std::vector<std::uint8_t> build_trainer_buy_spell_payload(std::uint64_t trainer_guid, std::uint32_t spell_id);
+std::vector<std::uint8_t> build_vendor_buy_item_payload(
+    std::uint64_t vendor_guid,
+    std::uint32_t item_id,
+    std::uint32_t vendor_slot,
+    std::uint32_t count);
+std::vector<std::uint8_t> build_vendor_sell_item_payload(
+    std::uint64_t vendor_guid,
+    std::uint64_t item_guid,
+    std::uint32_t count);
 std::vector<std::uint8_t> build_loot_payload(std::uint64_t raw_guid);
 std::vector<std::uint8_t> build_loot_release_payload(std::uint64_t raw_guid);
 std::vector<std::uint8_t> build_autostore_loot_item_payload(std::uint8_t loot_slot);
@@ -450,6 +489,9 @@ TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> pay
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std::uint8_t> payload);
 VendorListSummary parse_vendor_list_response(std::span<const std::uint8_t> payload);
+VendorBuyResponseSummary parse_vendor_buy_response(std::span<const std::uint8_t> payload);
+VendorBuyResponseSummary parse_vendor_buy_failed_response(std::span<const std::uint8_t> payload);
+VendorSellErrorSummary parse_vendor_sell_error_response(std::span<const std::uint8_t> payload);
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,

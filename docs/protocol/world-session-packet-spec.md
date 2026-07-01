@@ -512,9 +512,9 @@ Remaining trainer packet work:
 - Replace the target scan/list picker with normal in-world click targeting and persistent-session flow.
 - Keep the local trainer-buy fixture documented and rerun it before repeat success-path validations.
 
-## Vendor List Slice
+## Vendor List And Buy/Sell Slice
 
-Stage 17 now has the first vendor-list path required by [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md). This is a read-only vendor window slice: it opens a live AzerothCore vendor inventory and renders server-returned item rows by id and numeric fields. Buy, sell, repair, item names, icons, and tooltips remain future work.
+Stage 17 now has the first vendor-list and bounded vendor buy/sell paths required by [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md). This still is not full vendor parity: the current proof buys one known local test item, immediately sells that exact bought item GUID back to the same vendor, and verifies inventory/coinage changes. Repair, stock refresh UI, item names, icons, and tooltips remain future work.
 
 Relevant opcodes:
 
@@ -522,12 +522,35 @@ Relevant opcodes:
 | --- | ---: | --- |
 | `CMSG_LIST_INVENTORY` | `0x19E` | Sends selected vendor GUID after moving within NPC interaction range |
 | `SMSG_LIST_INVENTORY` | `0x19F` | Parses vendor GUID, item count, optional empty-list error byte, and item rows |
+| `CMSG_SELL_ITEM` | `0x1A0` | Sends selected vendor GUID, exact owned item GUID, and count |
+| `SMSG_SELL_ITEM` | `0x1A1` | Parses sell-error responses; success is confirmed by inventory and coinage snapshots |
+| `CMSG_BUY_ITEM` | `0x1A2` | Sends selected vendor GUID, item id, vendor slot, count, and trailing client byte |
+| `SMSG_BUY_ITEM` | `0x1A4` | Parses successful buy response |
+| `SMSG_BUY_FAILED` | `0x1A5` | Parses buy failure item id, optional param, and reason |
 
 Client request payload:
 
 | Field | Size | Notes |
 | --- | ---: | --- |
 | vendor GUID | 8 | Raw little-endian object GUID |
+
+Buy request payload from `WorldPackets::Item::BuyItem::Read`:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| vendor GUID | 8 | Raw little-endian object GUID |
+| item id | 4 | Vendor item template id |
+| vendor slot | 4 | Server vendor slot from the list row |
+| count | 4 | Requested buy count |
+| unknown byte | 1 | AzerothCore reads and ignores this trailing byte |
+
+Sell request payload from `WorldPackets::Item::SellItem::Read`:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| vendor GUID | 8 | Raw little-endian object GUID |
+| item GUID | 8 | Exact player-owned item GUID from inventory after buy |
+| count | 4 | Sell count |
 
 Server response payload from `WorldSession::SendListInventory`:
 
@@ -552,11 +575,15 @@ Observed Stage 17 result:
 - Godot scene `scenes/stage17_vendor_view.tscn` scans visible targets, prefers local vendor entry `1213`, sends the selected exact GUID through `ProtocolClientBridge.vendor_list_probe_selector(...)`, and renders numeric vendor item rows.
 - `ACORE_VENDOR_TARGET_PICKER_SELF_TEST=1` selected entry `1213` by exact GUID from 146 visible unit targets.
 - `ACORE_VENDOR_LIST_SELF_TEST=1` passed with `moved_close=true`, `returned=true`, 8 item rows, and response opcode `0x19F`.
+- Native helper command `--vendor-buy-sell` bought local test item id `17184` from vendor slot `8`, observed `SMSG_BUY_ITEM` opcode `0x1A4`, found the new item GUID in backpack slot `34`, sent `CMSG_SELL_ITEM` for that exact GUID, saw no sell error, and confirmed the slot returned to its prior state.
+- The latest live round trip changed coinage from `9965` to `9933` after buy, then `9939` after sell, for deltas `-32`, `+6`, and `-26`. This is expected because vendor buy and sell prices differ.
+- Godot scene `scenes/stage17_vendor_view.tscn` now exposes a `Buy + Sell` control and passed `ACORE_VENDOR_BUY_SELL_SELF_TEST=1` with buy opcode `0x1A4`, bought slot `34`, and `roundtrip=true`.
 - The scene uses generic labels and item ids only. Committed data does not include proprietary NPC names, item names, icons, or extracted client data.
 
 Remaining vendor packet work:
 
-- Add buy, sell, repair, failure-code UI, stock refresh, and inventory refresh after purchase/sale.
+- Turn the buy/sell proof into a normal player vendor window with chosen rows, quantities, failure-code UI, stock refresh, and visible inventory refresh after purchase/sale.
+- Add repair support and repair-cost/failure handling.
 - Resolve item names/icons/tooltips through the local-only data/asset pipeline.
 - Replace the target scan/list picker with normal in-world click targeting and persistent-session flow.
 

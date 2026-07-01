@@ -86,6 +86,46 @@ struct WorldPacketData
     std::vector<std::uint8_t> payload;
 };
 
+struct VendorBuyAttempt
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    bool live_target_found = false;
+    bool target_has_position = false;
+    bool approach_movement_sent = false;
+    bool return_movement_sent = false;
+    bool selection_sent = false;
+    bool vendor_list_sent = false;
+    bool vendor_list_response_seen = false;
+    VendorListSummary vendor_list;
+    bool buy_sent = false;
+    bool buy_response_seen = false;
+    std::uint16_t buy_response_opcode = 0;
+    VendorBuyResponseSummary buy_response;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
+struct VendorSellAttempt
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    bool live_target_found = false;
+    bool target_has_position = false;
+    bool approach_movement_sent = false;
+    bool return_movement_sent = false;
+    bool selection_sent = false;
+    bool sell_sent = false;
+    bool sell_error_seen = false;
+    VendorSellErrorSummary sell_error;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct AuthenticatedWorldSession
 {
     SocketFd socket;
@@ -2337,6 +2377,556 @@ VendorListProbeResult vendor_list_probe(
     }
 
     (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+VendorBuyAttempt vendor_buy_item_once(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::uint32_t vendor_slot,
+    std::uint32_t item_id,
+    std::uint32_t count,
+    FlowOptions options)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+
+    VendorBuyAttempt result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.target_entry = target_entry_from_selector(target_guid);
+
+    bool logged_in_world = false;
+    for (int i = 0; i < 160; ++i)
+    {
+        auto packet = read_world_packet_optional(session->socket.get(), &session->crypt, options.trace_world_packets, 250);
+        if (!packet)
+        {
+            if (logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            result.visible_objects.insert(result.visible_objects.end(), update.visible_objects.begin(), update.visible_objects.end());
+            if (!result.live_target_found)
+            {
+                std::optional<VisibleObjectSummary> target = choose_visible_target(result.visible_objects, target_guid, login);
+                if (target)
+                {
+                    result.target_guid = target->guid;
+                    result.target_entry = target->entry;
+                    result.target_has_position = target->has_position;
+                    result.live_target_found = true;
+                }
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            logged_in_world = true;
+            if (result.live_target_found)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before vendor buy");
+    }
+    if (!result.live_target_found)
+    {
+        (void)request_graceful_logout(*session, options);
+        return result;
+    }
+
+    std::optional<VisibleObjectSummary> selected_target = choose_visible_target(result.visible_objects, result.target_guid, login);
+    if (selected_target && selected_target->has_position)
+    {
+        float dx = login.x - selected_target->x;
+        float dy = login.y - selected_target->y;
+        float distance = std::sqrt(dx * dx + dy * dy);
+        if (distance < 0.01f)
+        {
+            dx = 1.0f;
+            dy = 0.0f;
+            distance = 1.0f;
+        }
+        MovementSample start;
+        start.flags = 0x00000001;
+        start.time = movement_timestamp_ms();
+        start.x = login.x;
+        start.y = login.y;
+        start.z = login.z;
+        start.orientation = facing_angle(start.x, start.y, selected_target->x, selected_target->y);
+
+        MovementSample approach = start;
+        approach.flags = 0;
+        approach.x = selected_target->x + (dx / distance) * 1.5f;
+        approach.y = selected_target->y + (dy / distance) * 1.5f;
+        approach.z = selected_target->z;
+        approach.orientation = facing_angle(approach.x, approach.y, selected_target->x, selected_target->y);
+
+        write_world_packet(session->socket.get(), MSG_MOVE_START_FORWARD, build_movement_payload(selected.guid, start), &session->crypt);
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        approach.time = movement_timestamp_ms();
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, approach), &session->crypt);
+        result.approach_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.selection_sent = true;
+    write_world_packet(session->socket.get(), CMSG_LIST_INVENTORY, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.vendor_list_sent = true;
+
+    for (int i = 0; i < 80; ++i)
+    {
+        auto packet = read_world_packet_optional(session->socket.get(), &session->crypt, options.trace_world_packets, 250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (packet->opcode == SMSG_LIST_INVENTORY)
+        {
+            result.vendor_list = parse_vendor_list_response(packet->payload);
+            result.vendor_list_response_seen = result.vendor_list.parsed;
+            break;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (result.vendor_list_response_seen)
+    {
+        write_world_packet(
+            session->socket.get(),
+            CMSG_BUY_ITEM,
+            build_vendor_buy_item_payload(result.target_guid, item_id, vendor_slot, count),
+            &session->crypt);
+        result.buy_sent = true;
+
+        for (int i = 0; i < 80; ++i)
+        {
+            auto packet = read_world_packet_optional(session->socket.get(), &session->crypt, options.trace_world_packets, 250);
+            if (!packet)
+            {
+                continue;
+            }
+            if (packet->opcode == SMSG_BUY_ITEM)
+            {
+                result.buy_response = parse_vendor_buy_response(packet->payload);
+                result.buy_response.item_id = item_id;
+                result.buy_response_seen = result.buy_response.parsed;
+                result.buy_response_opcode = packet->opcode;
+                break;
+            }
+            if (packet->opcode == SMSG_BUY_FAILED)
+            {
+                result.buy_response = parse_vendor_buy_failed_response(packet->payload);
+                result.buy_response_seen = result.buy_response.parsed;
+                result.buy_response_opcode = packet->opcode;
+                break;
+            }
+            if (packet->opcode == SMSG_TIME_SYNC_REQ)
+            {
+                answer_time_sync_request(*session, *packet);
+                continue;
+            }
+            if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+            {
+                throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+            }
+            result.skipped_opcodes.push_back(packet->opcode);
+        }
+    }
+
+    if (result.approach_movement_sent)
+    {
+        MovementSample back;
+        back.time = movement_timestamp_ms();
+        back.x = login.x;
+        back.y = login.y;
+        back.z = login.z;
+        back.orientation = login.orientation;
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, back), &session->crypt);
+        result.return_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+VendorSellAttempt vendor_sell_item_once(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::uint64_t item_guid,
+    std::uint32_t count,
+    FlowOptions options)
+{
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+
+    VendorSellAttempt result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.target_entry = target_entry_from_selector(target_guid);
+
+    bool logged_in_world = false;
+    for (int i = 0; i < 160; ++i)
+    {
+        auto packet = read_world_packet_optional(session->socket.get(), &session->crypt, options.trace_world_packets, 250);
+        if (!packet)
+        {
+            if (logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            result.visible_objects.insert(result.visible_objects.end(), update.visible_objects.begin(), update.visible_objects.end());
+            if (!result.live_target_found)
+            {
+                std::optional<VisibleObjectSummary> target = choose_visible_target(result.visible_objects, target_guid, login);
+                if (target)
+                {
+                    result.target_guid = target->guid;
+                    result.target_entry = target->entry;
+                    result.target_has_position = target->has_position;
+                    result.live_target_found = true;
+                }
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            logged_in_world = true;
+            if (result.live_target_found)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before vendor sell");
+    }
+    if (!result.live_target_found)
+    {
+        (void)request_graceful_logout(*session, options);
+        return result;
+    }
+
+    std::optional<VisibleObjectSummary> selected_target = choose_visible_target(result.visible_objects, result.target_guid, login);
+    if (selected_target && selected_target->has_position)
+    {
+        float dx = login.x - selected_target->x;
+        float dy = login.y - selected_target->y;
+        float distance = std::sqrt(dx * dx + dy * dy);
+        if (distance < 0.01f)
+        {
+            dx = 1.0f;
+            dy = 0.0f;
+            distance = 1.0f;
+        }
+        MovementSample start;
+        start.flags = 0x00000001;
+        start.time = movement_timestamp_ms();
+        start.x = login.x;
+        start.y = login.y;
+        start.z = login.z;
+        start.orientation = facing_angle(start.x, start.y, selected_target->x, selected_target->y);
+
+        MovementSample approach = start;
+        approach.flags = 0;
+        approach.x = selected_target->x + (dx / distance) * 1.5f;
+        approach.y = selected_target->y + (dy / distance) * 1.5f;
+        approach.z = selected_target->z;
+        approach.orientation = facing_angle(approach.x, approach.y, selected_target->x, selected_target->y);
+
+        write_world_packet(session->socket.get(), MSG_MOVE_START_FORWARD, build_movement_payload(selected.guid, start), &session->crypt);
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        approach.time = movement_timestamp_ms();
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, approach), &session->crypt);
+        result.approach_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.selection_sent = true;
+    write_world_packet(
+        session->socket.get(),
+        CMSG_SELL_ITEM,
+        build_vendor_sell_item_payload(result.target_guid, item_guid, count),
+        &session->crypt);
+    result.sell_sent = true;
+
+    for (int i = 0; i < 32; ++i)
+    {
+        auto packet = read_world_packet_optional(session->socket.get(), &session->crypt, options.trace_world_packets, 250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (packet->opcode == SMSG_SELL_ITEM)
+        {
+            result.sell_error = parse_vendor_sell_error_response(packet->payload);
+            result.sell_error_seen = result.sell_error.parsed;
+            break;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (result.approach_movement_sent)
+    {
+        MovementSample back;
+        back.time = movement_timestamp_ms();
+        back.x = login.x;
+        back.y = login.y;
+        back.z = login.z;
+        back.orientation = login.orientation;
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, back), &session->crypt);
+        result.return_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
+std::optional<InventorySlotSummary> find_bought_inventory_slot(
+    PlayerInventorySummary const& before,
+    PlayerInventorySummary const& after,
+    std::uint32_t item_id,
+    std::uint32_t count)
+{
+    for (std::uint8_t slot = 0; slot < PlayerInventorySnapshotSlots; ++slot)
+    {
+        InventorySlotSummary before_slot = inventory_slot_at(before, slot);
+        InventorySlotSummary after_slot = inventory_slot_at(after, slot);
+        if (!after_slot.populated || after_slot.item_entry != item_id)
+        {
+            continue;
+        }
+        if (!before_slot.populated)
+        {
+            return after_slot;
+        }
+        if (before_slot.item_guid == after_slot.item_guid
+            && after_slot.stack_count >= before_slot.stack_count + count)
+        {
+            return after_slot;
+        }
+        if (before_slot.item_guid != after_slot.item_guid)
+        {
+            return after_slot;
+        }
+    }
+    return std::nullopt;
+}
+
+VendorBuySellProbeResult vendor_buy_sell_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    std::uint32_t vendor_slot,
+    std::uint32_t item_id,
+    std::uint32_t count,
+    FlowOptions options)
+{
+    if (target_guid == 0)
+    {
+        throw std::runtime_error("vendor target guid or entry must be non-zero");
+    }
+    if (vendor_slot == 0 || item_id == 0 || count == 0)
+    {
+        throw std::runtime_error("vendor buy/sell requires non-zero slot, item, and count");
+    }
+
+    VendorBuySellProbeResult result;
+    result.target_entry = target_entry_from_selector(target_guid);
+    result.target_name = target_name;
+    result.vendor_slot = vendor_slot;
+    result.item_id = item_id;
+    result.count = count;
+
+    InventorySnapshotResult before = read_inventory_snapshot(host, port, account, password, character_name, options);
+    result.realm = before.realm;
+    result.character = before.character;
+    result.inventory_before = before.inventory;
+    result.inventory_before_seen = before.inventory_seen;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), before.skipped_opcodes.begin(), before.skipped_opcodes.end());
+    if (!before.inventory_seen || before.inventory.slots.size() != PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error("did not observe inventory before vendor buy/sell probe");
+    }
+
+    VendorBuyAttempt buy = vendor_buy_item_once(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        target_guid,
+        vendor_slot,
+        item_id,
+        count,
+        options);
+    result.realm = buy.realm;
+    result.character = buy.character;
+    result.target_guid = buy.target_guid;
+    result.target_entry = buy.target_entry;
+    result.live_target_found = buy.live_target_found;
+    result.target_has_position = buy.target_has_position;
+    result.approach_movement_sent = buy.approach_movement_sent;
+    result.return_movement_sent = buy.return_movement_sent;
+    result.selection_sent = buy.selection_sent;
+    result.vendor_list_sent = buy.vendor_list_sent;
+    result.vendor_list_response_seen = buy.vendor_list_response_seen;
+    result.vendor_list = buy.vendor_list;
+    result.buy_sent = buy.buy_sent;
+    result.buy_response_seen = buy.buy_response_seen;
+    result.buy_response = buy.buy_response;
+    result.buy_response_opcode = buy.buy_response_opcode;
+    result.visible_objects = buy.visible_objects;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), buy.skipped_opcodes.begin(), buy.skipped_opcodes.end());
+    if (!buy.buy_response_seen || !buy.buy_response.succeeded)
+    {
+        return result;
+    }
+
+    InventorySnapshotResult after_buy = read_inventory_snapshot(host, port, account, password, character_name, options);
+    result.inventory_after_buy = after_buy.inventory;
+    result.inventory_after_buy_seen = after_buy.inventory_seen;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), after_buy.skipped_opcodes.begin(), after_buy.skipped_opcodes.end());
+    if (!after_buy.inventory_seen || after_buy.inventory.slots.size() != PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error("did not observe inventory after vendor buy");
+    }
+
+    std::optional<InventorySlotSummary> bought_slot = find_bought_inventory_slot(before.inventory, after_buy.inventory, item_id, count);
+    if (!bought_slot)
+    {
+        return result;
+    }
+    result.bought_item_found = true;
+    result.bought_slot_after_buy = *bought_slot;
+    result.bought_slot_before = inventory_slot_at(before.inventory, bought_slot->slot);
+
+    VendorSellAttempt sell = vendor_sell_item_once(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        result.target_guid,
+        bought_slot->item_guid,
+        count,
+        options);
+    result.sell_sent = sell.sell_sent;
+    result.sell_error_seen = sell.sell_error_seen;
+    result.sell_error = sell.sell_error;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), sell.skipped_opcodes.begin(), sell.skipped_opcodes.end());
+
+    InventorySnapshotResult after_sell = read_inventory_snapshot(host, port, account, password, character_name, options);
+    result.inventory_after_sell = after_sell.inventory;
+    result.inventory_after_sell_seen = after_sell.inventory_seen;
+    result.skipped_opcodes.insert(result.skipped_opcodes.end(), after_sell.skipped_opcodes.begin(), after_sell.skipped_opcodes.end());
+    if (!after_sell.inventory_seen || after_sell.inventory.slots.size() != PlayerInventorySnapshotSlots)
+    {
+        throw std::runtime_error("did not observe inventory after vendor sell");
+    }
+
+    result.bought_slot_after_sell = inventory_slot_at(after_sell.inventory, bought_slot->slot);
+    result.sell_confirmed = sell.sell_sent
+        && !sell.sell_error_seen
+        && !inventory_slot_changed(result.bought_slot_before, result.bought_slot_after_sell);
+
+    result.coinage_before_seen = before.inventory.coinage_seen;
+    result.coinage_after_buy_seen = after_buy.inventory.coinage_seen;
+    result.coinage_after_sell_seen = after_sell.inventory.coinage_seen;
+    if (result.coinage_before_seen && result.coinage_after_buy_seen)
+    {
+        result.buy_coinage_delta = static_cast<std::int64_t>(after_buy.inventory.coinage)
+            - static_cast<std::int64_t>(before.inventory.coinage);
+    }
+    if (result.coinage_after_buy_seen && result.coinage_after_sell_seen)
+    {
+        result.sell_coinage_delta = static_cast<std::int64_t>(after_sell.inventory.coinage)
+            - static_cast<std::int64_t>(after_buy.inventory.coinage);
+    }
+    if (result.coinage_before_seen && result.coinage_after_sell_seen)
+    {
+        result.roundtrip_coinage_delta = static_cast<std::int64_t>(after_sell.inventory.coinage)
+            - static_cast<std::int64_t>(before.inventory.coinage);
+    }
+    result.roundtrip_confirmed = result.sell_confirmed
+        && result.buy_coinage_delta < 0
+        && result.sell_coinage_delta > 0
+        && result.roundtrip_coinage_delta < 0;
     return result;
 }
 

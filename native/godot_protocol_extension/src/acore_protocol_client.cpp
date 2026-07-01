@@ -403,6 +403,35 @@ Dictionary vendor_list_dictionary(VendorListSummary const& vendor_list)
     return value;
 }
 
+Dictionary vendor_buy_response_dictionary(VendorBuyResponseSummary const& response)
+{
+    Dictionary value;
+    value["parsed"] = response.parsed;
+    value["payload_size"] = static_cast<int>(response.payload_size);
+    value["vendor_guid"] = guid_to_hex(response.vendor_guid);
+    value["vendor_slot"] = static_cast<int64_t>(response.vendor_slot);
+    value["item_id"] = static_cast<int64_t>(response.item_id);
+    value["left_in_stock"] = static_cast<int64_t>(response.left_in_stock);
+    value["count"] = static_cast<int64_t>(response.count);
+    value["failure_param"] = static_cast<int64_t>(response.failure_param);
+    value["failure_reason"] = static_cast<int>(response.failure_reason);
+    value["succeeded"] = response.succeeded;
+    value["failed"] = response.failed;
+    return value;
+}
+
+Dictionary vendor_sell_error_dictionary(VendorSellErrorSummary const& response)
+{
+    Dictionary value;
+    value["parsed"] = response.parsed;
+    value["payload_size"] = static_cast<int>(response.payload_size);
+    value["vendor_guid"] = guid_to_hex(response.vendor_guid);
+    value["item_guid"] = guid_to_hex(response.item_guid);
+    value["param"] = static_cast<int64_t>(response.param);
+    value["reason"] = static_cast<int>(response.reason);
+    return value;
+}
+
 Dictionary loot_response_dictionary(LootResponseSummary const& loot)
 {
     Dictionary value;
@@ -501,6 +530,12 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("vendor_list_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "target_name"),
         &AcoreProtocolClient::vendor_list_probe_selector);
+    ClassDB::bind_method(
+        D_METHOD("vendor_buy_sell_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name", "vendor_slot", "item_id", "count"),
+        &AcoreProtocolClient::vendor_buy_sell_probe);
+    ClassDB::bind_method(
+        D_METHOD("vendor_buy_sell_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "target_name", "vendor_slot", "item_id", "count"),
+        &AcoreProtocolClient::vendor_buy_sell_probe_selector);
     ClassDB::bind_method(
         D_METHOD("combat_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
         &AcoreProtocolClient::combat_probe);
@@ -890,6 +925,130 @@ Dictionary AcoreProtocolClient::vendor_list_probe_selector(
         result["item_count"] = static_cast<int>(flow.vendor_list.item_count);
         result["error_code"] = static_cast<int>(flow.vendor_list.error_code);
         result["items"] = vendor_item_array(flow.vendor_list.items);
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::vendor_buy_sell_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    String const& target_name,
+    int64_t vendor_slot,
+    int64_t item_id,
+    int64_t count)
+{
+    return vendor_buy_sell_probe_selector(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        String::num_int64(target_entry),
+        target_name,
+        vendor_slot,
+        item_id,
+        count);
+}
+
+Dictionary AcoreProtocolClient::vendor_buy_sell_probe_selector(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    String const& target_selector,
+    String const& target_name,
+    int64_t vendor_slot,
+    int64_t item_id,
+    int64_t count)
+{
+    try
+    {
+        std::uint64_t const selector = parse_target_selector(target_selector, "vendor target selector");
+        if (vendor_slot < 0 || item_id <= 0 || count <= 0)
+        {
+            return failure("vendor slot must be non-negative; item id and count must be positive");
+        }
+
+        acore_protocol::VendorBuySellProbeResult flow = acore_protocol::vendor_buy_sell_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            selector,
+            to_std_string(target_name),
+            static_cast<std::uint32_t>(vendor_slot),
+            static_cast<std::uint32_t>(item_id),
+            static_cast<std::uint32_t>(count));
+
+        Dictionary result;
+        result["ok"] = flow.roundtrip_confirmed;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["vendor_slot"] = static_cast<int64_t>(flow.vendor_slot);
+        result["item_id"] = static_cast<int64_t>(flow.item_id);
+        result["count"] = static_cast<int64_t>(flow.count);
+        result["live_target_found"] = flow.live_target_found;
+        result["target_has_position"] = flow.target_has_position;
+        result["approach_movement_sent"] = flow.approach_movement_sent;
+        result["return_movement_sent"] = flow.return_movement_sent;
+        result["selection_sent"] = flow.selection_sent;
+        result["vendor_list_sent"] = flow.vendor_list_sent;
+        result["vendor_list_response_seen"] = flow.vendor_list_response_seen;
+        result["vendor_list"] = vendor_list_dictionary(flow.vendor_list);
+        result["item_count"] = static_cast<int>(flow.vendor_list.item_count);
+        result["items"] = vendor_item_array(flow.vendor_list.items);
+        result["inventory_before_seen"] = flow.inventory_before_seen;
+        result["inventory_after_buy_seen"] = flow.inventory_after_buy_seen;
+        result["inventory_after_sell_seen"] = flow.inventory_after_sell_seen;
+        result["inventory_before"] = inventory_dictionary(flow.inventory_before);
+        result["inventory_after_buy"] = inventory_dictionary(flow.inventory_after_buy);
+        result["inventory_after_sell"] = inventory_dictionary(flow.inventory_after_sell);
+        result["buy_sent"] = flow.buy_sent;
+        result["buy_response_seen"] = flow.buy_response_seen;
+        result["buy_response"] = vendor_buy_response_dictionary(flow.buy_response);
+        result["buy_succeeded"] = flow.buy_response.succeeded;
+        result["buy_failed"] = flow.buy_response.failed;
+        result["buy_response_opcode"] = static_cast<int>(flow.buy_response_opcode);
+        result["buy_failure_reason"] = static_cast<int>(flow.buy_response.failure_reason);
+        result["bought_item_found"] = flow.bought_item_found;
+        result["bought_slot_before"] = inventory_slot_dictionary(flow.bought_slot_before);
+        result["bought_slot_after_buy"] = inventory_slot_dictionary(flow.bought_slot_after_buy);
+        result["bought_slot_after_sell"] = inventory_slot_dictionary(flow.bought_slot_after_sell);
+        result["bought_slot"] = static_cast<int>(flow.bought_slot_after_buy.slot);
+        result["bought_guid"] = guid_to_hex(flow.bought_slot_after_buy.item_guid);
+        result["sell_sent"] = flow.sell_sent;
+        result["sell_error_seen"] = flow.sell_error_seen;
+        result["sell_error"] = vendor_sell_error_dictionary(flow.sell_error);
+        result["sell_error_reason"] = static_cast<int>(flow.sell_error.reason);
+        result["sell_confirmed"] = flow.sell_confirmed;
+        result["roundtrip_confirmed"] = flow.roundtrip_confirmed;
+        result["coinage_before_seen"] = flow.coinage_before_seen;
+        result["coinage_after_buy_seen"] = flow.coinage_after_buy_seen;
+        result["coinage_after_sell_seen"] = flow.coinage_after_sell_seen;
+        result["before_coinage"] = static_cast<int64_t>(flow.inventory_before.coinage);
+        result["after_buy_coinage"] = static_cast<int64_t>(flow.inventory_after_buy.coinage);
+        result["after_sell_coinage"] = static_cast<int64_t>(flow.inventory_after_sell.coinage);
+        result["buy_coinage_delta"] = static_cast<int64_t>(flow.buy_coinage_delta);
+        result["sell_coinage_delta"] = static_cast<int64_t>(flow.sell_coinage_delta);
+        result["roundtrip_coinage_delta"] = static_cast<int64_t>(flow.roundtrip_coinage_delta);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);

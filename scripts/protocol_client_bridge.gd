@@ -361,6 +361,76 @@ func vendor_list_probe_selector(
 	return parsed
 
 
+func vendor_buy_sell_probe(
+	character_name: String = "Codexstage",
+	target_entry: int = 1213,
+	target_name: String = "Nearby Vendor",
+	vendor_slot: int = 8,
+	item_id: int = 17184,
+	count: int = 1,
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	return vendor_buy_sell_probe_selector(character_name, str(target_entry), target_name, vendor_slot, item_id, count, host, port)
+
+
+func vendor_buy_sell_probe_selector(
+	character_name: String = "Codexstage",
+	target_selector: String = "1213",
+	target_name: String = "Nearby Vendor",
+	vendor_slot: int = 8,
+	item_id: int = 17184,
+	count: int = 1,
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_vendor_buy_sell_probe_selector(
+		character_name,
+		target_selector,
+		target_name,
+		vendor_slot,
+		item_id,
+		count,
+		host,
+		port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--vendor-buy-sell",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			target_selector,
+			target_name,
+			str(vendor_slot),
+			str(item_id),
+			str(count),
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_vendor_buy_sell_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("roundtrip_confirmed", false))
+	return parsed
+
+
 func combat_probe(
 	character_name: String = "Codexstage",
 	target_entry: int = 721,
@@ -1331,6 +1401,45 @@ func _run_native_vendor_list_probe_selector(
 	return parsed
 
 
+func _run_native_vendor_buy_sell_probe_selector(
+	character_name: String,
+	target_selector: String,
+	target_name: String,
+	vendor_slot: int,
+	item_id: int,
+	count: int,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("vendor_buy_sell_probe_selector"):
+		return {}
+
+	var result = client.call(
+		"vendor_buy_sell_probe_selector",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		target_selector,
+		target_name,
+		vendor_slot,
+		item_id,
+		count)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected vendor buy/sell result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
 func _run_native_combat_probe(
 	character_name: String,
 	target_entry: int,
@@ -1917,6 +2026,8 @@ func _redacted_result(result: Dictionary) -> Dictionary:
 	redacted.erase("skipped_opcodes")
 	redacted.erase("inventory_before")
 	redacted.erase("inventory_after")
+	redacted.erase("inventory_after_buy")
+	redacted.erase("inventory_after_sell")
 	if typeof(redacted.get("items", null)) == TYPE_ARRAY:
 		var items: Array = redacted["items"]
 		if items.size() > 8:
@@ -2272,6 +2383,128 @@ func _parse_vendor_list_output(output: String) -> Dictionary:
 		"item_count": result["item_count"],
 		"error_code": result["error_code"],
 		"items": result["items"],
+	}
+	return result
+
+
+func _parse_vendor_buy_sell_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"live_target_found": false,
+		"selection_sent": false,
+		"vendor_list_sent": false,
+		"vendor_list_response_seen": false,
+		"inventory_before_seen": false,
+		"inventory_after_buy_seen": false,
+		"inventory_after_sell_seen": false,
+		"buy_sent": false,
+		"buy_response_seen": false,
+		"buy_succeeded": false,
+		"buy_failed": false,
+		"bought_item_found": false,
+		"sell_sent": false,
+		"sell_error_seen": false,
+		"sell_confirmed": false,
+		"roundtrip_confirmed": false,
+		"target_guid": "0x0",
+		"target_entry": 0,
+		"target_name": "",
+		"vendor_slot": 0,
+		"item_id": 0,
+		"count": 0,
+		"target_has_position": false,
+		"approach_movement_sent": false,
+		"return_movement_sent": false,
+		"visible_object_count": 0,
+		"item_count": 0,
+		"buy_response_opcode": 0,
+		"buy_failure_reason": 0,
+		"bought_slot": 0,
+		"bought_guid": "0x0",
+		"sell_error_reason": 0,
+		"before_coinage": 0,
+		"after_buy_coinage": 0,
+		"after_sell_coinage": 0,
+		"buy_coinage_delta": 0,
+		"sell_coinage_delta": 0,
+		"roundtrip_coinage_delta": 0,
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("VENDOR_BUY_SELL_PROBE"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["target_guid"] = _extract_token_after(line, "target_guid=")
+			result["target_entry"] = _extract_int_field(line, "target_entry=")
+			result["target_name"] = _extract_quoted_field(line, "target_name=\"")
+			result["vendor_slot"] = _extract_int_field(line, "vendor_slot=")
+			result["item_id"] = _extract_int_field(line, "item_id=")
+			result["count"] = _extract_int_field(line, "count=")
+			result["live_target_found"] = _extract_int_field(line, "live_target_found=") == 1
+			result["target_has_position"] = _extract_int_field(line, "target_has_position=") == 1
+			result["visible_object_count"] = _extract_int_field(line, "visible_objects=")
+			result["approach_movement_sent"] = _extract_int_field(line, "approach_movement_sent=") == 1
+			result["return_movement_sent"] = _extract_int_field(line, "return_movement_sent=") == 1
+			result["selection_sent"] = _extract_int_field(line, "selection_sent=") == 1
+			result["vendor_list_sent"] = _extract_int_field(line, "vendor_list_sent=") == 1
+			result["vendor_list_response_seen"] = _extract_int_field(line, "vendor_list_response_seen=") == 1
+			result["inventory_before_seen"] = _extract_int_field(line, "inventory_before_seen=") == 1
+			result["inventory_after_buy_seen"] = _extract_int_field(line, "inventory_after_buy_seen=") == 1
+			result["inventory_after_sell_seen"] = _extract_int_field(line, "inventory_after_sell_seen=") == 1
+			result["buy_sent"] = _extract_int_field(line, "buy_sent=") == 1
+			result["buy_response_seen"] = _extract_int_field(line, "buy_response_seen=") == 1
+			result["buy_succeeded"] = _extract_int_field(line, "buy_succeeded=") == 1
+			result["buy_failed"] = _extract_int_field(line, "buy_failed=") == 1
+			result["buy_response_opcode"] = _extract_hex_field(line, "buy_response_opcode=0x")
+			result["buy_failure_reason"] = _extract_int_field(line, "buy_failure_reason=")
+			result["bought_item_found"] = _extract_int_field(line, "bought_item_found=") == 1
+			result["bought_slot"] = _extract_int_field(line, "bought_slot=")
+			result["bought_guid"] = _extract_token_after(line, "bought_guid=")
+			result["sell_sent"] = _extract_int_field(line, "sell_sent=") == 1
+			result["sell_error_seen"] = _extract_int_field(line, "sell_error_seen=") == 1
+			result["sell_error_reason"] = _extract_int_field(line, "sell_error_reason=")
+			result["sell_confirmed"] = _extract_int_field(line, "sell_confirmed=") == 1
+			result["roundtrip_confirmed"] = _extract_int_field(line, "roundtrip_confirmed=") == 1
+			result["before_coinage"] = _extract_int_field(line, "before_coinage=")
+			result["after_buy_coinage"] = _extract_int_field(line, "after_buy_coinage=")
+			result["after_sell_coinage"] = _extract_int_field(line, "after_sell_coinage=")
+			result["buy_coinage_delta"] = _extract_int_field(line, "buy_coinage_delta=")
+			result["sell_coinage_delta"] = _extract_int_field(line, "sell_coinage_delta=")
+			result["roundtrip_coinage_delta"] = _extract_int_field(line, "roundtrip_coinage_delta=")
+	result["vendor_list"] = {
+		"parsed": result["vendor_list_response_seen"],
+		"vendor_guid": result["target_guid"],
+		"item_count": result["item_count"],
+	}
+	result["inventory_before"] = {
+		"seen": result["inventory_before_seen"],
+		"coinage": result["before_coinage"],
+	}
+	result["inventory_after_buy"] = {
+		"seen": result["inventory_after_buy_seen"],
+		"coinage": result["after_buy_coinage"],
+	}
+	result["inventory_after_sell"] = {
+		"seen": result["inventory_after_sell_seen"],
+		"coinage": result["after_sell_coinage"],
+	}
+	result["buy_response"] = {
+		"parsed": result["buy_response_seen"],
+		"vendor_guid": result["target_guid"],
+		"vendor_slot": result["vendor_slot"],
+		"item_id": result["item_id"],
+		"count": result["count"],
+		"failure_reason": result["buy_failure_reason"],
+		"succeeded": result["buy_succeeded"],
+		"failed": result["buy_failed"],
+	}
+	result["sell_error"] = {
+		"parsed": result["sell_error_seen"],
+		"vendor_guid": result["target_guid"],
+		"item_guid": result["bought_guid"],
+		"reason": result["sell_error_reason"],
 	}
 	return result
 

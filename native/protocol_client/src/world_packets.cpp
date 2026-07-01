@@ -793,6 +793,33 @@ std::vector<std::uint8_t> build_trainer_buy_spell_payload(std::uint64_t trainer_
     return payload;
 }
 
+std::vector<std::uint8_t> build_vendor_buy_item_payload(
+    std::uint64_t vendor_guid,
+    std::uint32_t item_id,
+    std::uint32_t vendor_slot,
+    std::uint32_t count)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, vendor_guid);
+    append_u32_le(payload, item_id);
+    append_u32_le(payload, vendor_slot);
+    append_u32_le(payload, count);
+    append_u8(payload, 0);
+    return payload;
+}
+
+std::vector<std::uint8_t> build_vendor_sell_item_payload(
+    std::uint64_t vendor_guid,
+    std::uint64_t item_guid,
+    std::uint32_t count)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, vendor_guid);
+    append_u64_le(payload, item_guid);
+    append_u32_le(payload, count);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_loot_payload(std::uint64_t raw_guid)
 {
     return build_raw_guid_payload(raw_guid);
@@ -1422,6 +1449,65 @@ VendorListSummary parse_vendor_list_response(std::span<const std::uint8_t> paylo
     return summary;
 }
 
+VendorBuyResponseSummary parse_vendor_buy_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    VendorBuyResponseSummary summary;
+    summary.payload_size = payload.size();
+    summary.vendor_guid = read_u64_le(payload, offset);
+    summary.vendor_slot = read_u32_le(payload, offset);
+    summary.left_in_stock = read_u32_le(payload, offset);
+    summary.count = read_u32_le(payload, offset);
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("vendor buy parser left trailing bytes");
+    }
+    summary.succeeded = true;
+    summary.parsed = true;
+    return summary;
+}
+
+VendorBuyResponseSummary parse_vendor_buy_failed_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    VendorBuyResponseSummary summary;
+    summary.payload_size = payload.size();
+    summary.vendor_guid = read_u64_le(payload, offset);
+    summary.item_id = read_u32_le(payload, offset);
+    if (payload.size() == 17)
+    {
+        summary.failure_param = read_u32_le(payload, offset);
+    }
+    summary.failure_reason = read_u8(payload, offset);
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("vendor buy failure parser left trailing bytes");
+    }
+    summary.failed = true;
+    summary.parsed = true;
+    return summary;
+}
+
+VendorSellErrorSummary parse_vendor_sell_error_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    VendorSellErrorSummary summary;
+    summary.payload_size = payload.size();
+    summary.vendor_guid = read_u64_le(payload, offset);
+    summary.item_guid = read_u64_le(payload, offset);
+    if (payload.size() == 21)
+    {
+        summary.param = read_u32_le(payload, offset);
+    }
+    summary.reason = read_u8(payload, offset);
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("vendor sell error parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
 UpdateObjectSummary parse_update_object_summary(
     std::span<const std::uint8_t> payload,
     bool compressed,
@@ -1686,6 +1772,24 @@ bool world_packet_self_test()
     {
         return false;
     }
+    auto vendor_buy_payload = build_vendor_buy_item_payload(0xF1300004BD000001ULL, 17184, 8, 1);
+    auto vendor_buy_packet = build_client_packet(CMSG_BUY_ITEM, vendor_buy_payload);
+    if (vendor_buy_packet.size() != 27
+        || vendor_buy_packet[2] != 0xA2
+        || vendor_buy_packet[3] != 0x01
+        || vendor_buy_payload.size() != 21)
+    {
+        return false;
+    }
+    auto vendor_sell_payload = build_vendor_sell_item_payload(0xF1300004BD000001ULL, 0x4000000000001234ULL, 1);
+    auto vendor_sell_packet = build_client_packet(CMSG_SELL_ITEM, vendor_sell_payload);
+    if (vendor_sell_packet.size() != 26
+        || vendor_sell_packet[2] != 0xA0
+        || vendor_sell_packet[3] != 0x01
+        || vendor_sell_payload.size() != 20)
+    {
+        return false;
+    }
     auto trainer_buy_payload = build_trainer_buy_spell_payload(0xF13000038F000001ULL, 6673);
     auto trainer_buy_packet = build_client_packet(CMSG_TRAINER_BUY_SPELL, trainer_buy_payload);
     if (trainer_buy_packet.size() != 18
@@ -1912,6 +2016,25 @@ bool world_packet_self_test()
     append_u8(empty_vendor_payload, 0);
     VendorListSummary empty_vendor_list = parse_vendor_list_response(empty_vendor_payload);
 
+    std::vector<std::uint8_t> vendor_buy_response_payload;
+    append_u64_le(vendor_buy_response_payload, 0xF1300004BD000001ULL);
+    append_u32_le(vendor_buy_response_payload, 8);
+    append_u32_le(vendor_buy_response_payload, 0xFFFFFFFF);
+    append_u32_le(vendor_buy_response_payload, 1);
+    VendorBuyResponseSummary vendor_buy_response = parse_vendor_buy_response(vendor_buy_response_payload);
+
+    std::vector<std::uint8_t> vendor_buy_failed_payload;
+    append_u64_le(vendor_buy_failed_payload, 0xF1300004BD000001ULL);
+    append_u32_le(vendor_buy_failed_payload, 17184);
+    append_u8(vendor_buy_failed_payload, 2);
+    VendorBuyResponseSummary vendor_buy_failed = parse_vendor_buy_failed_response(vendor_buy_failed_payload);
+
+    std::vector<std::uint8_t> vendor_sell_error_payload;
+    append_u64_le(vendor_sell_error_payload, 0xF1300004BD000001ULL);
+    append_u64_le(vendor_sell_error_payload, 0x4000000000001234ULL);
+    append_u8(vendor_sell_error_payload, 4);
+    VendorSellErrorSummary vendor_sell_error = parse_vendor_sell_error_response(vendor_sell_error_payload);
+
     std::vector<std::uint8_t> trainer_list_payload;
     append_u64_le(trainer_list_payload, 0xF13000038F000001ULL);
     append_u32_le(trainer_list_payload, 0);
@@ -2040,6 +2163,20 @@ bool world_packet_self_test()
         && empty_vendor_list.parsed
         && empty_vendor_list.item_count == 0
         && empty_vendor_list.error_code == 0
+        && vendor_buy_response.parsed
+        && vendor_buy_response.succeeded
+        && vendor_buy_response.vendor_guid == 0xF1300004BD000001ULL
+        && vendor_buy_response.vendor_slot == 8
+        && vendor_buy_response.left_in_stock == 0xFFFFFFFF
+        && vendor_buy_response.count == 1
+        && vendor_buy_failed.parsed
+        && vendor_buy_failed.failed
+        && vendor_buy_failed.item_id == 17184
+        && vendor_buy_failed.failure_reason == 2
+        && vendor_sell_error.parsed
+        && vendor_sell_error.vendor_guid == 0xF1300004BD000001ULL
+        && vendor_sell_error.item_guid == 0x4000000000001234ULL
+        && vendor_sell_error.reason == 4
         && trainer_list.parsed
         && trainer_list.trainer_guid == 0xF13000038F000001ULL
         && trainer_list.spell_count == 1

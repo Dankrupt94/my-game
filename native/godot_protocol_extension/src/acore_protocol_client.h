@@ -103,6 +103,28 @@ public:
         godot::String const& character_name,
         godot::String const& target_selector,
         godot::String const& target_name);
+    godot::Dictionary vendor_buy_sell_probe(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        int64_t target_entry,
+        godot::String const& target_name,
+        int64_t vendor_slot,
+        int64_t item_id,
+        int64_t count);
+    godot::Dictionary vendor_buy_sell_probe_selector(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        godot::String const& target_selector,
+        godot::String const& target_name,
+        int64_t vendor_slot,
+        int64_t item_id,
+        int64_t count);
     godot::Dictionary combat_probe(
         godot::String const& host,
         godot::String const& port,

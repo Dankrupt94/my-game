@@ -518,6 +518,78 @@ int vendor_list_probe(
         && result.vendor_list_response_seen && result.vendor_list.item_count > 0 ? 0 : 1;
 }
 
+int vendor_buy_sell_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_guid,
+    std::string const& target_name,
+    std::string const& vendor_slot,
+    std::string const& item_id,
+    std::string const& count)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::VendorBuySellProbeResult result = acore_protocol::vendor_buy_sell_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_guid),
+        target_name,
+        static_cast<std::uint32_t>(std::stoul(vendor_slot)),
+        static_cast<std::uint32_t>(std::stoul(item_id)),
+        static_cast<std::uint32_t>(std::stoul(count)),
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "VENDOR_BUY_SELL_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " target_name=\"" << result.target_name << "\""
+              << " vendor_slot=" << result.vendor_slot
+              << " item_id=" << result.item_id
+              << " count=" << result.count
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " target_has_position=" << (result.target_has_position ? 1 : 0)
+              << " visible_objects=" << result.visible_objects.size()
+              << " approach_movement_sent=" << (result.approach_movement_sent ? 1 : 0)
+              << " return_movement_sent=" << (result.return_movement_sent ? 1 : 0)
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " vendor_list_sent=" << (result.vendor_list_sent ? 1 : 0)
+              << " vendor_list_response_seen=" << (result.vendor_list_response_seen ? 1 : 0)
+              << " inventory_before_seen=" << (result.inventory_before_seen ? 1 : 0)
+              << " inventory_after_buy_seen=" << (result.inventory_after_buy_seen ? 1 : 0)
+              << " inventory_after_sell_seen=" << (result.inventory_after_sell_seen ? 1 : 0)
+              << " buy_sent=" << (result.buy_sent ? 1 : 0)
+              << " buy_response_seen=" << (result.buy_response_seen ? 1 : 0)
+              << " buy_succeeded=" << (result.buy_response.succeeded ? 1 : 0)
+              << " buy_failed=" << (result.buy_response.failed ? 1 : 0)
+              << " buy_response_opcode=0x" << std::hex << result.buy_response_opcode << std::dec
+              << " buy_failure_reason=" << static_cast<int>(result.buy_response.failure_reason)
+              << " bought_item_found=" << (result.bought_item_found ? 1 : 0)
+              << " bought_slot=" << static_cast<int>(result.bought_slot_after_buy.slot)
+              << " bought_guid=0x" << std::hex << result.bought_slot_after_buy.item_guid << std::dec
+              << " sell_sent=" << (result.sell_sent ? 1 : 0)
+              << " sell_error_seen=" << (result.sell_error_seen ? 1 : 0)
+              << " sell_error_reason=" << static_cast<int>(result.sell_error.reason)
+              << " sell_confirmed=" << (result.sell_confirmed ? 1 : 0)
+              << " roundtrip_confirmed=" << (result.roundtrip_confirmed ? 1 : 0)
+              << " before_coinage=" << result.inventory_before.coinage
+              << " after_buy_coinage=" << result.inventory_after_buy.coinage
+              << " after_sell_coinage=" << result.inventory_after_sell.coinage
+              << " buy_coinage_delta=" << result.buy_coinage_delta
+              << " sell_coinage_delta=" << result.sell_coinage_delta
+              << " roundtrip_coinage_delta=" << result.roundtrip_coinage_delta
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    return result.roundtrip_confirmed ? 0 : 1;
+}
+
 int combat_probe(
     std::string const& host,
     std::string const& port,
@@ -1441,6 +1513,11 @@ int main(int argc, char** argv)
         if (argc == 8 && std::strcmp(argv[1], "--vendor-list") == 0)
         {
             return vendor_list_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+        }
+
+        if (argc == 11 && std::strcmp(argv[1], "--vendor-buy-sell") == 0)
+        {
+            return vendor_buy_sell_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8], argv[9], argv[10]);
         }
 
         if (argc == 8 && std::strcmp(argv[1], "--combat-probe") == 0)

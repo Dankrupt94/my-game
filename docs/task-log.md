@@ -1,5 +1,27 @@
 # Task Log
 
+## 2026-07-01 - Stage 17 Vendor Buy/Sell Round Trip Started
+
+Goal: extend the Stage 17 vendor slice from read-only list viewing into a bounded buy/sell proof through the Godot client path.
+
+Plan:
+
+- Add safe packet support for vendor buy and sell requests plus buy/sell response parsing.
+- Keep the proof reversible by buying one known local test item and selling that exact owned item GUID back immediately.
+- Verify inventory snapshots and coinage deltas so success is based on server-owned state, not UI assumptions.
+- Wire the proof through the Godot extension, script bridge, and vendor scene without committing proprietary item names, icons, client data, secrets, or logs.
+
+Result:
+
+- Added native packet support for `CMSG_BUY_ITEM`, `SMSG_BUY_ITEM`, `SMSG_BUY_FAILED`, `CMSG_SELL_ITEM`, and `SMSG_SELL_ITEM`.
+- Added native `--vendor-buy-sell`, which snapshots inventory and coinage before buy, after buy, and after sell.
+- Added Godot extension and `ProtocolClientBridge.vendor_buy_sell_probe_selector(...)` support with helper fallback parsing.
+- Added a `Buy + Sell` action and `ACORE_VENDOR_BUY_SELL_SELF_TEST=1` path to `scenes/stage17_vendor_view.tscn`.
+- Verified the live native round trip against vendor entry `1213`: bought item id `17184` from slot `8`, observed buy opcode `0x1A4`, found the bought item in slot `34`, sold it back without a sell error, and confirmed `roundtrip_confirmed=1`.
+- Verified `ACORE_VENDOR_BUY_SELL_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` with `roundtrip=true`, bought slot `34`, buy opcode `0x1A4`, and roundtrip coinage delta `-26`.
+- The live coinage proof changed `9965 -> 9933 -> 9939`, showing expected buy/sell deltas while restoring the bought item slot.
+- Remaining work: convert the fixed proof into normal row-selected vendor buy/sell UI, add quantity controls, stock refresh, repair, failure-code UI, item metadata through the local-only pipeline, in-world click targeting, and persistent-session integration.
+
 ## 2026-07-01 - Stage 14 Object Visibility Started
 
 Goal: build the first object visibility slice after Stage 13 live movement.

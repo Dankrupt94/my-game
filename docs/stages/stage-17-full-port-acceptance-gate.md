@@ -233,6 +233,17 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Local `qwen-agent` advisory review reported no blockers for the vendor protocol, bridge, and scene slice.
 - Remaining work: live buy/sell/repair packets, inventory refresh after purchases/sales, stock and failure-code UI, item metadata/icons/tooltips through local-only pipelines, in-world click targeting, and persistent-session integration.
 
+### 2026-07-01 - Vendor Buy/Sell Round Trip Probe
+
+- Extended the vendor slice from read-only list viewing into a bounded server-authoritative commerce mutation.
+- Added `CMSG_BUY_ITEM`, `SMSG_BUY_ITEM`, `SMSG_BUY_FAILED`, `CMSG_SELL_ITEM`, and `SMSG_SELL_ITEM` support to the packet layer.
+- The native flow snapshots inventory and coinage, buys one known local test item from a visible vendor row, finds the newly-owned item GUID, sells that exact GUID back, and snapshots inventory/coinage again.
+- `scenes/stage17_vendor_view.tscn` now has a `Buy + Sell` control and `ACORE_VENDOR_BUY_SELL_SELF_TEST=1`.
+- Validation: native `--vendor-buy-sell` passed against local vendor entry `1213`, buying item id `17184` from slot `8`, observing buy opcode `0x1A4`, finding the bought item in slot `34`, selling it back without a sell error, and confirming `roundtrip_confirmed=1`.
+- Validation: the live coinage path changed `9965 -> 9933 -> 9939`, proving buy and sell deltas through server-owned state while leaving the bought item slot restored.
+- Validation: `ACORE_VENDOR_BUY_SELL_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` passed with `roundtrip=true`, buy opcode `0x1A4`, bought slot `34`, and roundtrip coinage delta `-26`.
+- Remaining work: turn this fixed proof into normal row-selected vendor buy/sell UI, add quantity controls, item names/icons/tooltips through the local-only data pipeline, stock refresh, repair, failure-code UI, in-world click targeting, and persistent-session integration.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

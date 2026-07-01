@@ -184,6 +184,53 @@ struct VendorListProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct VendorBuySellProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    std::uint32_t vendor_slot = 0;
+    std::uint32_t item_id = 0;
+    std::uint32_t count = 0;
+    bool live_target_found = false;
+    bool target_has_position = false;
+    bool approach_movement_sent = false;
+    bool return_movement_sent = false;
+    bool selection_sent = false;
+    bool vendor_list_sent = false;
+    bool vendor_list_response_seen = false;
+    VendorListSummary vendor_list;
+    bool inventory_before_seen = false;
+    bool inventory_after_buy_seen = false;
+    bool inventory_after_sell_seen = false;
+    PlayerInventorySummary inventory_before;
+    PlayerInventorySummary inventory_after_buy;
+    PlayerInventorySummary inventory_after_sell;
+    bool buy_sent = false;
+    bool buy_response_seen = false;
+    VendorBuyResponseSummary buy_response;
+    std::uint16_t buy_response_opcode = 0;
+    bool bought_item_found = false;
+    InventorySlotSummary bought_slot_before;
+    InventorySlotSummary bought_slot_after_buy;
+    bool sell_sent = false;
+    bool sell_error_seen = false;
+    VendorSellErrorSummary sell_error;
+    InventorySlotSummary bought_slot_after_sell;
+    bool sell_confirmed = false;
+    bool roundtrip_confirmed = false;
+    bool coinage_before_seen = false;
+    bool coinage_after_buy_seen = false;
+    bool coinage_after_sell_seen = false;
+    std::int64_t buy_coinage_delta = 0;
+    std::int64_t sell_coinage_delta = 0;
+    std::int64_t roundtrip_coinage_delta = 0;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct CombatProbeResult
 {
     RealmInfo realm;
@@ -544,6 +591,19 @@ VendorListProbeResult vendor_list_probe(
     std::string const& character_name,
     std::uint64_t target_guid,
     std::string const& target_name,
+    FlowOptions options = {});
+
+VendorBuySellProbeResult vendor_buy_sell_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    std::uint32_t vendor_slot,
+    std::uint32_t item_id,
+    std::uint32_t count,
     FlowOptions options = {});
 
 CombatProbeResult combat_probe(
