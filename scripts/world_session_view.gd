@@ -17,7 +17,7 @@ const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
 const PANEL_NAMES := [
-	"chat", "character", "spells", "actions", "targets", "quests", "loot", "vendor",
+	"chat", "character", "spells", "actions", "targets", "quests", "loot", "vendor", "trainer",
 	"map", "options", "inventory"
 ]
 const PANEL_TITLES := {
@@ -31,6 +31,7 @@ const PANEL_TITLES := {
 	"quests": "Quests",
 	"spells": "Spells",
 	"targets": "Targets",
+	"trainer": "Trainer",
 	"vendor": "Vendor",
 }
 const ACTION_BAR_DISPLAY_COUNT := 12
@@ -113,6 +114,7 @@ var session_spell_rows: Array = []
 var session_action_slots: Array = []
 var session_loot_snapshot: Dictionary = {}
 var session_vendor_snapshot: Dictionary = {}
+var session_trainer_snapshot: Dictionary = {}
 var session_inventory_slots: Array = []
 var session_coinage := -1
 var selected_target_index := -1
@@ -284,6 +286,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Quests", "quests")
 	_add_panel_button(nav_bar, "Loot", "loot")
 	_add_panel_button(nav_bar, "Vendor", "vendor")
+	_add_panel_button(nav_bar, "Trainer", "trainer")
 	_add_panel_button(nav_bar, "Map", "map")
 	_add_panel_button(nav_bar, "Bags", "inventory")
 	_add_panel_button(nav_bar, "Options", "options")
@@ -495,6 +498,7 @@ func _apply_session_data(
 	session_action_slots = _extract_action_slots(character, enter_result)
 	session_loot_snapshot = _extract_loot_snapshot(character, enter_result)
 	session_vendor_snapshot = _extract_vendor_snapshot(character, enter_result)
+	session_trainer_snapshot = _extract_trainer_snapshot(character, enter_result)
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
 	session_quest_slots = _extract_quest_slots(character, enter_result)
@@ -1018,6 +1022,153 @@ func _normalize_vendor_transaction(raw_snapshot: Dictionary) -> Dictionary:
 		"bought_slot_before": raw_snapshot.get("bought_slot_before", {}),
 		"bought_slot_after_buy": raw_snapshot.get("bought_slot_after_buy", {}),
 		"bought_slot_after_sell": raw_snapshot.get("bought_slot_after_sell", {}),
+	}
+
+
+func _extract_trainer_snapshot(character: Dictionary, enter_result: Dictionary) -> Dictionary:
+	var candidates: Array = [
+		character.get("trainer", {}),
+		character.get("trainer_list", {}),
+		character.get("trainer_window", {}),
+		enter_result.get("trainer", {}),
+		enter_result.get("trainer_list", {}),
+		enter_result.get("trainer_window", {}),
+	]
+	if _looks_like_trainer_snapshot(character):
+		candidates.append(character)
+	if _looks_like_trainer_snapshot(enter_result):
+		candidates.append(enter_result)
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("trainer", {}))
+		candidates.append(update.get("trainer_list", {}))
+		candidates.append(update.get("trainer_window", {}))
+		if _looks_like_trainer_snapshot(update):
+			candidates.append(update)
+
+	for candidate in candidates:
+		if not candidate is Dictionary or candidate.is_empty():
+			continue
+		var snapshot := _normalize_trainer_snapshot(candidate)
+		if bool(snapshot.get("has_trainer_data", false)):
+			return snapshot
+	return {}
+
+
+func _looks_like_trainer_snapshot(snapshot: Dictionary) -> bool:
+	for key in [
+		"trainer_list_response_seen",
+		"trainer_list",
+		"trainer_spells",
+		"trainer_type",
+		"spell_count",
+		"buy_response_seen",
+		"failure_reason",
+		"spell_known_after",
+		"coinage_delta",
+	]:
+		if snapshot.has(key):
+			return true
+	return false
+
+
+func _normalize_trainer_snapshot(raw_snapshot: Dictionary) -> Dictionary:
+	var nested = raw_snapshot.get("trainer_list", {})
+	var raw_spells = raw_snapshot.get("spells", raw_snapshot.get("trainer_spells", []))
+	if raw_spells is Array and raw_spells.is_empty() and nested is Dictionary:
+		raw_spells = nested.get("spells", [])
+	var spells: Array = _normalize_trainer_spells(raw_spells if raw_spells is Array else [])
+	var learn_result: Dictionary = _normalize_trainer_learn_result(raw_snapshot)
+	var spell_count := int(raw_snapshot.get("spell_count", spells.size()))
+	if spell_count == 0 and nested is Dictionary:
+		spell_count = int(nested.get("spell_count", spells.size()))
+	var response_seen: bool = bool(
+		raw_snapshot.get(
+			"trainer_list_response_seen",
+			nested.get("parsed", not spells.is_empty()) if nested is Dictionary else not spells.is_empty()
+		)
+	)
+	var has_trainer_data: bool = (
+		_looks_like_trainer_snapshot(raw_snapshot)
+		or response_seen
+		or not spells.is_empty()
+		or not learn_result.is_empty()
+	)
+	var target_guid: String = str(
+		raw_snapshot.get("target_guid", raw_snapshot.get("trainer_guid", ""))
+	)
+	if target_guid.strip_edges().is_empty() and nested is Dictionary:
+		target_guid = str(nested.get("trainer_guid", ""))
+	return {
+		"has_trainer_data": has_trainer_data,
+		"response_seen": response_seen,
+		"target_guid": target_guid,
+		"target_entry": raw_snapshot.get("target_entry", raw_snapshot.get("entry", 0)),
+		"target_name": raw_snapshot.get("target_name", raw_snapshot.get("name", "")),
+		"response_opcode": raw_snapshot.get("response_opcode", 0),
+		"trainer_type": raw_snapshot.get(
+			"trainer_type", nested.get("trainer_type", 0) if nested is Dictionary else 0
+		),
+		"greeting": raw_snapshot.get("greeting", ""),
+		"spell_count": spell_count,
+		"spells": spells,
+		"learn_result": learn_result,
+	}
+
+
+func _normalize_trainer_spells(raw_spells: Array) -> Array:
+	var spells: Array = []
+	for index in range(raw_spells.size()):
+		var raw_spell = raw_spells[index]
+		if not raw_spell is Dictionary:
+			continue
+		var spell: Dictionary = raw_spell.duplicate(true)
+		if not spell.has("spell_id"):
+			for key in ["id", "spell", "spell_entry"]:
+				if spell.has(key):
+					spell["spell_id"] = int(spell.get(key, 0))
+					break
+		if int(spell.get("spell_id", 0)) <= 0:
+			continue
+		if not spell.has("index"):
+			spell["index"] = index
+		if not spell.has("money_cost"):
+			spell["money_cost"] = int(spell.get("cost", 0))
+		if not spell.has("usable"):
+			spell["usable"] = int(spell.get("state", 0))
+		spells.append(spell)
+	return spells
+
+
+func _normalize_trainer_learn_result(raw_snapshot: Dictionary) -> Dictionary:
+	var learn_keys := [
+		"buy_response_seen",
+		"buy_succeeded",
+		"buy_failed",
+		"failure_reason",
+		"spell_known_before",
+		"spell_known_after",
+		"coinage_delta",
+	]
+	var has_learn_result := false
+	for key in learn_keys:
+		if raw_snapshot.has(key):
+			has_learn_result = true
+			break
+	if not has_learn_result:
+		return {}
+	return {
+		"buy_response_seen": raw_snapshot.get("buy_response_seen", false),
+		"buy_succeeded": raw_snapshot.get("buy_succeeded", false),
+		"buy_failed": raw_snapshot.get("buy_failed", false),
+		"failure_reason": raw_snapshot.get("failure_reason", 0),
+		"spell_id": raw_snapshot.get("spell_id", 0),
+		"spell_known_before": raw_snapshot.get("spell_known_before", false),
+		"spell_known_after": raw_snapshot.get("spell_known_after", false),
+		"before_coinage": raw_snapshot.get("before_coinage", 0),
+		"after_coinage": raw_snapshot.get("after_coinage", 0),
+		"coinage_delta": raw_snapshot.get("coinage_delta", 0),
+		"response_opcode": raw_snapshot.get("response_opcode", 0),
 	}
 
 
@@ -1585,6 +1736,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_loot_panel()
 		"vendor":
 			_build_vendor_panel()
+		"trainer":
+			_build_trainer_panel()
 		"map":
 			_build_map_panel()
 		"inventory":
@@ -2375,6 +2528,170 @@ func _money_delta_text(copper: int) -> String:
 	return prefix + _money_text(abs(copper))
 
 
+func _build_trainer_panel() -> void:
+	panel_title_label.text = "Trainer"
+	if session_trainer_snapshot.is_empty():
+		panel_body.add_child(_panel_label("Trainer window: waiting for session trainer data.", 13))
+		panel_body.add_child(
+			_panel_label("Learn-spell actions remain in the persistent live-session lane.", 13)
+		)
+		return
+
+	panel_body.add_child(
+		_panel_label(
+			(
+				"Trainer type %s | spell rows %s"
+				% [
+					str(session_trainer_snapshot.get("trainer_type", 0)),
+					str(session_trainer_snapshot.get("spell_count", 0)),
+				]
+			),
+			13
+		)
+	)
+	var target_entry := int(session_trainer_snapshot.get("target_entry", 0))
+	var target_guid := str(session_trainer_snapshot.get("target_guid", "")).strip_edges()
+	if target_entry > 0 or not target_guid.is_empty():
+		panel_body.add_child(
+			_panel_label(
+				"Target: entry %s guid %s" % [str(target_entry), target_guid],
+				13
+			)
+		)
+	var opcode := int(session_trainer_snapshot.get("response_opcode", 0))
+	if opcode > 0:
+		panel_body.add_child(_panel_label("Response opcode: 0x%03x" % opcode, 13))
+	var greeting := str(session_trainer_snapshot.get("greeting", "")).strip_edges()
+	if not greeting.is_empty():
+		panel_body.add_child(_panel_label("Greeting: " + greeting, 13))
+
+	var spells: Array = session_trainer_snapshot.get("spells", [])
+	if spells.is_empty():
+		panel_body.add_child(_panel_label("Trainer rows: no spell rows in this snapshot.", 13))
+	else:
+		for index in range(min(spells.size(), 48)):
+			var spell = spells[index]
+			if spell is Dictionary:
+				panel_body.add_child(_trainer_spell_button(spell))
+		if spells.size() > 48:
+			panel_body.add_child(
+				_panel_label("+%s more trainer rows" % str(spells.size() - 48), 13)
+			)
+
+	var learn_result: Dictionary = session_trainer_snapshot.get("learn_result", {})
+	if not learn_result.is_empty():
+		panel_body.add_child(_panel_label("Learn Result", 14))
+		panel_body.add_child(_panel_label(_trainer_learn_summary(learn_result), 13))
+		panel_body.add_child(
+			_panel_label(
+				(
+					"Money: %s -> %s | delta %s"
+					% [
+						_money_text(int(learn_result.get("before_coinage", 0))),
+						_money_text(int(learn_result.get("after_coinage", 0))),
+						_money_delta_text(int(learn_result.get("coinage_delta", 0))),
+					]
+				),
+				13
+			)
+		)
+
+	panel_body.add_child(_panel_label("Trainer actions: waiting for live session controls.", 13))
+
+
+func _trainer_spell_button(spell: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = _trainer_spell_text(spell)
+	button.tooltip_text = _trainer_spell_detail(spell)
+	button.custom_minimum_size = Vector2(240.0, 46.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_trainer_spell.bind(spell))
+	if int(spell.get("usable", 0)) != 0:
+		button.add_theme_color_override("font_color", Color(0.70, 0.75, 0.74))
+	return button
+
+
+func _show_trainer_spell(spell: Dictionary) -> void:
+	session_label.text = _trainer_spell_detail(spell)
+	status_label.text = "Trainer row selected: " + _trainer_spell_text(spell).replace("\n", " | ")
+
+
+func _trainer_spell_text(spell: Dictionary) -> String:
+	return "Spell %s\n%s | %s | %s" % [
+		str(spell.get("spell_id", 0)),
+		_trainer_spell_status(int(spell.get("usable", 0))),
+		_money_text(int(spell.get("money_cost", 0))),
+		_trainer_spell_requirements(spell),
+	]
+
+
+func _trainer_spell_detail(spell: Dictionary) -> String:
+	return "spell %s | state %s | cost %s | req %s" % [
+		str(spell.get("spell_id", 0)),
+		_trainer_spell_status(int(spell.get("usable", 0))),
+		_money_text(int(spell.get("money_cost", 0))),
+		_trainer_spell_requirements(spell),
+	]
+
+
+func _trainer_spell_status(state: int) -> String:
+	match state:
+		0:
+			return "available"
+		1:
+			return "unavailable"
+		2:
+			return "known"
+		_:
+			return "state " + str(state)
+
+
+func _trainer_spell_requirements(spell: Dictionary) -> String:
+	var parts: Array[String] = []
+	var req_level := int(spell.get("req_level", 0))
+	if req_level > 0:
+		parts.append("level " + str(req_level))
+	var skill_line := int(spell.get("req_skill_line", 0))
+	var skill_rank := int(spell.get("req_skill_rank", 0))
+	if skill_line > 0 or skill_rank > 0:
+		parts.append("skill %s/%s" % [str(skill_line), str(skill_rank)])
+	for ability_key in ["req_ability_1", "req_ability_2", "req_ability_3"]:
+		var ability := int(spell.get(ability_key, 0))
+		if ability > 0:
+			parts.append("spell " + str(ability))
+	if parts.is_empty():
+		return "no extra requirements"
+	return ", ".join(parts)
+
+
+func _trainer_learn_summary(learn_result: Dictionary) -> String:
+	var reason := int(learn_result.get("failure_reason", 0))
+	if bool(learn_result.get("buy_succeeded", false)):
+		return "spell %s learned | known %s -> %s" % [
+			str(learn_result.get("spell_id", 0)),
+			str(learn_result.get("spell_known_before", false)),
+			str(learn_result.get("spell_known_after", false)),
+		]
+	if bool(learn_result.get("buy_failed", false)):
+		return "spell %s failed: %s" % [
+			str(learn_result.get("spell_id", 0)),
+			_trainer_failure_reason(reason),
+		]
+	return "spell %s response pending" % str(learn_result.get("spell_id", 0))
+
+
+func _trainer_failure_reason(reason: int) -> String:
+	match reason:
+		0:
+			return "unavailable"
+		1:
+			return "not enough money"
+		2:
+			return "not enough skill"
+		_:
+			return "failure " + str(reason)
+
+
 func _build_map_panel() -> void:
 	panel_title_label.text = "Map"
 	var selected_target_text := "none" if selected_target_index < 0 else str(selected_target_index + 1)
@@ -3038,6 +3355,41 @@ func _run_self_test() -> void:
 				"item_guid": "0x4000000000000300",
 			},
 		},
+		"trainer":
+		{
+			"trainer_list_response_seen": true,
+			"target_guid": "0xf13000038f000888",
+			"target_entry": 911,
+			"response_opcode": 0x1B1,
+			"trainer_type": 0,
+			"greeting": "Train me.",
+			"spell_count": 2,
+			"spells":
+			[
+				{
+					"spell_id": 6673,
+					"usable": 0,
+					"money_cost": 100,
+					"req_level": 1,
+					"req_skill_line": 0,
+					"req_skill_rank": 0,
+				},
+				{
+					"spell_id": 78,
+					"usable": 2,
+					"money_cost": 0,
+					"req_level": 1,
+				},
+			],
+			"buy_response_seen": true,
+			"buy_succeeded": true,
+			"spell_id": 6673,
+			"spell_known_before": false,
+			"spell_known_after": true,
+			"before_coinage": 10000,
+			"after_coinage": 9900,
+			"coinage_delta": -100,
+		},
 		"action_buttons":
 		{
 			"buttons":
@@ -3278,6 +3630,24 @@ func _run_self_test() -> void:
 		and _control_tree_text_contains(vendor_body, "roundtrip true")
 		and _control_tree_text_contains(vendor_body, "total -0g 0s 26c")
 	)
+	_show_session_panel("trainer")
+	var trainer_shell := _panel_shell("trainer")
+	var trainer_title: Label = session_panels.get("trainer", {}).get("title", null)
+	var trainer_body: VBoxContainer = session_panels.get("trainer", {}).get("body", null)
+	var trainer_spells: Array = session_trainer_snapshot.get("spells", [])
+	var trainer_panel_ok := (
+		trainer_shell != null
+		and trainer_shell.visible
+		and trainer_title != null
+		and trainer_title.text == "Trainer"
+		and trainer_body != null
+		and trainer_spells.size() == 2
+		and _control_tree_text_contains(trainer_body, "Trainer type 0")
+		and _control_tree_text_contains(trainer_body, "Spell 6673")
+		and _control_tree_text_contains(trainer_body, "available")
+		and _control_tree_text_contains(trainer_body, "spell 6673 learned")
+		and _control_tree_text_contains(trainer_body, "delta -0g 1s 0c")
+	)
 	_show_session_panel("map")
 	var map_shell := _panel_shell("map")
 	var map_title: Label = session_panels.get("map", {}).get("title", null)
@@ -3338,7 +3708,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 13
+	var actions_ok := action_buttons.size() == 14
 	var shortcut_ok := (
 		shortcut_slots.size() == 12
 		and shortcut_slots[0].text.find("spell 78") != -1
@@ -3362,6 +3732,7 @@ func _run_self_test() -> void:
 		and quests_panel_ok
 		and loot_panel_ok
 		and vendor_panel_ok
+		and trainer_panel_ok
 		and map_panel_ok
 		and quest_tracker_ok
 		and options_panel_ok
@@ -3374,7 +3745,7 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
-				+ "loot_panel=true vendor_panel=true map_panel=true "
+				+ "loot_panel=true vendor_panel=true trainer_panel=true map_panel=true "
 				+ "targets=true action_slots=true spellbook=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
 			)
@@ -3396,7 +3767,7 @@ func _run_self_test() -> void:
 			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
 			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
 			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s "
-			+ "loot_panel_ok=%s vendor_panel_ok=%s"
+			+ "loot_panel_ok=%s vendor_panel_ok=%s trainer_panel_ok=%s"
 		)
 		% [
 			str(marker_ok),
@@ -3413,6 +3784,7 @@ func _run_self_test() -> void:
 			str(character_panel_ok),
 			str(loot_panel_ok),
 			str(vendor_panel_ok),
+			str(trainer_panel_ok),
 		]
 	)
 	push_error(self_test_error)

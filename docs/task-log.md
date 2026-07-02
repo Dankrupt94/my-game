@@ -1,5 +1,32 @@
 # Task Log
 
+## 2026-07-02 - World Session Trainer Panel
+
+Goal: add a first resident trainer-window surface to the active world-session
+HUD without touching Claude's native/protocol/bridge/live-session files.
+
+Result:
+
+- Added a `Trainer` panel to the world-session movable/resizable HUD system.
+- The panel renders safe session trainer data: target entry/GUID, response
+  opcode, trainer type, greeting, spell rows, money cost, usable/known state,
+  requirements, and learn success/failure feedback when present.
+- The panel stays display-only; learn-spell requests, fixture setup,
+  spellbook/money refresh, and real click targeting remain live-session lane
+  work.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `trainer_panel=true`.
+
+Remaining work:
+
+- Feed live trainer snapshots from the persistent session lane.
+- Add player-driven learn controls, failure-code feedback, spellbook/money
+  refresh after learning, local-only names/icons/ranks, richer disabled-state
+  explanations, and normal click-to-trainer targeting.
+
 ## 2026-07-02 - World Session Vendor Panel
 
 Goal: add a first resident vendor-window surface to the active world-session

@@ -22,17 +22,33 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Trainer Panel Started (Codex UI lane)
+## 2026-07-02 - World Session Trainer Panel (Codex UI lane)
 
-Goal: add a resident trainer-window surface to the active world-session HUD so
-safe trainer snapshots can display in the normal gameplay view.
+Context: Stage 17 has live trainer proof scenes, but the active world-session
+HUD did not yet have a resident trainer-window surface.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Render session-provided trainer target, spell rows, cost/requirement state,
-  and learn feedback without calling or editing the protocol bridge.
-- Keep learn-spell actions in Claude's live-session lane.
+- Added a resident `Trainer` panel to `scripts/world_session_view.gd`.
+- The panel renders safe session trainer dictionaries without calling the
+  protocol bridge: target entry/GUID, response opcode, trainer type, greeting,
+  spell rows, money cost, usable/known state, requirements, and learn
+  success/failure feedback when present.
+- Actual learn-spell requests, fixture setup, spellbook refresh, and money
+  verification remains in Claude's live-session/native lane.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `trainer_panel=true`.
+
+Remaining work:
+
+- Feed live trainer snapshots from Claude's persistent session lane into the
+  world-session context.
+- Add player-driven learn controls, failure-code feedback, spellbook/money
+  refresh after learning, local-only names/icons/ranks, richer disabled-state
+  explanations, and normal click-to-trainer targeting.
 
 ## 2026-07-02 - World Session Vendor Panel (Codex UI lane)
 
