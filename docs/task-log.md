@@ -1,5 +1,32 @@
 # Task Log
 
+## 2026-07-02 - World Session Mail Panel
+
+Goal: add a first resident mailbox surface to the active world-session HUD
+without touching Claude's native/protocol/bridge/live-session files.
+
+Result:
+
+- Added a `Mail` panel to the world-session movable/resizable HUD system.
+- The panel renders safe session mail data: message rows, sender, subject,
+  preview text, unread/read state, attached money, COD amount, and attachment
+  summaries when present.
+- The panel stays display-only; mailbox discovery, read/send/delete, attachment
+  pickup, COD payment, and live message body actions remain live-session lane
+  work.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `mail_panel=true`.
+
+Remaining work:
+
+- Feed live mailbox snapshots from the persistent session lane.
+- Add player-driven read, send, delete, return, attachment pickup, COD payment,
+  mailbox object discovery, message body expansion, and local-only item
+  names/icons/tooltips.
+
 ## 2026-07-02 - World Session Social Panel
 
 Goal: add a first resident social-window surface to the active world-session

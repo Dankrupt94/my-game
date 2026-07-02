@@ -22,18 +22,33 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Mail Panel Started (Codex UI lane)
+## 2026-07-02 - World Session Mail Panel (Codex UI lane)
 
-Goal: add a resident mailbox surface to the active world-session HUD so safe
-mail snapshots can display in the normal gameplay view.
+Context: the Stage 17 parity spec requires normal mailbox list/read/send
+surfaces, but the active world-session HUD did not yet have a resident Mail
+window.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Render session-provided mail lists, message rows, money/COD fields, and
-  attachment summaries without calling or editing the protocol bridge.
-- Keep mailbox discovery, read/send/delete, attachment pickup, and COD actions
-  in Claude's live-session lane.
+- Added a resident `Mail` panel to `scripts/world_session_view.gd`.
+- The panel renders safe session mail dictionaries without calling the protocol
+  bridge: message rows, sender, subject, preview text, unread state, attached
+  money, COD amount, and attachment summaries when present.
+- Actual mailbox discovery, read/send/delete, attachment pickup, and COD actions
+  stay in Claude's live-session/native lane.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `mail_panel=true`.
+
+Remaining work:
+
+- Feed live mailbox snapshots from Claude's persistent session lane into the
+  world-session context.
+- Add player-driven read, send, delete, return, attachment pickup, COD payment,
+  mailbox object discovery, message body expansion, and local-only item
+  names/icons/tooltips.
 
 ## 2026-07-02 - World Session Social Panel (Codex UI lane)
 

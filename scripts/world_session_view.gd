@@ -17,8 +17,20 @@ const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
 const PANEL_NAMES := [
-	"chat", "character", "spells", "actions", "targets", "quests", "loot", "vendor",
-	"trainer", "social", "map", "options", "inventory"
+	"chat",
+	"character",
+	"spells",
+	"actions",
+	"targets",
+	"quests",
+	"loot",
+	"vendor",
+	"trainer",
+	"social",
+	"mail",
+	"map",
+	"options",
+	"inventory"
 ]
 const PANEL_TITLES := {
 	"actions": "Actions",
@@ -26,6 +38,7 @@ const PANEL_TITLES := {
 	"chat": "Chat",
 	"inventory": "Bags",
 	"loot": "Loot",
+	"mail": "Mail",
 	"map": "Map",
 	"options": "Options",
 	"quests": "Quests",
@@ -117,6 +130,7 @@ var session_loot_snapshot: Dictionary = {}
 var session_vendor_snapshot: Dictionary = {}
 var session_trainer_snapshot: Dictionary = {}
 var session_social_snapshot: Dictionary = {}
+var session_mail_snapshot: Dictionary = {}
 var session_inventory_slots: Array = []
 var session_coinage := -1
 var selected_target_index := -1
@@ -290,6 +304,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Vendor", "vendor")
 	_add_panel_button(nav_bar, "Trainer", "trainer")
 	_add_panel_button(nav_bar, "Social", "social")
+	_add_panel_button(nav_bar, "Mail", "mail")
 	_add_panel_button(nav_bar, "Map", "map")
 	_add_panel_button(nav_bar, "Bags", "inventory")
 	_add_panel_button(nav_bar, "Options", "options")
@@ -383,11 +398,14 @@ func _refresh_target_frame() -> void:
 	var target := _visible_object_at(selected_target_index)
 	target_frame_body.add_child(
 		_panel_label(
-			"Selected %s of %s | %s" % [
-				str(selected_target_index + 1),
-				str(visible_object_count),
-				_target_summary(target, selected_target_index),
-			],
+			(
+				"Selected %s of %s | %s"
+				% [
+					str(selected_target_index + 1),
+					str(visible_object_count),
+					_target_summary(target, selected_target_index),
+				]
+			),
 			12
 		)
 	)
@@ -429,18 +447,27 @@ func _refresh_quest_tracker() -> void:
 		rendered += 1
 	if active_slots.size() > rendered:
 		quest_tracker_body.add_child(
-			_panel_label("+%s more active quest slot%s" % [
-				str(active_slots.size() - rendered),
-				"" if active_slots.size() - rendered == 1 else "s",
-			], 12)
+			_panel_label(
+				(
+					"+%s more active quest slot%s"
+					% [
+						str(active_slots.size() - rendered),
+						"" if active_slots.size() - rendered == 1 else "s",
+					]
+				),
+				12
+			)
 		)
 
 
 func _quest_tracker_row(slot: Dictionary) -> Label:
-	var text := "Slot %s | %s" % [
-		str(slot.get("slot", "?")),
-		_quest_slot_state(slot),
-	]
+	var text := (
+		"Slot %s | %s"
+		% [
+			str(slot.get("slot", "?")),
+			_quest_slot_state(slot),
+		]
+	)
 	return _panel_label(text, 12)
 
 
@@ -503,6 +530,7 @@ func _apply_session_data(
 	session_vendor_snapshot = _extract_vendor_snapshot(character, enter_result)
 	session_trainer_snapshot = _extract_trainer_snapshot(character, enter_result)
 	session_social_snapshot = _extract_social_snapshot(character, enter_result)
+	session_mail_snapshot = _extract_mail_snapshot(character, enter_result)
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
 	session_quest_slots = _extract_quest_slots(character, enter_result)
@@ -610,7 +638,9 @@ func _extract_chat_rows(character: Dictionary, enter_result: Dictionary) -> Arra
 	for candidate in candidates:
 		var raw_rows = []
 		if candidate is Dictionary:
-			raw_rows = candidate.get("messages", candidate.get("rows", candidate.get("chat_rows", [])))
+			raw_rows = candidate.get(
+				"messages", candidate.get("rows", candidate.get("chat_rows", []))
+			)
 		elif candidate is Array:
 			raw_rows = candidate
 		if raw_rows is Array and not raw_rows.is_empty():
@@ -672,7 +702,9 @@ func _extract_spell_rows(character: Dictionary, enter_result: Dictionary) -> Arr
 	for candidate in candidates:
 		var raw_rows = []
 		if candidate is Dictionary:
-			raw_rows = candidate.get("spells", candidate.get("rows", candidate.get("spell_rows", [])))
+			raw_rows = candidate.get(
+				"spells", candidate.get("rows", candidate.get("spell_rows", []))
+			)
 		elif candidate is Array:
 			raw_rows = candidate
 		if raw_rows is Array and not raw_rows.is_empty():
@@ -815,9 +847,7 @@ func _normalize_loot_snapshot(raw_snapshot: Dictionary) -> Dictionary:
 		"items", raw_snapshot.get("loot_items", raw_snapshot.get("rows", []))
 	)
 	var items := _normalize_loot_items(raw_items if raw_items is Array else [])
-	var raw_changed = raw_snapshot.get(
-		"changed_slots", raw_snapshot.get("inventory_changes", [])
-	)
+	var raw_changed = raw_snapshot.get("changed_slots", raw_snapshot.get("inventory_changes", []))
 	var changed_slots := _normalize_inventory_slots(raw_changed if raw_changed is Array else [])
 	var money := -1
 	for key in ["gold", "loot_money", "money", "coinage", "copper"]:
@@ -938,7 +968,11 @@ func _normalize_vendor_snapshot(raw_snapshot: Dictionary) -> Dictionary:
 	var response_seen: bool = bool(
 		raw_snapshot.get(
 			"vendor_list_response_seen",
-			nested.get("parsed", not items.is_empty()) if nested is Dictionary else not items.is_empty()
+			(
+				nested.get("parsed", not items.is_empty())
+				if nested is Dictionary
+				else not items.is_empty()
+			)
 		)
 	)
 	var has_vendor_data: bool = (
@@ -1089,7 +1123,11 @@ func _normalize_trainer_snapshot(raw_snapshot: Dictionary) -> Dictionary:
 	var response_seen: bool = bool(
 		raw_snapshot.get(
 			"trainer_list_response_seen",
-			nested.get("parsed", not spells.is_empty()) if nested is Dictionary else not spells.is_empty()
+			(
+				nested.get("parsed", not spells.is_empty())
+				if nested is Dictionary
+				else not spells.is_empty()
+			)
 		)
 	)
 	var has_trainer_data: bool = (
@@ -1110,7 +1148,8 @@ func _normalize_trainer_snapshot(raw_snapshot: Dictionary) -> Dictionary:
 		"target_entry": raw_snapshot.get("target_entry", raw_snapshot.get("entry", 0)),
 		"target_name": raw_snapshot.get("target_name", raw_snapshot.get("name", "")),
 		"response_opcode": raw_snapshot.get("response_opcode", 0),
-		"trainer_type": raw_snapshot.get(
+		"trainer_type":
+		raw_snapshot.get(
 			"trainer_type", nested.get("trainer_type", 0) if nested is Dictionary else 0
 		),
 		"greeting": raw_snapshot.get("greeting", ""),
@@ -1236,9 +1275,7 @@ func _normalize_social_snapshot(raw_snapshot: Dictionary) -> Dictionary:
 	var friends_raw = _social_raw_rows(raw_snapshot, ["friends", "friend_rows"], "friends")
 	var ignore_raw = _social_raw_rows(raw_snapshot, ["ignore", "ignore_rows", "ignored"], "ignore")
 	var party_raw = _social_raw_rows(
-		raw_snapshot,
-		["party_members", "group_members", "members"],
-		"party"
+		raw_snapshot, ["party_members", "group_members", "members"], "party"
 	)
 	var guild_raw = _social_raw_rows(raw_snapshot, ["guild_members", "members"], "guild")
 	var invites_raw = _social_raw_rows(raw_snapshot, ["invites", "pending_invites"], "invites")
@@ -1327,6 +1364,163 @@ func _social_group_name(snapshot: Dictionary, key: String, field: String) -> Str
 		if not nested_value.is_empty():
 			return nested_value
 	return str(snapshot.get(field, "")).strip_edges()
+
+
+func _extract_mail_snapshot(character: Dictionary, enter_result: Dictionary) -> Dictionary:
+	var candidates: Array = [
+		character.get("mail", {}),
+		character.get("mailbox", {}),
+		character.get("mail_list", {}),
+		enter_result.get("mail", {}),
+		enter_result.get("mailbox", {}),
+		enter_result.get("mail_list", {}),
+	]
+	if _looks_like_mail_snapshot(character):
+		candidates.append(character)
+	if _looks_like_mail_snapshot(enter_result):
+		candidates.append(enter_result)
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("mail", {}))
+		candidates.append(update.get("mailbox", {}))
+		candidates.append(update.get("mail_list", {}))
+		if _looks_like_mail_snapshot(update):
+			candidates.append(update)
+
+	for candidate in candidates:
+		if not candidate is Dictionary or candidate.is_empty():
+			continue
+		var snapshot := _normalize_mail_snapshot(candidate)
+		if bool(snapshot.get("has_mail_data", false)):
+			return snapshot
+	return {}
+
+
+func _looks_like_mail_snapshot(snapshot: Dictionary) -> bool:
+	for key in [
+		"mail",
+		"mailbox",
+		"mail_list",
+		"mail_rows",
+		"messages",
+		"attachments",
+		"money",
+		"cod",
+		"unread_count",
+		"mail_count",
+	]:
+		if snapshot.has(key):
+			return true
+	return false
+
+
+func _normalize_mail_snapshot(raw_snapshot: Dictionary) -> Dictionary:
+	var source := raw_snapshot
+	for nested_key in ["mail", "mailbox", "mail_list"]:
+		var nested: Variant = raw_snapshot.get(nested_key, {})
+		if nested is Dictionary and _looks_like_mail_snapshot(nested):
+			source = nested
+			break
+	var raw_rows = source.get(
+		"messages", source.get("mail_rows", source.get("rows", source.get("items", [])))
+	)
+	var messages := _normalize_mail_rows(raw_rows if raw_rows is Array else [])
+	var unread_count := int(source.get("unread_count", -1))
+	if unread_count < 0:
+		unread_count = 0
+		for message in messages:
+			if message is Dictionary and not bool(message.get("read", false)):
+				unread_count += 1
+	var message_count := int(source.get("mail_count", source.get("message_count", messages.size())))
+	var money_total := 0
+	var cod_total := 0
+	for message in messages:
+		if message is Dictionary:
+			money_total += int(message.get("money", 0))
+			cod_total += int(message.get("cod", 0))
+	var has_mail_data := _looks_like_mail_snapshot(source) or not messages.is_empty()
+	return {
+		"has_mail_data": has_mail_data,
+		"messages": messages,
+		"message_count": message_count,
+		"unread_count": unread_count,
+		"money_total": money_total,
+		"cod_total": cod_total,
+		"mailbox_guid": source.get("mailbox_guid", source.get("guid", "")),
+		"response_opcode": source.get("response_opcode", 0),
+	}
+
+
+func _normalize_mail_rows(raw_rows: Array) -> Array:
+	var rows: Array = []
+	for index in range(raw_rows.size()):
+		var raw_row = raw_rows[index]
+		var row: Dictionary = {}
+		if raw_row is Dictionary:
+			row = raw_row.duplicate(true)
+		elif raw_row is String:
+			row = {"subject": raw_row}
+		else:
+			continue
+		if not row.has("id"):
+			row["id"] = _mail_value(row, ["mail_id", "message_id", "mailbox_id", "guid"], index)
+		if not row.has("sender"):
+			row["sender"] = _mail_value(row, ["from", "sender_name", "sender_guid"], "Unknown")
+		if not row.has("subject"):
+			row["subject"] = _mail_value(
+				row, ["title", "headline"], "Mail " + str(row.get("id", index))
+			)
+		if not row.has("body_preview"):
+			var body_text := str(_mail_value(row, ["preview", "body", "text"], "")).strip_edges()
+			row["body_preview"] = body_text.left(96)
+		if not row.has("money"):
+			row["money"] = int(_mail_value(row, ["cash", "copper", "coinage"], 0))
+		if not row.has("cod"):
+			row["cod"] = int(_mail_value(row, ["cod_amount", "cash_on_delivery"], 0))
+		if not row.has("read"):
+			if row.has("unread"):
+				row["read"] = not bool(row.get("unread", false))
+			else:
+				row["read"] = bool(row.get("is_read", false))
+		if not row.has("expire_time"):
+			row["expire_time"] = _mail_value(row, ["expires", "expiration", "expire"], "")
+		var raw_attachments = _mail_value(row, ["attachments", "items", "attachment_items"], [])
+		row["attachments"] = _normalize_mail_attachments(
+			raw_attachments if raw_attachments is Array else []
+		)
+		rows.append(row)
+	return rows
+
+
+func _normalize_mail_attachments(raw_attachments: Array) -> Array:
+	var attachments: Array = []
+	for index in range(raw_attachments.size()):
+		var raw_attachment = raw_attachments[index]
+		var attachment: Dictionary = {}
+		if raw_attachment is Dictionary:
+			attachment = raw_attachment.duplicate(true)
+		elif raw_attachment is String:
+			attachment = {"name": raw_attachment}
+		else:
+			continue
+		if not attachment.has("slot"):
+			attachment["slot"] = int(attachment.get("index", index))
+		if not attachment.has("item_id"):
+			attachment["item_id"] = int(_mail_value(attachment, ["item_entry", "entry", "id"], 0))
+		if not attachment.has("count"):
+			attachment["count"] = int(_mail_value(attachment, ["stack_count", "quantity"], 1))
+		if not attachment.has("name"):
+			var item_id := int(attachment.get("item_id", 0))
+			attachment["name"] = "item " + str(item_id) if item_id > 0 else "attachment"
+		attachments.append(attachment)
+	return attachments
+
+
+func _mail_value(row: Dictionary, keys: Array, fallback: Variant = null) -> Variant:
+	for key in keys:
+		if row.has(key):
+			return row.get(key)
+	return fallback
 
 
 func _extract_inventory_slots(character: Dictionary, enter_result: Dictionary) -> Array:
@@ -1598,11 +1792,14 @@ func _refresh_target_label() -> void:
 		_refresh_target_frame()
 		return
 	var target := _visible_object_at(selected_target_index)
-	target_label.text = "Target %s of %s selected: %s." % [
-		str(selected_target_index + 1),
-		str(visible_object_count),
-		_target_summary(target, selected_target_index),
-	]
+	target_label.text = (
+		"Target %s of %s selected: %s."
+		% [
+			str(selected_target_index + 1),
+			str(visible_object_count),
+			_target_summary(target, selected_target_index),
+		]
+	)
 	_refresh_target_frame()
 
 
@@ -1843,13 +2040,13 @@ func _refresh_shortcut_slots() -> void:
 	for index in range(shortcut_slots.size()):
 		var button := shortcut_slots[index]
 		if index < ACTION_BAR_DISPLAY_COUNT:
-				var slot := _action_slot_at(index)
-				if not slot.is_empty():
-					var key_text: String = (
-						ACTION_BAR_KEYS[index] if index < ACTION_BAR_KEYS.size() else str(index)
-					)
-					button.text = "%s\n%s" % [key_text, _action_slot_label(slot)]
-				button.tooltip_text = _action_slot_detail(slot)
+			var slot := _action_slot_at(index)
+			if not slot.is_empty():
+				var key_text: String = (
+					ACTION_BAR_KEYS[index] if index < ACTION_BAR_KEYS.size() else str(index)
+				)
+				button.text = "%s\n%s" % [key_text, _action_slot_label(slot)]
+			button.tooltip_text = _action_slot_detail(slot)
 
 
 func _add_panel_button(parent: Control, label_text: String, panel_name: String) -> void:
@@ -1897,6 +2094,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_trainer_panel()
 		"social":
 			_build_social_panel()
+		"mail":
+			_build_mail_panel()
 		"map":
 			_build_map_panel()
 		"inventory":
@@ -2102,7 +2301,10 @@ func _build_character_panel() -> void:
 				float(session_character_profile.get("z", session_wow_position.z)),
 			]
 		),
-		"Orientation: %.3f" % float(session_character_profile.get("orientation", session_orientation)),
+		(
+			"Orientation: %.3f"
+			% float(session_character_profile.get("orientation", session_orientation))
+		),
 	]
 	var race_text := str(session_character_profile.get("race", "")).strip_edges()
 	if not race_text.is_empty():
@@ -2178,9 +2380,10 @@ func _chat_row_text(row: Dictionary) -> String:
 	var mode := str(row.get("mode", row.get("channel", "Say"))).strip_edges()
 	if mode.is_empty():
 		mode = "Say"
-	var sender := str(
-		row.get("sender", row.get("sender_name", row.get("from", row.get("sender_guid", ""))))
-	).strip_edges()
+	var sender := (
+		str(row.get("sender", row.get("sender_name", row.get("from", row.get("sender_guid", "")))))
+		. strip_edges()
+	)
 	var message := str(row.get("message", "")).strip_edges()
 	if sender.is_empty():
 		return "[%s] %s" % [mode, message]
@@ -2296,12 +2499,15 @@ func _action_slot_label(slot: Dictionary) -> String:
 
 
 func _action_slot_detail(slot: Dictionary) -> String:
-	return "slot %s | %s | action %s | packed %s" % [
-		str(slot.get("button", "?")),
-		_action_type_name(int(slot.get("type", 0))),
-		str(slot.get("action", 0)),
-		str(slot.get("packed", "")),
-	]
+	return (
+		"slot %s | %s | action %s | packed %s"
+		% [
+			str(slot.get("button", "?")),
+			_action_type_name(int(slot.get("type", 0))),
+			str(slot.get("action", 0)),
+			str(slot.get("packed", "")),
+		]
+	)
 
 
 func _action_type_name(action_type: int) -> String:
@@ -2328,7 +2534,9 @@ func _build_targets_panel() -> void:
 			_panel_label(
 				(
 					"Selected: "
-					+ _target_summary(_visible_object_at(selected_target_index), selected_target_index)
+					+ _target_summary(
+						_visible_object_at(selected_target_index), selected_target_index
+					)
 				),
 				13
 			)
@@ -2339,8 +2547,7 @@ func _build_targets_panel() -> void:
 	if visible_objects.is_empty():
 		panel_body.add_child(
 			_panel_label(
-				"Detailed target rows are waiting for the persistent session snapshot.",
-				13
+				"Detailed target rows are waiting for the persistent session snapshot.", 13
 			)
 		)
 		return
@@ -2406,18 +2613,24 @@ func _target_detail(target: Dictionary, index: int) -> String:
 
 func _target_position_text(target: Dictionary) -> String:
 	if target.has("x") and target.has("y") and target.has("z"):
-		return "pos %.2f, %.2f, %.2f" % [
-			float(target.get("x", 0.0)),
-			float(target.get("y", 0.0)),
-			float(target.get("z", 0.0)),
-		]
+		return (
+			"pos %.2f, %.2f, %.2f"
+			% [
+				float(target.get("x", 0.0)),
+				float(target.get("y", 0.0)),
+				float(target.get("z", 0.0)),
+			]
+		)
 	var position = target.get("position", {})
 	if position is Dictionary and position.has("x") and position.has("y") and position.has("z"):
-		return "pos %.2f, %.2f, %.2f" % [
-			float(position.get("x", 0.0)),
-			float(position.get("y", 0.0)),
-			float(position.get("z", 0.0)),
-		]
+		return (
+			"pos %.2f, %.2f, %.2f"
+			% [
+				float(position.get("x", 0.0)),
+				float(position.get("y", 0.0)),
+				float(position.get("z", 0.0)),
+			]
+		)
 	return ""
 
 
@@ -2437,20 +2650,17 @@ func _build_quests_panel() -> void:
 		)
 		return
 
-	(
-		panel_body
-		. add_child(
-			_panel_label(
-				(
-					"Slots observed: %s of %s  Active: %s"
-					% [
-						str(session_quest_slots.size()),
-						str(QUEST_LOG_SLOT_COUNT),
-						str(active_slots.size()),
-					]
-				),
-				13
-			)
+	panel_body.add_child(
+		_panel_label(
+			(
+				"Slots observed: %s of %s  Active: %s"
+				% [
+					str(session_quest_slots.size()),
+					str(QUEST_LOG_SLOT_COUNT),
+					str(active_slots.size()),
+				]
+			),
+			13
 		)
 	)
 
@@ -2484,10 +2694,7 @@ func _build_loot_panel() -> void:
 	var target_guid := str(session_loot_snapshot.get("target_guid", "")).strip_edges()
 	if target_entry > 0 or not target_guid.is_empty():
 		panel_body.add_child(
-			_panel_label(
-				"Target: entry %s guid %s" % [str(target_entry), target_guid],
-				13
-			)
+			_panel_label("Target: entry %s guid %s" % [str(target_entry), target_guid], 13)
 		)
 	var money := int(session_loot_snapshot.get("money", -1))
 	if money >= 0:
@@ -2514,7 +2721,9 @@ func _build_loot_panel() -> void:
 		panel_body.add_child(_panel_label("Inventory changes: " + str(changed_slots.size()), 14))
 		for slot in changed_slots:
 			if slot is Dictionary:
-				panel_body.add_child(_panel_label(_inventory_slot_detail(slot, int(slot.get("slot", 0))), 13))
+				panel_body.add_child(
+					_panel_label(_inventory_slot_detail(slot, int(slot.get("slot", 0))), 13)
+				)
 
 	panel_body.add_child(_panel_label("Loot actions: waiting for live session controls.", 13))
 
@@ -2539,11 +2748,14 @@ func _loot_item_text(item: Dictionary) -> String:
 	var item_id := int(item.get("item_id", 0))
 	if item_name.is_empty():
 		item_name = "item " + str(item_id)
-	return "Slot %s\n%s x%s" % [
-		str(item.get("slot", 0)),
-		item_name,
-		str(item.get("count", 0)),
-	]
+	return (
+		"Slot %s\n%s x%s"
+		% [
+			str(item.get("slot", 0)),
+			item_name,
+			str(item.get("count", 0)),
+		]
+	)
 
 
 func _loot_item_detail(item: Dictionary) -> String:
@@ -2564,8 +2776,7 @@ func _build_vendor_panel() -> void:
 		panel_body.add_child(_panel_label("Vendor window: waiting for session vendor data.", 13))
 		panel_body.add_child(
 			_panel_label(
-				"Buy, sell, repair, and stock refresh actions remain in the live-session lane.",
-				13
+				"Buy, sell, repair, and stock refresh actions remain in the live-session lane.", 13
 			)
 		)
 		return
@@ -2576,10 +2787,7 @@ func _build_vendor_panel() -> void:
 	var target_guid := str(session_vendor_snapshot.get("target_guid", "")).strip_edges()
 	if target_entry > 0 or not target_guid.is_empty():
 		panel_body.add_child(
-			_panel_label(
-				"Target: entry %s guid %s" % [str(target_entry), target_guid],
-				13
-			)
+			_panel_label("Target: entry %s guid %s" % [str(target_entry), target_guid], 13)
 		)
 	var opcode := int(session_vendor_snapshot.get("response_opcode", 0))
 	if opcode > 0:
@@ -2597,9 +2805,7 @@ func _build_vendor_panel() -> void:
 			if item is Dictionary:
 				panel_body.add_child(_vendor_item_button(item))
 		if items.size() > 36:
-			panel_body.add_child(
-				_panel_label("+%s more vendor rows" % str(items.size() - 36), 13)
-			)
+			panel_body.add_child(_panel_label("+%s more vendor rows" % str(items.size() - 36), 13))
 
 	var transaction: Dictionary = session_vendor_snapshot.get("transaction", {})
 	if not transaction.is_empty():
@@ -2645,33 +2851,42 @@ func _show_vendor_item(item: Dictionary) -> void:
 
 
 func _vendor_item_text(item: Dictionary) -> String:
-	return "Slot %s\nItem %s | %s each | stock %s" % [
-		str(item.get("vendor_slot", 0)),
-		str(item.get("item_id", 0)),
-		_money_text(int(item.get("buy_price", 0))),
-		_vendor_stock_text(int(item.get("left_in_stock", 0))),
-	]
+	return (
+		"Slot %s\nItem %s | %s each | stock %s"
+		% [
+			str(item.get("vendor_slot", 0)),
+			str(item.get("item_id", 0)),
+			_money_text(int(item.get("buy_price", 0))),
+			_vendor_stock_text(int(item.get("left_in_stock", 0))),
+		]
+	)
 
 
 func _vendor_item_detail(item: Dictionary) -> String:
-	return "slot %s | item %s | price %s | count %s | stock %s | durability %s | cost %s" % [
-		str(item.get("vendor_slot", 0)),
-		str(item.get("item_id", 0)),
-		_money_text(int(item.get("buy_price", 0))),
-		str(item.get("buy_count", 0)),
-		_vendor_stock_text(int(item.get("left_in_stock", 0))),
-		str(item.get("max_durability", 0)),
-		str(item.get("extended_cost", 0)),
-	]
+	return (
+		"slot %s | item %s | price %s | count %s | stock %s | durability %s | cost %s"
+		% [
+			str(item.get("vendor_slot", 0)),
+			str(item.get("item_id", 0)),
+			_money_text(int(item.get("buy_price", 0))),
+			str(item.get("buy_count", 0)),
+			_vendor_stock_text(int(item.get("left_in_stock", 0))),
+			str(item.get("max_durability", 0)),
+			str(item.get("extended_cost", 0)),
+		]
+	)
 
 
 func _vendor_transaction_summary(transaction: Dictionary) -> String:
-	return "buy %s | sell %s | roundtrip %s | bought slot %s" % [
-		str(transaction.get("buy_succeeded", false)),
-		str(transaction.get("sell_confirmed", false)),
-		str(transaction.get("roundtrip_confirmed", false)),
-		str(transaction.get("bought_slot", 0)),
-	]
+	return (
+		"buy %s | sell %s | roundtrip %s | bought slot %s"
+		% [
+			str(transaction.get("buy_succeeded", false)),
+			str(transaction.get("sell_confirmed", false)),
+			str(transaction.get("roundtrip_confirmed", false)),
+			str(transaction.get("bought_slot", 0)),
+		]
+	)
 
 
 func _vendor_stock_text(stock: int) -> String:
@@ -2712,10 +2927,7 @@ func _build_trainer_panel() -> void:
 	var target_guid := str(session_trainer_snapshot.get("target_guid", "")).strip_edges()
 	if target_entry > 0 or not target_guid.is_empty():
 		panel_body.add_child(
-			_panel_label(
-				"Target: entry %s guid %s" % [str(target_entry), target_guid],
-				13
-			)
+			_panel_label("Target: entry %s guid %s" % [str(target_entry), target_guid], 13)
 		)
 	var opcode := int(session_trainer_snapshot.get("response_opcode", 0))
 	if opcode > 0:
@@ -2776,21 +2988,27 @@ func _show_trainer_spell(spell: Dictionary) -> void:
 
 
 func _trainer_spell_text(spell: Dictionary) -> String:
-	return "Spell %s\n%s | %s | %s" % [
-		str(spell.get("spell_id", 0)),
-		_trainer_spell_status(int(spell.get("usable", 0))),
-		_money_text(int(spell.get("money_cost", 0))),
-		_trainer_spell_requirements(spell),
-	]
+	return (
+		"Spell %s\n%s | %s | %s"
+		% [
+			str(spell.get("spell_id", 0)),
+			_trainer_spell_status(int(spell.get("usable", 0))),
+			_money_text(int(spell.get("money_cost", 0))),
+			_trainer_spell_requirements(spell),
+		]
+	)
 
 
 func _trainer_spell_detail(spell: Dictionary) -> String:
-	return "spell %s | state %s | cost %s | req %s" % [
-		str(spell.get("spell_id", 0)),
-		_trainer_spell_status(int(spell.get("usable", 0))),
-		_money_text(int(spell.get("money_cost", 0))),
-		_trainer_spell_requirements(spell),
-	]
+	return (
+		"spell %s | state %s | cost %s | req %s"
+		% [
+			str(spell.get("spell_id", 0)),
+			_trainer_spell_status(int(spell.get("usable", 0))),
+			_money_text(int(spell.get("money_cost", 0))),
+			_trainer_spell_requirements(spell),
+		]
+	)
 
 
 func _trainer_spell_status(state: int) -> String:
@@ -2826,16 +3044,22 @@ func _trainer_spell_requirements(spell: Dictionary) -> String:
 func _trainer_learn_summary(learn_result: Dictionary) -> String:
 	var reason := int(learn_result.get("failure_reason", 0))
 	if bool(learn_result.get("buy_succeeded", false)):
-		return "spell %s learned | known %s -> %s" % [
-			str(learn_result.get("spell_id", 0)),
-			str(learn_result.get("spell_known_before", false)),
-			str(learn_result.get("spell_known_after", false)),
-		]
+		return (
+			"spell %s learned | known %s -> %s"
+			% [
+				str(learn_result.get("spell_id", 0)),
+				str(learn_result.get("spell_known_before", false)),
+				str(learn_result.get("spell_known_after", false)),
+			]
+		)
 	if bool(learn_result.get("buy_failed", false)):
-		return "spell %s failed: %s" % [
-			str(learn_result.get("spell_id", 0)),
-			_trainer_failure_reason(reason),
-		]
+		return (
+			"spell %s failed: %s"
+			% [
+				str(learn_result.get("spell_id", 0)),
+				_trainer_failure_reason(reason),
+			]
+		)
 	return "spell %s response pending" % str(learn_result.get("spell_id", 0))
 
 
@@ -2964,9 +3188,156 @@ func _social_row_summary(row: Dictionary) -> String:
 	return " ".join(parts)
 
 
+func _build_mail_panel() -> void:
+	panel_title_label.text = "Mail"
+	if session_mail_snapshot.is_empty():
+		panel_body.add_child(_panel_label("Mail window: waiting for session mailbox data.", 13))
+		panel_body.add_child(
+			_panel_label(
+				"Read, send, delete, COD, and attachment actions remain in the live-session lane.",
+				13
+			)
+		)
+		return
+
+	var messages: Array = session_mail_snapshot.get("messages", [])
+	panel_body.add_child(
+		_panel_label(
+			(
+				"Mail rows: %s | unread %s"
+				% [
+					str(session_mail_snapshot.get("message_count", messages.size())),
+					str(session_mail_snapshot.get("unread_count", 0)),
+				]
+			),
+			13
+		)
+	)
+	var mailbox_guid := str(session_mail_snapshot.get("mailbox_guid", "")).strip_edges()
+	if not mailbox_guid.is_empty():
+		panel_body.add_child(_panel_label("Mailbox: " + mailbox_guid, 13))
+	var money_total := int(session_mail_snapshot.get("money_total", 0))
+	var cod_total := int(session_mail_snapshot.get("cod_total", 0))
+	if money_total > 0 or cod_total > 0:
+		panel_body.add_child(
+			_panel_label(
+				(
+					"Money attached: %s | COD total: %s"
+					% [_money_text(money_total), _money_text(cod_total)]
+				),
+				13
+			)
+		)
+	var opcode := int(session_mail_snapshot.get("response_opcode", 0))
+	if opcode > 0:
+		panel_body.add_child(_panel_label("Response opcode: 0x%03x" % opcode, 13))
+
+	if messages.is_empty():
+		panel_body.add_child(_panel_label("Mailbox rows: no messages in this snapshot.", 13))
+	else:
+		for index in range(min(messages.size(), 32)):
+			var message = messages[index]
+			if message is Dictionary:
+				panel_body.add_child(_mail_row_button(message))
+		if messages.size() > 32:
+			panel_body.add_child(_panel_label("+%s more mail rows" % str(messages.size() - 32), 13))
+
+	panel_body.add_child(_panel_label("Mail actions: waiting for live mailbox controls.", 13))
+
+
+func _mail_row_button(row: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = _mail_row_text(row)
+	button.tooltip_text = _mail_row_detail(row)
+	button.custom_minimum_size = Vector2(260.0, 50.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_mail_row.bind(row))
+	return button
+
+
+func _show_mail_row(row: Dictionary) -> void:
+	session_label.text = _mail_row_detail(row)
+	status_label.text = "Mail row selected: " + _mail_row_text(row).replace("\n", " | ")
+
+
+func _mail_row_text(row: Dictionary) -> String:
+	var subject := str(row.get("subject", "Mail")).strip_edges()
+	if subject.is_empty():
+		subject = "Mail " + str(row.get("id", ""))
+	var parts: Array[String] = [
+		"from " + str(row.get("sender", "Unknown")),
+		_mail_read_state(row),
+	]
+	var attachments: Array = row.get("attachments", [])
+	if not attachments.is_empty():
+		parts.append("attachments " + str(attachments.size()))
+	var money := int(row.get("money", 0))
+	if money > 0:
+		parts.append("money " + _money_text(money))
+	var cod := int(row.get("cod", 0))
+	if cod > 0:
+		parts.append("COD " + _money_text(cod))
+	return "%s\n%s" % [subject, " | ".join(parts)]
+
+
+func _mail_row_detail(row: Dictionary) -> String:
+	var parts: Array[String] = [
+		"mail " + str(row.get("id", "")),
+		"from " + str(row.get("sender", "Unknown")),
+		"subject " + str(row.get("subject", "")),
+		"state " + _mail_read_state(row),
+	]
+	var preview := str(row.get("body_preview", "")).strip_edges()
+	if not preview.is_empty():
+		parts.append("preview " + preview)
+	var money := int(row.get("money", 0))
+	if money > 0:
+		parts.append("money " + _money_text(money))
+	var cod := int(row.get("cod", 0))
+	if cod > 0:
+		parts.append("COD " + _money_text(cod))
+	var expire_time := str(row.get("expire_time", "")).strip_edges()
+	if not expire_time.is_empty():
+		parts.append("expires " + expire_time)
+	var attachments: Array = row.get("attachments", [])
+	if not attachments.is_empty():
+		parts.append("attachments " + _mail_attachment_summary(attachments))
+	return " | ".join(parts)
+
+
+func _mail_read_state(row: Dictionary) -> String:
+	if row.has("returned") and bool(row.get("returned", false)):
+		return "returned"
+	return "read" if bool(row.get("read", false)) else "unread"
+
+
+func _mail_attachment_summary(attachments: Array) -> String:
+	var parts: Array[String] = []
+	for index in range(min(attachments.size(), 6)):
+		var attachment = attachments[index]
+		if attachment is Dictionary:
+			parts.append(_mail_attachment_text(attachment))
+	if attachments.size() > 6:
+		parts.append("+%s more" % str(attachments.size() - 6))
+	return ", ".join(parts)
+
+
+func _mail_attachment_text(attachment: Dictionary) -> String:
+	return (
+		"slot %s %s x%s"
+		% [
+			str(attachment.get("slot", 0)),
+			str(attachment.get("name", "attachment")),
+			str(attachment.get("count", 1)),
+		]
+	)
+
+
 func _build_map_panel() -> void:
 	panel_title_label.text = "Map"
-	var selected_target_text := "none" if selected_target_index < 0 else str(selected_target_index + 1)
+	var selected_target_text := (
+		"none" if selected_target_index < 0 else str(selected_target_index + 1)
+	)
 	var rows := [
 		"Map ID: " + str(session_map_id),
 		(
@@ -3083,19 +3454,16 @@ func _build_inventory_panel() -> void:
 		)
 		return
 
-	(
-		panel_body
-		. add_child(
-			_panel_label(
-				(
-					"Slots: %s  Filled: %s"
-					% [
-						str(INVENTORY_SLOT_NAMES.size()),
-						str(_inventory_populated_count(session_inventory_slots)),
-					]
-				),
-				13
-			)
+	panel_body.add_child(
+		_panel_label(
+			(
+				"Slots: %s  Filled: %s"
+				% [
+					str(INVENTORY_SLOT_NAMES.size()),
+					str(_inventory_populated_count(session_inventory_slots)),
+				]
+			),
+			13
 		)
 	)
 
@@ -3718,6 +4086,38 @@ func _run_self_test() -> void:
 				},
 			],
 		},
+		"mail":
+		{
+			"unread_count": 1,
+			"messages":
+			[
+				{
+					"mail_id": 101,
+					"sender": "Postmaster",
+					"subject": "Welcome bundle",
+					"body_preview": "A local test message.",
+					"money": 123,
+					"cod": 0,
+					"read": false,
+					"attachments":
+					[
+						{
+							"slot": 0,
+							"item_id": 6948,
+							"count": 1,
+						},
+					],
+				},
+				{
+					"mail_id": 102,
+					"sender": "Localfriend",
+					"subject": "No attachment",
+					"read": true,
+					"money": 0,
+					"cod": 25,
+				},
+			],
+		},
 		"action_buttons":
 		{
 			"buttons":
@@ -4000,6 +4400,25 @@ func _run_self_test() -> void:
 		and _control_tree_text_contains(social_body, "Localfriend")
 		and _control_tree_text_contains(social_body, "Pendingbuddy")
 	)
+	_show_session_panel("mail")
+	var mail_shell := _panel_shell("mail")
+	var mail_title: Label = session_panels.get("mail", {}).get("title", null)
+	var mail_body: VBoxContainer = session_panels.get("mail", {}).get("body", null)
+	var mail_messages: Array = session_mail_snapshot.get("messages", [])
+	var mail_panel_ok := (
+		mail_shell != null
+		and mail_shell.visible
+		and mail_title != null
+		and mail_title.text == "Mail"
+		and mail_body != null
+		and mail_messages.size() == 2
+		and int(session_mail_snapshot.get("unread_count", 0)) == 1
+		and _control_tree_text_contains(mail_body, "Mail rows: 2")
+		and _control_tree_text_contains(mail_body, "Welcome bundle")
+		and _control_tree_text_contains(mail_body, "Postmaster")
+		and _control_tree_text_contains(mail_body, "attachments 1")
+		and _control_tree_text_contains(mail_body, "COD 0g 0s 25c")
+	)
 	_show_session_panel("map")
 	var map_shell := _panel_shell("map")
 	var map_title: Label = session_panels.get("map", {}).get("title", null)
@@ -4060,7 +4479,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 15
+	var actions_ok := action_buttons.size() == 16
 	var shortcut_ok := (
 		shortcut_slots.size() == 12
 		and shortcut_slots[0].text.find("spell 78") != -1
@@ -4086,6 +4505,7 @@ func _run_self_test() -> void:
 		and vendor_panel_ok
 		and trainer_panel_ok
 		and social_panel_ok
+		and mail_panel_ok
 		and map_panel_ok
 		and quest_tracker_ok
 		and options_panel_ok
@@ -4098,7 +4518,7 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
-				+ "loot_panel=true vendor_panel=true trainer_panel=true social_panel=true "
+				+ "loot_panel=true vendor_panel=true trainer_panel=true social_panel=true mail_panel=true "
 				+ "map_panel=true "
 				+ "targets=true action_slots=true spellbook=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
@@ -4122,7 +4542,7 @@ func _run_self_test() -> void:
 			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
 			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s "
 			+ "loot_panel_ok=%s vendor_panel_ok=%s trainer_panel_ok=%s social_panel_ok=%s "
-			+ "social_counts=%s/%s/%s/%s"
+			+ "mail_panel_ok=%s social_counts=%s/%s/%s/%s mail_count=%s"
 		)
 		% [
 			str(marker_ok),
@@ -4141,10 +4561,12 @@ func _run_self_test() -> void:
 			str(vendor_panel_ok),
 			str(trainer_panel_ok),
 			str(social_panel_ok),
+			str(mail_panel_ok),
 			str(social_friends.size()),
 			str(social_party.size()),
 			str(social_guild.size()),
 			str(social_invites.size()),
+			str(mail_messages.size()),
 		]
 	)
 	push_error(self_test_error)
