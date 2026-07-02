@@ -2237,3 +2237,20 @@ Remaining work:
   quests that actually have selectable reward rows, share/failure paths,
   full-log/full-bag checks, persistent-session HUD wiring, and local-only text
   and icon rendering.
+
+## 2026-07-01 - Begin Stage 17 Quest Status Marker Probe
+
+Goal: add a read-only quest-giver status query proof so the Godot client can ask
+AzerothCore for the server-owned numeric quest-marker state of a selected visible
+quest giver. This moves toward in-world quest markers and minimap/objective UI
+without mutating quest state.
+
+Plan:
+
+- Add `CMSG_QUESTGIVER_STATUS_QUERY` and `SMSG_QUESTGIVER_STATUS` support.
+- Parse the response as raw target GUID plus one status byte using AzerothCore's
+  `DIALOG_STATUS_*` numeric values.
+- Expose the read-only probe through the native helper, Godot extension, and
+  `ProtocolClientBridge`.
+- Validate against the local starter fixture target entry `823`, with output
+  kept to ids, GUIDs, status numbers, and booleans only.
