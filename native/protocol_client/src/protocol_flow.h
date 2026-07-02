@@ -184,6 +184,33 @@ struct QuestGiverDetailsProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct QuestGiverAcceptProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    std::uint32_t quest_id = 0;
+    bool live_target_found = false;
+    bool target_has_position = false;
+    float target_x = 0;
+    float target_y = 0;
+    float target_z = 0;
+    bool approach_movement_sent = false;
+    bool return_movement_sent = false;
+    bool selection_sent = false;
+    bool questgiver_hello_sent = false;
+    bool accept_sent = false;
+    bool quest_in_log_after_accept = false;
+    std::int32_t accepted_slot = -1;
+    bool remove_sent = false;
+    bool quest_removed_after_remove = false;
+    std::uint16_t accept_response_opcode = 0;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct TrainerBuySpellProbeResult
 {
     RealmInfo realm;
@@ -633,6 +660,17 @@ QuestGiverListProbeResult questgiver_list_probe(
     FlowOptions options = {});
 
 QuestGiverDetailsProbeResult questgiver_details_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::uint32_t quest_id,
+    std::string const& target_name,
+    FlowOptions options = {});
+
+QuestGiverAcceptProbeResult questgiver_accept_probe(
     std::string const& host,
     std::string const& port,
     std::string const& account,

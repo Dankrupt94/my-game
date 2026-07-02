@@ -171,6 +171,9 @@ constexpr std::uint32_t ItemFieldMaxDurability = 0x0006 + 0x0037;
 constexpr std::uint32_t PlayerFieldInvSlotHead = UnitEndField + 0x00B0;
 constexpr std::uint32_t PlayerFieldPackSlot1 = UnitEndField + 0x00DE;
 constexpr std::uint32_t PlayerFieldCoinage = UnitEndField + 0x03FE;
+constexpr std::uint32_t PlayerFieldQuestLog1_1 = UnitEndField + 0x000A;
+constexpr std::uint32_t QuestLogSlotStride = 5;
+constexpr std::uint8_t QuestLogSlotCount = 25;
 constexpr std::uint8_t InventorySectionEquipment = 0;
 constexpr std::uint8_t InventorySectionBag = 1;
 constexpr std::uint8_t InventorySectionBackpack = 2;
@@ -514,6 +517,30 @@ void apply_player_inventory_values(
         inventory.seen = true;
         ensure_inventory_slots(inventory);
         update_populated_count(inventory);
+    }
+}
+
+void apply_player_quest_log_values(
+    PlayerQuestLogSummary& quest_log,
+    std::uint64_t player_guid,
+    std::vector<UpdateFieldValue> const& values)
+{
+    quest_log.player_guid = player_guid;
+    for (std::uint8_t slot = 0; slot < QuestLogSlotCount; ++slot)
+    {
+        std::uint32_t const id_index = PlayerFieldQuestLog1_1 + static_cast<std::uint32_t>(slot) * QuestLogSlotStride;
+        std::uint32_t quest_id = 0;
+        // Value updates are partial: only record slots whose id field is present
+        // in this block. A present id of 0 means the slot was just cleared.
+        if (!update_value_at(values, id_index, quest_id))
+        {
+            continue;
+        }
+        quest_log.seen = true;
+        quest_log.slots.push_back(QuestLogSlotSummary{
+            .slot = static_cast<std::int32_t>(slot),
+            .quest_id = quest_id,
+        });
     }
 }
 
@@ -1466,6 +1493,22 @@ std::vector<std::uint8_t> build_questgiver_query_quest_payload(std::uint64_t gui
     return payload;
 }
 
+std::vector<std::uint8_t> build_questgiver_accept_quest_payload(std::uint64_t guid, std::uint32_t quest_id)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, guid);
+    append_u32_le(payload, quest_id);
+    append_u32_le(payload, 0); // unk (start slot / npc flags; client sends 0)
+    return payload;
+}
+
+std::vector<std::uint8_t> build_questlog_remove_quest_payload(std::uint8_t slot)
+{
+    std::vector<std::uint8_t> payload;
+    append_u8(payload, slot); // quest-log slot index to abandon
+    return payload;
+}
+
 QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const std::uint8_t> payload)
 {
     std::size_t offset = 0;
@@ -1757,6 +1800,7 @@ UpdateObjectSummary parse_update_object_summary(
                 if (guid == player_guid)
                 {
                     apply_player_inventory_values(summary.inventory, guid, values);
+                    apply_player_quest_log_values(summary.quest_log, guid, values);
                 }
                 if (high_guid_has_entry(high_guid(guid)) && !high_guid_is_item(high_guid(guid)))
                 {
@@ -1784,6 +1828,7 @@ UpdateObjectSummary parse_update_object_summary(
                 if (guid == player_guid)
                 {
                     apply_player_inventory_values(summary.inventory, guid, values);
+                    apply_player_quest_log_values(summary.quest_log, guid, values);
                 }
                 if (!item_object)
                 {
@@ -2059,6 +2104,26 @@ bool world_packet_self_test()
     append_u32_le(update_payload, 17);
     append_u32_le(update_payload, 42);
     auto update = parse_update_object_summary(update_payload, false, 0xF13000033700000BULL);
+
+    // Isolated self value-update carrying a single quest-log slot id (accept path).
+    std::vector<std::uint8_t> quest_log_update_payload;
+    append_u32_le(quest_log_update_payload, 1); // block count
+    append_u8(quest_log_update_payload, 0);     // update type 0 = values only
+    append_packed_guid(quest_log_update_payload, 0xF13000033700000BULL);
+    std::uint32_t const quest_log_index = PlayerFieldQuestLog1_1; // slot 0 id field
+    std::uint8_t const quest_log_blocks = static_cast<std::uint8_t>(quest_log_index / 32 + 1);
+    append_u8(quest_log_update_payload, quest_log_blocks);
+    std::vector<std::uint32_t> quest_log_masks(quest_log_blocks, 0);
+    quest_log_masks[quest_log_index / 32] |= 1u << (quest_log_index % 32);
+    for (std::uint32_t mask : quest_log_masks)
+    {
+        append_u32_le(quest_log_update_payload, mask);
+    }
+    append_u32_le(quest_log_update_payload, 783); // quest id now in slot 0
+    auto quest_log_update = parse_update_object_summary(quest_log_update_payload, false, 0xF13000033700000BULL);
+
+    auto accept_payload = build_questgiver_accept_quest_payload(0xF13000033700000BULL, 783);
+    auto remove_payload = build_questlog_remove_quest_payload(0);
 
     std::vector<std::uint8_t> chat_response;
     append_u8(chat_response, CHAT_MSG_SAY);
@@ -2483,5 +2548,13 @@ bool world_packet_self_test()
         && trainer_buy_failure.spell_id == 6673
         && trainer_buy_failure.failure_reason == 1
         && loot_response.items[0].display_id == 777
-        && loot_response.items[0].slot_type == 0;
+        && loot_response.items[0].slot_type == 0
+        && quest_log_update.quest_log.seen
+        && quest_log_update.quest_log.player_guid == 0xF13000033700000BULL
+        && quest_log_update.quest_log.slots.size() == 1
+        && quest_log_update.quest_log.slots[0].slot == 0
+        && quest_log_update.quest_log.slots[0].quest_id == 783
+        && accept_payload.size() == 16
+        && remove_payload.size() == 1
+        && remove_payload[0] == 0;
 }

@@ -1866,3 +1866,44 @@ Remaining work:
 - Quest detail (`CMSG_QUESTGIVER_QUERY_QUEST` / `SMSG_QUESTGIVER_QUEST_DETAILS`),
   accept/complete/reward protocol, objective/quest-log tracking, in-world click
   targeting, persistent-session integration, and dashboard navigation (UI lane).
+
+## 2026-07-01 - Stage 17 Quest Accept + Abandon Slice (native)
+
+Goal: add the next quest-loop protocol step — accepting an offered quest against
+live AzerothCore and proving it via server-authoritative quest-log state — kept
+reversible by abandoning the quest in the same probe (matching the swap/restore
+discipline used for inventory/equipment slices).
+
+Result:
+
+- Packet layer: `CMSG_QUESTGIVER_ACCEPT_QUEST` (0x189) and
+  `CMSG_QUESTLOG_REMOVE_QUEST` (0x194) builders. New player quest-log
+  update-field extractor (`PLAYER_QUEST_LOG_1_1 = UNIT_END + 0x0A`, stride 5, 25
+  slots) wired into `parse_update_object_summary` for the self object, exposed as
+  `UpdateObjectSummary.quest_log` (slot index + quest id per present slot).
+- `questgiver_accept_probe` flow (visible-target scan, approach, select, hello,
+  accept, watch self value-updates for the quest id landing in a quest-log slot,
+  then remove that slot and watch it clear back to 0) + `--questgiver-accept` CLI.
+- No proprietary quest text is read or stored; the slice is purely numeric
+  (quest id, slot index).
+
+Validation:
+
+- `native/protocol_client/build/acore_protocol_client --self-test` passes
+  (`WORLD_PACKET_SELF_TEST_OK`) with a new synthetic quest-log value-update block
+  (slot 0 → quest 783) and accept/remove builder-size assertions.
+- Live vs `Codexstage` against Deputy Willem (823), quest 783:
+  `live_target_found=1`, `accept_sent=1`, `quest_in_log_after_accept=1`,
+  `accepted_slot=0`, `remove_sent=1`, `quest_removed_after_remove=1`,
+  `accept_response_opcode=0x0` — full reversible round trip, character quest log
+  restored to its prior state.
+
+Remaining work:
+
+- Godot extension binding + bridge method + `stage17_*` accept scene (this lane).
+- Quest complete/turn-in (`CMSG_QUESTGIVER_COMPLETE_QUEST` /
+  `SMSG_QUESTGIVER_OFFER_REWARD`, `CMSG_QUESTGIVER_CHOOSE_REWARD`), objective
+  progress (`SMSG_QUESTUPDATE_ADD_KILL`/`ADD_ITEM`), quest-log UI, in-world click
+  targeting, and persistent-session integration.
+- The already-landed native quest-details probe still needs its Godot
+  extension/bridge/scene exposure.
