@@ -1,5 +1,33 @@
 # Task Log
 
+## 2026-07-02 - World Session Social Panel
+
+Goal: add a first resident social-window surface to the active world-session
+HUD without touching Claude's native/protocol/bridge/live-session files.
+
+Result:
+
+- Added a `Social` panel to the world-session movable/resizable HUD system.
+- The panel renders safe session social data: friends, ignore rows,
+  party/group members, guild members, pending invites, party leader, guild name,
+  online state, rank, role, level, class, zone, notes, and GUID details when
+  present.
+- Fixed nested social row extraction so `party.members` and `guild.members`
+  shapes are accepted alongside flat row arrays.
+- The panel stays display-only; invite, friend, ignore, party, guild, and social
+  mutation actions remain live-session lane work.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `social_panel=true`.
+
+Remaining work:
+
+- Feed live social/group/guild snapshots from the persistent session lane.
+- Add player-driven invite/accept/decline, friend/ignore, party leave, guild
+  roster/rank actions, status updates, and chat integration.
+
 ## 2026-07-02 - World Session Trainer Panel
 
 Goal: add a first resident trainer-window surface to the active world-session

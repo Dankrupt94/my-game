@@ -22,19 +22,35 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Social Panel Started (Codex UI lane)
+## 2026-07-02 - World Session Social Panel (Codex UI lane)
 
-Goal: add a resident social-window surface to the active world-session HUD so
-safe friends, party, guild, and invite snapshots can display in the normal
-gameplay view.
+Context: the Stage 17 parity spec requires normal social, group, and guild
+surfaces, but the active world-session HUD did not yet have a resident social
+window.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Render session-provided social dictionaries/arrays without calling or editing
-  the protocol bridge.
-- Keep invite, friend, ignore, group, and guild actions in Claude's
-  live-session lane.
+- Added a resident `Social` panel to `scripts/world_session_view.gd`.
+- The panel renders safe session social dictionaries without calling the
+  protocol bridge: friends, ignore rows, party/group members, guild members,
+  pending invites, party leader, guild name, online state, rank, role, level,
+  class, zone, notes, and GUID details when present.
+- Fixed nested social row extraction so `party.members` and `guild.members`
+  shapes are accepted alongside flat row arrays.
+- Actual invite, friend, ignore, party, guild, and social mutation actions stay
+  in Claude's live-session/native lane.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `social_panel=true`.
+
+Remaining work:
+
+- Feed live social/group/guild snapshots from Claude's persistent session lane
+  into the world-session context.
+- Add player-driven invite/accept/decline, friend/ignore, party leave, guild
+  roster/rank actions, status updates, and chat integration.
 
 ## 2026-07-02 - World Session Trainer Panel (Codex UI lane)
 

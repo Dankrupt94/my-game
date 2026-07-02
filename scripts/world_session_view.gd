@@ -17,8 +17,8 @@ const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
 const PANEL_NAMES := [
-	"chat", "character", "spells", "actions", "targets", "quests", "loot", "vendor", "trainer",
-	"map", "options", "inventory"
+	"chat", "character", "spells", "actions", "targets", "quests", "loot", "vendor",
+	"trainer", "social", "map", "options", "inventory"
 ]
 const PANEL_TITLES := {
 	"actions": "Actions",
@@ -29,6 +29,7 @@ const PANEL_TITLES := {
 	"map": "Map",
 	"options": "Options",
 	"quests": "Quests",
+	"social": "Social",
 	"spells": "Spells",
 	"targets": "Targets",
 	"trainer": "Trainer",
@@ -115,6 +116,7 @@ var session_action_slots: Array = []
 var session_loot_snapshot: Dictionary = {}
 var session_vendor_snapshot: Dictionary = {}
 var session_trainer_snapshot: Dictionary = {}
+var session_social_snapshot: Dictionary = {}
 var session_inventory_slots: Array = []
 var session_coinage := -1
 var selected_target_index := -1
@@ -287,6 +289,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Loot", "loot")
 	_add_panel_button(nav_bar, "Vendor", "vendor")
 	_add_panel_button(nav_bar, "Trainer", "trainer")
+	_add_panel_button(nav_bar, "Social", "social")
 	_add_panel_button(nav_bar, "Map", "map")
 	_add_panel_button(nav_bar, "Bags", "inventory")
 	_add_panel_button(nav_bar, "Options", "options")
@@ -499,6 +502,7 @@ func _apply_session_data(
 	session_loot_snapshot = _extract_loot_snapshot(character, enter_result)
 	session_vendor_snapshot = _extract_vendor_snapshot(character, enter_result)
 	session_trainer_snapshot = _extract_trainer_snapshot(character, enter_result)
+	session_social_snapshot = _extract_social_snapshot(character, enter_result)
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
 	session_quest_slots = _extract_quest_slots(character, enter_result)
@@ -1172,6 +1176,159 @@ func _normalize_trainer_learn_result(raw_snapshot: Dictionary) -> Dictionary:
 	}
 
 
+func _extract_social_snapshot(character: Dictionary, enter_result: Dictionary) -> Dictionary:
+	var candidates: Array = [
+		character.get("social", {}),
+		character.get("friends", {}),
+		character.get("party", {}),
+		character.get("group", {}),
+		character.get("guild", {}),
+		enter_result.get("social", {}),
+		enter_result.get("friends", {}),
+		enter_result.get("party", {}),
+		enter_result.get("group", {}),
+		enter_result.get("guild", {}),
+	]
+	if _looks_like_social_snapshot(character):
+		candidates.append(character)
+	if _looks_like_social_snapshot(enter_result):
+		candidates.append(enter_result)
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("social", {}))
+		candidates.append(update.get("friends", {}))
+		candidates.append(update.get("party", {}))
+		candidates.append(update.get("group", {}))
+		candidates.append(update.get("guild", {}))
+		if _looks_like_social_snapshot(update):
+			candidates.append(update)
+
+	for candidate in candidates:
+		if not candidate is Dictionary or candidate.is_empty():
+			continue
+		var snapshot := _normalize_social_snapshot(candidate)
+		if bool(snapshot.get("has_social_data", false)):
+			return snapshot
+	return {}
+
+
+func _looks_like_social_snapshot(snapshot: Dictionary) -> bool:
+	for key in [
+		"friends",
+		"friend_rows",
+		"ignore",
+		"ignore_rows",
+		"party",
+		"group",
+		"party_members",
+		"group_members",
+		"guild",
+		"guild_members",
+		"invites",
+		"pending_invites",
+	]:
+		if snapshot.has(key):
+			return true
+	return false
+
+
+func _normalize_social_snapshot(raw_snapshot: Dictionary) -> Dictionary:
+	var friends_raw = _social_raw_rows(raw_snapshot, ["friends", "friend_rows"], "friends")
+	var ignore_raw = _social_raw_rows(raw_snapshot, ["ignore", "ignore_rows", "ignored"], "ignore")
+	var party_raw = _social_raw_rows(
+		raw_snapshot,
+		["party_members", "group_members", "members"],
+		"party"
+	)
+	var guild_raw = _social_raw_rows(raw_snapshot, ["guild_members", "members"], "guild")
+	var invites_raw = _social_raw_rows(raw_snapshot, ["invites", "pending_invites"], "invites")
+	var friends: Array = _normalize_social_rows(friends_raw, "friend")
+	var ignores: Array = _normalize_social_rows(ignore_raw, "ignore")
+	var party: Array = _normalize_social_rows(party_raw, "party")
+	var guild: Array = _normalize_social_rows(guild_raw, "guild")
+	var invites: Array = _normalize_social_rows(invites_raw, "invite")
+	var has_social_data: bool = (
+		_looks_like_social_snapshot(raw_snapshot)
+		or not friends.is_empty()
+		or not ignores.is_empty()
+		or not party.is_empty()
+		or not guild.is_empty()
+		or not invites.is_empty()
+	)
+	return {
+		"has_social_data": has_social_data,
+		"friends": friends,
+		"ignore": ignores,
+		"party": party,
+		"guild": guild,
+		"invites": invites,
+		"guild_name": _social_group_name(raw_snapshot, "guild", "guild_name"),
+		"party_leader": _social_group_name(raw_snapshot, "party", "leader"),
+	}
+
+
+func _social_raw_rows(snapshot: Dictionary, keys: Array, nested_key: String) -> Array:
+	for key in keys:
+		var value: Variant = snapshot.get(key, null)
+		if value is Array:
+			return value
+		if value is Dictionary:
+			for row_key in ["rows", "members", "entries", nested_key]:
+				if not value.has(row_key):
+					continue
+				var rows: Variant = value.get(row_key, [])
+				if rows is Array:
+					return rows
+	var nested: Variant = snapshot.get(nested_key, {})
+	if nested is Dictionary:
+		for row_key in ["rows", "members", "entries"]:
+			if not nested.has(row_key):
+				continue
+			var rows: Variant = nested.get(row_key, [])
+			if rows is Array:
+				return rows
+	return []
+
+
+func _normalize_social_rows(raw_rows: Array, row_kind: String) -> Array:
+	var rows: Array = []
+	for index in range(raw_rows.size()):
+		var raw_row = raw_rows[index]
+		var row: Dictionary = {}
+		if raw_row is Dictionary:
+			row = raw_row.duplicate(true)
+		elif raw_row is String:
+			row = {"name": raw_row}
+		else:
+			continue
+		var name := _social_row_name(row)
+		if name.is_empty():
+			continue
+		row["name"] = name
+		row["kind"] = row_kind
+		if not row.has("index"):
+			row["index"] = index
+		rows.append(row)
+	return rows
+
+
+func _social_row_name(row: Dictionary) -> String:
+	for key in ["name", "character_name", "player", "member", "account", "guid"]:
+		var value := str(row.get(key, "")).strip_edges()
+		if not value.is_empty():
+			return value
+	return ""
+
+
+func _social_group_name(snapshot: Dictionary, key: String, field: String) -> String:
+	var nested: Variant = snapshot.get(key, {})
+	if nested is Dictionary:
+		var nested_value := str(nested.get(field, "")).strip_edges()
+		if not nested_value.is_empty():
+			return nested_value
+	return str(snapshot.get(field, "")).strip_edges()
+
+
 func _extract_inventory_slots(character: Dictionary, enter_result: Dictionary) -> Array:
 	var candidates := [
 		character.get("inventory", {}),
@@ -1738,6 +1895,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_vendor_panel()
 		"trainer":
 			_build_trainer_panel()
+		"social":
+			_build_social_panel()
 		"map":
 			_build_map_panel()
 		"inventory":
@@ -2692,6 +2851,119 @@ func _trainer_failure_reason(reason: int) -> String:
 			return "failure " + str(reason)
 
 
+func _build_social_panel() -> void:
+	panel_title_label.text = "Social"
+	if session_social_snapshot.is_empty():
+		panel_body.add_child(_panel_label("Social window: waiting for session social data.", 13))
+		panel_body.add_child(
+			_panel_label(
+				"Friend, ignore, party, guild, and invite actions remain in the live-session lane.",
+				13
+			)
+		)
+		return
+
+	var party: Array = session_social_snapshot.get("party", [])
+	var friends: Array = session_social_snapshot.get("friends", [])
+	var ignores: Array = session_social_snapshot.get("ignore", [])
+	var guild: Array = session_social_snapshot.get("guild", [])
+	var invites: Array = session_social_snapshot.get("invites", [])
+	panel_body.add_child(
+		_panel_label(
+			(
+				"Friends %s | Ignore %s | Party %s | Guild %s | Invites %s"
+				% [
+					str(friends.size()),
+					str(ignores.size()),
+					str(party.size()),
+					str(guild.size()),
+					str(invites.size()),
+				]
+			),
+			13
+		)
+	)
+	var party_leader := str(session_social_snapshot.get("party_leader", "")).strip_edges()
+	if not party_leader.is_empty():
+		panel_body.add_child(_panel_label("Party leader: " + party_leader, 13))
+	var guild_name := str(session_social_snapshot.get("guild_name", "")).strip_edges()
+	if not guild_name.is_empty():
+		panel_body.add_child(_panel_label("Guild: " + guild_name, 13))
+
+	_add_social_section("Party", party)
+	_add_social_section("Friends", friends)
+	_add_social_section("Ignore", ignores)
+	_add_social_section("Guild", guild)
+	_add_social_section("Invites", invites)
+	panel_body.add_child(_panel_label("Social actions: waiting for live session controls.", 13))
+
+
+func _add_social_section(title: String, rows: Array) -> void:
+	panel_body.add_child(_panel_label("%s: %s" % [title, str(rows.size())], 14))
+	if rows.is_empty():
+		panel_body.add_child(_panel_label("No " + title.to_lower() + " rows in this snapshot.", 13))
+		return
+	for index in range(min(rows.size(), 24)):
+		var row: Variant = rows[index]
+		if row is Dictionary:
+			panel_body.add_child(_social_row_button(row))
+	if rows.size() > 24:
+		panel_body.add_child(_panel_label("+%s more %s rows" % [str(rows.size() - 24), title], 13))
+
+
+func _social_row_button(row: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = _social_row_text(row)
+	button.tooltip_text = _social_row_detail(row)
+	button.custom_minimum_size = Vector2(240.0, 44.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_social_row.bind(row))
+	return button
+
+
+func _show_social_row(row: Dictionary) -> void:
+	session_label.text = _social_row_detail(row)
+	status_label.text = "Social row selected: " + _social_row_text(row).replace("\n", " | ")
+
+
+func _social_row_text(row: Dictionary) -> String:
+	var name := str(row.get("name", "Unknown"))
+	var status := _social_status_text(row)
+	var detail := _social_row_summary(row)
+	if detail.is_empty():
+		return "%s\n%s" % [name, status]
+	return "%s\n%s | %s" % [name, status, detail]
+
+
+func _social_row_detail(row: Dictionary) -> String:
+	var parts: Array[String] = [
+		str(row.get("kind", "social")),
+		"name " + str(row.get("name", "Unknown")),
+		"status " + _social_status_text(row),
+	]
+	for key in ["level", "class", "zone", "rank", "note", "role", "guid"]:
+		if row.has(key):
+			parts.append(key + " " + str(row.get(key)))
+	return " | ".join(parts)
+
+
+func _social_status_text(row: Dictionary) -> String:
+	if row.has("online"):
+		return "online" if bool(row.get("online", false)) else "offline"
+	var status := str(row.get("status", "")).strip_edges()
+	if not status.is_empty():
+		return status
+	return "listed"
+
+
+func _social_row_summary(row: Dictionary) -> String:
+	var parts: Array[String] = []
+	for key in ["level", "class", "zone", "rank", "role"]:
+		if row.has(key):
+			parts.append(str(row.get(key)))
+	return " ".join(parts)
+
+
 func _build_map_panel() -> void:
 	panel_title_label.text = "Map"
 	var selected_target_text := "none" if selected_target_index < 0 else str(selected_target_index + 1)
@@ -3390,6 +3662,62 @@ func _run_self_test() -> void:
 			"after_coinage": 9900,
 			"coinage_delta": -100,
 		},
+		"social":
+		{
+			"friends":
+			[
+				{
+					"name": "Localfriend",
+					"online": true,
+					"level": 80,
+					"class": "Mage",
+					"zone": "Stormwind",
+				},
+				{
+					"name": "Offlinepal",
+					"online": false,
+					"level": 12,
+					"class": "Priest",
+				},
+			],
+			"ignore": ["Noisytest"],
+			"party":
+			{
+				"leader": "Codexstage",
+				"members":
+				[
+					{
+						"name": "Codexstage",
+						"online": true,
+						"role": "leader",
+					},
+					{
+						"name": "Partyhelper",
+						"online": true,
+						"role": "member",
+					},
+				],
+			},
+			"guild":
+			{
+				"guild_name": "Local Test Guild",
+				"members":
+				[
+					{
+						"name": "Guildmate",
+						"online": true,
+						"rank": "Officer",
+					},
+				],
+			},
+			"invites":
+			[
+				{
+					"name": "Pendingbuddy",
+					"status": "pending",
+				},
+			],
+		},
 		"action_buttons":
 		{
 			"buttons":
@@ -3648,6 +3976,30 @@ func _run_self_test() -> void:
 		and _control_tree_text_contains(trainer_body, "spell 6673 learned")
 		and _control_tree_text_contains(trainer_body, "delta -0g 1s 0c")
 	)
+	_show_session_panel("social")
+	var social_shell := _panel_shell("social")
+	var social_title: Label = session_panels.get("social", {}).get("title", null)
+	var social_body: VBoxContainer = session_panels.get("social", {}).get("body", null)
+	var social_friends: Array = session_social_snapshot.get("friends", [])
+	var social_party: Array = session_social_snapshot.get("party", [])
+	var social_guild: Array = session_social_snapshot.get("guild", [])
+	var social_invites: Array = session_social_snapshot.get("invites", [])
+	var social_panel_ok := (
+		social_shell != null
+		and social_shell.visible
+		and social_title != null
+		and social_title.text == "Social"
+		and social_body != null
+		and social_friends.size() == 2
+		and social_party.size() == 2
+		and social_guild.size() == 1
+		and social_invites.size() == 1
+		and _control_tree_text_contains(social_body, "Friends 2")
+		and _control_tree_text_contains(social_body, "Party leader: Codexstage")
+		and _control_tree_text_contains(social_body, "Guild: Local Test Guild")
+		and _control_tree_text_contains(social_body, "Localfriend")
+		and _control_tree_text_contains(social_body, "Pendingbuddy")
+	)
 	_show_session_panel("map")
 	var map_shell := _panel_shell("map")
 	var map_title: Label = session_panels.get("map", {}).get("title", null)
@@ -3708,7 +4060,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 14
+	var actions_ok := action_buttons.size() == 15
 	var shortcut_ok := (
 		shortcut_slots.size() == 12
 		and shortcut_slots[0].text.find("spell 78") != -1
@@ -3733,6 +4085,7 @@ func _run_self_test() -> void:
 		and loot_panel_ok
 		and vendor_panel_ok
 		and trainer_panel_ok
+		and social_panel_ok
 		and map_panel_ok
 		and quest_tracker_ok
 		and options_panel_ok
@@ -3745,7 +4098,8 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
-				+ "loot_panel=true vendor_panel=true trainer_panel=true map_panel=true "
+				+ "loot_panel=true vendor_panel=true trainer_panel=true social_panel=true "
+				+ "map_panel=true "
 				+ "targets=true action_slots=true spellbook=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
 			)
@@ -3767,7 +4121,8 @@ func _run_self_test() -> void:
 			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
 			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
 			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s "
-			+ "loot_panel_ok=%s vendor_panel_ok=%s trainer_panel_ok=%s"
+			+ "loot_panel_ok=%s vendor_panel_ok=%s trainer_panel_ok=%s social_panel_ok=%s "
+			+ "social_counts=%s/%s/%s/%s"
 		)
 		% [
 			str(marker_ok),
@@ -3785,6 +4140,11 @@ func _run_self_test() -> void:
 			str(loot_panel_ok),
 			str(vendor_panel_ok),
 			str(trainer_panel_ok),
+			str(social_panel_ok),
+			str(social_friends.size()),
+			str(social_party.size()),
+			str(social_guild.size()),
+			str(social_invites.size()),
 		]
 	)
 	push_error(self_test_error)
