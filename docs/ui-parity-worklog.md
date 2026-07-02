@@ -22,6 +22,19 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Character Panel Started (Codex UI lane)
+
+Goal: add the first resident character/paper-doll style HUD surface to the
+active world-session view using only safe session dictionaries.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render character identity, position, coinage, and equipment-slot summaries
+  from data already present in the session context.
+- Do not call or edit the protocol bridge; live equipment mutation remains a
+  separate native/session-lane task.
+
 ## 2026-07-02 - World Session Chat Log Data (Codex UI lane)
 
 Context: the resident world-session `Chat` panel had a local send box, but it
