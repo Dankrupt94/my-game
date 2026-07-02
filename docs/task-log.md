@@ -1,5 +1,37 @@
 # Task Log
 
+## 2026-07-02 - World Session Death And Respawn Panel
+
+Goal: add resident death, ghost, corpse-run, and resurrection status surfaces
+to the active world-session HUD without touching Claude's
+native/protocol/bridge/live-session files.
+
+Result:
+
+- Added a compact always-visible `Death` status strip to the world-session HUD.
+- Added a resident `Death` panel to the world-session movable/resizable HUD
+  system.
+- The panel renders safe session death data: alive/dead/ghost/released state,
+  release timer, respawn timer, corpse distance/position, graveyard, durability
+  loss, respawn health, resurrection offer source/health/expiry, and failure
+  text when present.
+- The panel stays display-only; live death packets, release-spirit requests,
+  graveyard teleport, corpse-respawn requests, resurrection accept/decline, and
+  server failure states remain live-session lane work.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `death_panel=true`.
+
+Remaining work:
+
+- Feed live death/ghost/corpse/resurrection snapshots from the persistent
+  session lane.
+- Wire player-driven release spirit, corpse respawn, graveyard return,
+  resurrection accept/decline, durability loss refresh, corpse marker, ghost
+  movement visuals, and server failure-code feedback.
+
 ## 2026-07-02 - World Session Auction Panel
 
 Goal: add a first resident auction-house surface to the active world-session

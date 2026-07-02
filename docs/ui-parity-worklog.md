@@ -22,21 +22,38 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Death And Respawn Panel Started (Codex UI lane)
+## 2026-07-02 - World Session Death And Respawn Panel (Codex UI lane)
 
-Goal: add resident death, ghost, corpse-run, and resurrection status surfaces
-to the active world-session HUD so safe live-session snapshots can display in
-the normal gameplay view.
+Context: a separate death/respawn simulation existed, but the active
+world-session HUD did not yet have a resident surface for death, ghost,
+corpse-run, release, or resurrection state.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Render session-provided alive/dead/ghost state, release timers, corpse
-  distance/position, resurrection offers, durability loss, and respawn health
-  summaries without calling or editing the protocol bridge.
+- Added a compact always-visible `Death` status strip to
+  `scripts/world_session_view.gd`.
+- Added a resident `Death` panel to the world-session movable/resizable HUD
+  system.
+- The panel renders safe session death dictionaries without calling the
+  protocol bridge: alive/dead/ghost/released state, release timer, respawn
+  timer, corpse distance/position, graveyard, durability loss, respawn health,
+  resurrection offer source/health/expiry, and failure text when present.
 - Keep live death packets, release-spirit requests, graveyard teleport,
   corpse-respawn requests, resurrection accept/decline, and server failure
   states in Claude's live-session lane.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `death_panel=true`.
+
+Remaining work:
+
+- Feed live death/ghost/corpse/resurrection snapshots from Claude's persistent
+  session lane into the world-session context.
+- Wire player-driven release spirit, corpse respawn, graveyard return,
+  resurrection accept/decline, durability loss refresh, corpse marker, ghost
+  movement visuals, and server failure-code feedback.
 
 ## 2026-07-02 - World Session Auction Panel (Codex UI lane)
 

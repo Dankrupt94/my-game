@@ -23,6 +23,7 @@ const PANEL_NAMES := [
 	"actions",
 	"targets",
 	"auras",
+	"death",
 	"quests",
 	"loot",
 	"vendor",
@@ -40,6 +41,7 @@ const PANEL_TITLES := {
 	"auras": "Auras",
 	"character": "Character",
 	"chat": "Chat",
+	"death": "Death",
 	"inventory": "Bags",
 	"loot": "Loot",
 	"mail": "Mail",
@@ -109,6 +111,7 @@ var target_frame_body: VBoxContainer
 var quest_label: Label
 var session_label: Label
 var quest_tracker_body: VBoxContainer
+var death_status_body: VBoxContainer
 var panel_overlay: Control
 var panel_shell: PanelContainer
 var panel_title_label: Label
@@ -131,6 +134,7 @@ var session_chat_rows: Array = []
 var session_spell_rows: Array = []
 var session_action_slots: Array = []
 var session_unit_status_snapshot: Dictionary = {}
+var session_death_snapshot: Dictionary = {}
 var session_loot_snapshot: Dictionary = {}
 var session_vendor_snapshot: Dictionary = {}
 var session_trainer_snapshot: Dictionary = {}
@@ -280,6 +284,7 @@ func _build_hud() -> void:
 	quest_label = _hud_label()
 	layout.add_child(quest_label)
 	_build_quest_tracker(layout)
+	_build_death_status(layout)
 	session_label = _hud_label()
 	layout.add_child(session_label)
 
@@ -306,6 +311,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Actions", "actions")
 	_add_panel_button(nav_bar, "Targets", "targets")
 	_add_panel_button(nav_bar, "Auras", "auras")
+	_add_panel_button(nav_bar, "Death", "death")
 	_add_panel_button(nav_bar, "Quests", "quests")
 	_add_panel_button(nav_bar, "Loot", "loot")
 	_add_panel_button(nav_bar, "Vendor", "vendor")
@@ -345,6 +351,64 @@ func _build_quest_tracker(parent: Control) -> void:
 	quest_tracker_body = VBoxContainer.new()
 	quest_tracker_body.add_theme_constant_override("separation", 4)
 	margin.add_child(quest_tracker_body)
+
+
+func _build_death_status(parent: Control) -> void:
+	var frame := PanelContainer.new()
+	frame.name = "DeathStatusHud"
+	frame.custom_minimum_size = Vector2(340.0, 78.0)
+	var frame_style := StyleBoxFlat.new()
+	frame_style.bg_color = Color(0.050, 0.040, 0.048, 0.76)
+	frame_style.border_color = Color(0.36, 0.26, 0.32, 0.85)
+	frame_style.set_border_width_all(1)
+	frame_style.corner_radius_top_left = 5
+	frame_style.corner_radius_top_right = 5
+	frame_style.corner_radius_bottom_left = 5
+	frame_style.corner_radius_bottom_right = 5
+	frame.add_theme_stylebox_override("panel", frame_style)
+	parent.add_child(frame)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	frame.add_child(margin)
+
+	death_status_body = VBoxContainer.new()
+	death_status_body.add_theme_constant_override("separation", 4)
+	margin.add_child(death_status_body)
+
+
+func _refresh_death_status() -> void:
+	if death_status_body == null:
+		return
+	_clear_children(death_status_body)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	death_status_body.add_child(header)
+
+	var title := _panel_label("Death", 14)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+
+	var open_button := Button.new()
+	open_button.text = "Open"
+	open_button.tooltip_text = "Open Death"
+	open_button.custom_minimum_size = Vector2(72.0, 28.0)
+	open_button.pressed.connect(_show_session_panel.bind("death"))
+	header.add_child(open_button)
+
+	if session_death_snapshot.is_empty():
+		death_status_body.add_child(_panel_label("Death state: waiting for session data.", 12))
+		return
+	death_status_body.add_child(_panel_label(_death_state_summary(session_death_snapshot), 12))
+	var corpse_distance := float(session_death_snapshot.get("corpse_distance", -1.0))
+	if corpse_distance >= 0.0:
+		death_status_body.add_child(
+			_panel_label("Corpse distance: %.1fm" % corpse_distance, 12)
+		)
 
 
 func _build_target_frame(parent: Control) -> void:
@@ -541,6 +605,7 @@ func _apply_session_data(
 	session_spell_rows = _extract_spell_rows(character, enter_result)
 	session_action_slots = _extract_action_slots(character, enter_result)
 	session_unit_status_snapshot = _extract_unit_status_snapshot(character, enter_result)
+	session_death_snapshot = _extract_death_snapshot(character, enter_result)
 	session_loot_snapshot = _extract_loot_snapshot(character, enter_result)
 	session_vendor_snapshot = _extract_vendor_snapshot(character, enter_result)
 	session_trainer_snapshot = _extract_trainer_snapshot(character, enter_result)
@@ -565,6 +630,7 @@ func _apply_session_data(
 	else:
 		quest_label.text = "Quest tracker: waiting for live quest-log integration."
 	_refresh_quest_tracker()
+	_refresh_death_status()
 	session_label.text = source_text
 	_update_camera()
 
@@ -840,6 +906,118 @@ func _aura_kind(row: Dictionary, default_kind: String) -> String:
 	if bool(row.get("is_debuff", row.get("harmful", false))):
 		return "debuff"
 	return default_kind if not default_kind.is_empty() else "aura"
+
+
+func _extract_death_snapshot(character: Dictionary, enter_result: Dictionary) -> Dictionary:
+	var candidates: Array = [
+		character.get("death", {}),
+		character.get("death_state", {}),
+		character.get("respawn", {}),
+		enter_result.get("death", {}),
+		enter_result.get("death_state", {}),
+		enter_result.get("respawn", {}),
+	]
+	if _looks_like_death_snapshot(character):
+		candidates.append(character)
+	if _looks_like_death_snapshot(enter_result):
+		candidates.append(enter_result)
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("death", {}))
+		candidates.append(update.get("death_state", {}))
+		candidates.append(update.get("respawn", {}))
+		if _looks_like_death_snapshot(update):
+			candidates.append(update)
+
+	for candidate in candidates:
+		if not candidate is Dictionary or candidate.is_empty():
+			continue
+		var snapshot := _normalize_death_snapshot(candidate)
+		if bool(snapshot.get("has_death_data", false)):
+			return snapshot
+	return {}
+
+
+func _looks_like_death_snapshot(snapshot: Dictionary) -> bool:
+	for key in [
+		"death",
+		"death_state",
+		"life_state",
+		"dead",
+		"is_dead",
+		"ghost",
+		"is_ghost",
+		"released",
+		"release_timer_ms",
+		"respawn_timer_ms",
+		"corpse_distance",
+		"corpse_position",
+		"resurrection_offer",
+		"resurrect_offer",
+		"durability_loss_percent",
+		"respawn_health_percent",
+	]:
+		if snapshot.has(key):
+			return true
+	return false
+
+
+func _normalize_death_snapshot(raw_snapshot: Dictionary) -> Dictionary:
+	var source := raw_snapshot
+	for nested_key in ["death", "death_state", "respawn"]:
+		var nested: Variant = raw_snapshot.get(nested_key, {})
+		if nested is Dictionary and _looks_like_death_snapshot(nested):
+			source = nested
+			break
+	var state := _death_state_text(source)
+	var resurrection_offer := _normalize_resurrection_offer(
+		source.get("resurrection_offer", source.get("resurrect_offer", {}))
+	)
+	var has_death_data := _looks_like_death_snapshot(source) or not resurrection_offer.is_empty()
+	return {
+		"has_death_data": has_death_data,
+		"state": state,
+		"dead": state in ["dead", "ghost", "released"],
+		"ghost": state == "ghost" or bool(source.get("ghost", source.get("is_ghost", false))),
+		"released": bool(source.get("released", false)),
+		"release_timer_ms": int(source.get("release_timer_ms", source.get("release_time_ms", 0))),
+		"respawn_timer_ms": int(source.get("respawn_timer_ms", source.get("timer_ms", 0))),
+		"corpse_distance": float(source.get("corpse_distance", source.get("distance_to_corpse", -1.0))),
+		"corpse_position": source.get("corpse_position", source.get("corpse", {})),
+		"graveyard": source.get("graveyard", source.get("graveyard_name", "")),
+		"durability_loss_percent": int(source.get("durability_loss_percent", 0)),
+		"respawn_health_percent": int(source.get("respawn_health_percent", 0)),
+		"resurrection_offer": resurrection_offer,
+		"failure_reason": source.get("failure_reason", ""),
+	}
+
+
+func _death_state_text(source: Dictionary) -> String:
+	var explicit := str(source.get("state", source.get("life_state", ""))).strip_edges().to_lower()
+	if not explicit.is_empty():
+		return explicit
+	if bool(source.get("ghost", source.get("is_ghost", false))):
+		return "ghost"
+	if bool(source.get("released", false)):
+		return "released"
+	if bool(source.get("dead", source.get("is_dead", false))):
+		return "dead"
+	return "alive"
+
+
+func _normalize_resurrection_offer(raw_offer: Variant) -> Dictionary:
+	if raw_offer is Dictionary:
+		var offer: Dictionary = raw_offer.duplicate(true)
+		if not offer.has("healer"):
+			offer["healer"] = offer.get("caster", offer.get("caster_name", ""))
+		if not offer.has("health_percent"):
+			offer["health_percent"] = int(offer.get("revive_health_percent", 0))
+		if not offer.has("expires_ms"):
+			offer["expires_ms"] = int(offer.get("timeout_ms", 0))
+		return offer
+	if raw_offer is bool and bool(raw_offer):
+		return {"healer": "", "health_percent": 0, "expires_ms": 0}
+	return {}
 
 
 func _extract_chat_rows(character: Dictionary, enter_result: Dictionary) -> Array:
@@ -2449,6 +2627,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_targets_panel()
 		"auras":
 			_build_auras_panel()
+		"death":
+			_build_death_panel()
 		"quests":
 			_build_quests_panel()
 		"loot":
@@ -3201,6 +3381,116 @@ func _duration_text(milliseconds: int) -> String:
 	if milliseconds >= 1000:
 		return "%.1fs" % (float(milliseconds) / 1000.0)
 	return str(milliseconds) + "ms"
+
+
+func _build_death_panel() -> void:
+	panel_title_label.text = "Death"
+	if session_death_snapshot.is_empty():
+		panel_body.add_child(_panel_label("Death state: waiting for session data.", 13))
+		panel_body.add_child(
+			_panel_label(
+				"Release, corpse respawn, and resurrection actions remain in the live-session lane.",
+				13
+			)
+		)
+		return
+
+	panel_body.add_child(_panel_label(_death_state_summary(session_death_snapshot), 13))
+	var release_timer := int(session_death_snapshot.get("release_timer_ms", 0))
+	if release_timer > 0:
+		panel_body.add_child(_panel_label("Release timer: " + _duration_text(release_timer), 13))
+	var respawn_timer := int(session_death_snapshot.get("respawn_timer_ms", 0))
+	if respawn_timer > 0:
+		panel_body.add_child(_panel_label("Respawn timer: " + _duration_text(respawn_timer), 13))
+	var corpse_distance := float(session_death_snapshot.get("corpse_distance", -1.0))
+	if corpse_distance >= 0.0:
+		panel_body.add_child(_panel_label("Corpse distance: %.1fm" % corpse_distance, 13))
+	var corpse_text := _death_position_text(session_death_snapshot.get("corpse_position", {}))
+	if not corpse_text.is_empty():
+		panel_body.add_child(_panel_label("Corpse: " + corpse_text, 13))
+	var graveyard := str(session_death_snapshot.get("graveyard", "")).strip_edges()
+	if not graveyard.is_empty():
+		panel_body.add_child(_panel_label("Graveyard: " + graveyard, 13))
+	var durability_loss := int(session_death_snapshot.get("durability_loss_percent", 0))
+	if durability_loss > 0:
+		panel_body.add_child(_panel_label("Durability loss: " + str(durability_loss) + "%", 13))
+	var respawn_health := int(session_death_snapshot.get("respawn_health_percent", 0))
+	if respawn_health > 0:
+		panel_body.add_child(_panel_label("Respawn health: " + str(respawn_health) + "%", 13))
+	var resurrection_offer: Dictionary = session_death_snapshot.get("resurrection_offer", {})
+	if not resurrection_offer.is_empty():
+		panel_body.add_child(_panel_label("Resurrection Offer", 14))
+		panel_body.add_child(_panel_label(_resurrection_offer_text(resurrection_offer), 13))
+	var failure_reason := str(session_death_snapshot.get("failure_reason", "")).strip_edges()
+	if not failure_reason.is_empty():
+		panel_body.add_child(_panel_label("Death action error: " + failure_reason, 13))
+
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 8)
+	panel_body.add_child(action_row)
+	_add_death_action_button(action_row, "Release", "release spirit")
+	_add_death_action_button(action_row, "Corpse", "corpse respawn")
+	_add_death_action_button(action_row, "Accept", "accept resurrection")
+	_add_death_action_button(action_row, "Decline", "decline resurrection")
+	panel_body.add_child(_panel_label("Death actions: waiting for live session controls.", 13))
+
+
+func _death_state_summary(snapshot: Dictionary) -> String:
+	var state := str(snapshot.get("state", "alive")).strip_edges()
+	if state.is_empty():
+		state = "alive"
+	var parts: Array[String] = ["State: " + state]
+	if bool(snapshot.get("ghost", false)):
+		parts.append("ghost")
+	if bool(snapshot.get("released", false)):
+		parts.append("released")
+	return " | ".join(parts)
+
+
+func _death_position_text(position: Variant) -> String:
+	if not position is Dictionary:
+		return ""
+	if position.has("x") and position.has("y") and position.has("z"):
+		return (
+			"%.2f, %.2f, %.2f"
+			% [
+				float(position.get("x", 0.0)),
+				float(position.get("y", 0.0)),
+				float(position.get("z", 0.0)),
+			]
+		)
+	return ""
+
+
+func _resurrection_offer_text(offer: Dictionary) -> String:
+	var parts: Array[String] = []
+	var healer := str(offer.get("healer", "")).strip_edges()
+	if not healer.is_empty():
+		parts.append("from " + healer)
+	var health_percent := int(offer.get("health_percent", 0))
+	if health_percent > 0:
+		parts.append("health " + str(health_percent) + "%")
+	var expires_ms := int(offer.get("expires_ms", 0))
+	if expires_ms > 0:
+		parts.append("expires " + _duration_text(expires_ms))
+	if parts.is_empty():
+		return "resurrection available"
+	return " | ".join(parts)
+
+
+func _add_death_action_button(parent: Control, label_text: String, action_text: String) -> void:
+	var button := Button.new()
+	button.text = label_text
+	button.custom_minimum_size = Vector2(84.0, 32.0)
+	button.pressed.connect(_queue_death_action.bind(action_text))
+	parent.add_child(button)
+
+
+func _queue_death_action(action_text: String) -> void:
+	status_label.text = "Death action queued locally: " + action_text
+	session_label.text = (
+		"Death action waits for Claude's persistent live-session bridge: " + action_text
+	)
 
 
 func _build_quests_panel() -> void:
@@ -4807,6 +5097,31 @@ func _run_self_test() -> void:
 				},
 			],
 		},
+		"death":
+		{
+			"state": "ghost",
+			"dead": true,
+			"ghost": true,
+			"released": true,
+			"release_timer_ms": 360000,
+			"respawn_timer_ms": 120000,
+			"corpse_distance": 42.5,
+			"corpse_position":
+			{
+				"x": -8940.0,
+				"y": -130.0,
+				"z": 83.5,
+			},
+			"graveyard": "Local Test Graveyard",
+			"durability_loss_percent": 10,
+			"respawn_health_percent": 50,
+			"resurrection_offer":
+			{
+				"healer": "Localhealer",
+				"health_percent": 35,
+				"expires_ms": 30000,
+			},
+		},
 		"mail":
 		{
 			"unread_count": 1,
@@ -5087,6 +5402,38 @@ func _run_self_test() -> void:
 		and _control_tree_text_contains(auras_body, "Cooldowns: 1")
 		and _control_tree_text_contains(auras_body, "Spell 78 cooldown 2.5s/6.0s")
 	)
+	var death_hud_ok := (
+		death_status_body != null
+		and _control_tree_text_contains(death_status_body, "State: ghost")
+		and _control_tree_text_contains(death_status_body, "Corpse distance: 42.5m")
+		and _control_tree_text_contains(death_status_body, "Open")
+	)
+	_show_session_panel("death")
+	var death_shell := _panel_shell("death")
+	var death_title: Label = session_panels.get("death", {}).get("title", null)
+	var death_body: VBoxContainer = session_panels.get("death", {}).get("body", null)
+	var resurrection_offer: Dictionary = session_death_snapshot.get("resurrection_offer", {})
+	var death_panel_ok := (
+		death_shell != null
+		and death_shell.visible
+		and death_title != null
+		and death_title.text == "Death"
+		and death_body != null
+		and str(session_death_snapshot.get("state", "")) == "ghost"
+		and bool(session_death_snapshot.get("ghost", false))
+		and bool(session_death_snapshot.get("released", false))
+		and int(session_death_snapshot.get("release_timer_ms", 0)) == 360000
+		and int(session_death_snapshot.get("respawn_timer_ms", 0)) == 120000
+		and not resurrection_offer.is_empty()
+		and _control_tree_text_contains(death_body, "State: ghost")
+		and _control_tree_text_contains(death_body, "Release timer: 360.0s")
+		and _control_tree_text_contains(death_body, "Respawn timer: 120.0s")
+		and _control_tree_text_contains(death_body, "Corpse distance: 42.5m")
+		and _control_tree_text_contains(death_body, "Local Test Graveyard")
+		and _control_tree_text_contains(death_body, "Durability loss: 10%")
+		and _control_tree_text_contains(death_body, "Respawn health: 50%")
+		and _control_tree_text_contains(death_body, "from Localhealer")
+	)
 	_show_session_panel("spells")
 	var spells_shell := _panel_shell("spells")
 	var spells_title: Label = session_panels.get("spells", {}).get("title", null)
@@ -5308,7 +5655,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 18
+	var actions_ok := action_buttons.size() == 19
 	var shortcut_ok := (
 		shortcut_slots.size() == 12
 		and shortcut_slots[0].text.find("spell 78") != -1
@@ -5329,6 +5676,8 @@ func _run_self_test() -> void:
 		and targets_panel_ok
 		and target_frame_ok
 		and auras_panel_ok
+		and death_hud_ok
+		and death_panel_ok
 		and spells_panel_ok
 		and quests_panel_ok
 		and loot_panel_ok
@@ -5349,7 +5698,7 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
-				+ "auras_panel=true "
+				+ "auras_panel=true death_panel=true "
 				+ "loot_panel=true vendor_panel=true trainer_panel=true social_panel=true "
 				+ "mail_panel=true auction_panel=true "
 				+ "map_panel=true "
@@ -5374,7 +5723,7 @@ func _run_self_test() -> void:
 			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
 			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
 			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s "
-			+ "auras_panel_ok=%s "
+			+ "auras_panel_ok=%s death_hud_ok=%s death_panel_ok=%s "
 			+ "loot_panel_ok=%s vendor_panel_ok=%s trainer_panel_ok=%s social_panel_ok=%s "
 			+ "mail_panel_ok=%s auction_panel_ok=%s social_counts=%s/%s/%s/%s "
 			+ "mail_count=%s auction_counts=%s/%s/%s"
@@ -5393,6 +5742,8 @@ func _run_self_test() -> void:
 			str(target_frame_ok),
 			str(character_panel_ok),
 			str(auras_panel_ok),
+			str(death_hud_ok),
+			str(death_panel_ok),
 			str(loot_panel_ok),
 			str(vendor_panel_ok),
 			str(trainer_panel_ok),
