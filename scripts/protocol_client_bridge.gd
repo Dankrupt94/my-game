@@ -1008,6 +1008,46 @@ func inventory_snapshot(
 	return parsed
 
 
+func quest_log_snapshot(
+	character_name: String = "Codexstage",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_quest_log_snapshot(character_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--quest-log-snapshot",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_quest_log_snapshot_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 and bool(parsed.get("quest_log_seen", false))
+	return parsed
+
+
 func swap_inventory_slots(
 	character_name: String = "Codexstage",
 	source_slot: int = 23,
@@ -2005,6 +2045,35 @@ func _run_native_inventory_snapshot(
 		character_name)
 	if typeof(result) != TYPE_DICTIONARY:
 		return _failure("Native Godot protocol client returned an unexpected inventory result")
+
+	var parsed: Dictionary = result
+	parsed["source"] = "Godot native extension"
+	parsed["exit_code"] = 0 if bool(parsed.get("ok", false)) else 1
+	parsed["output"] = JSON.stringify(_redacted_result(parsed))
+	return parsed
+
+
+func _run_native_quest_log_snapshot(
+	character_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("quest_log_snapshot"):
+		return {}
+
+	var result = client.call(
+		"quest_log_snapshot",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected quest-log result")
 
 	var parsed: Dictionary = result
 	parsed["source"] = "Godot native extension"
@@ -3472,6 +3541,40 @@ func _parse_action_buttons_output(output: String) -> Dictionary:
 				"packed": _extract_hex_field(line, "packed=0x"),
 				"populated": true,
 			})
+	return result
+
+
+func _parse_quest_log_snapshot_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"quest_log_seen": false,
+		"logged_in_world": false,
+		"player_guid": "0x0",
+		"slot_count": 0,
+		"populated_count": 0,
+		"slots": [],
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("QUEST_LOG_SNAPSHOT"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["quest_log_seen"] = _extract_int_field(line, "quest_log_seen=") == 1
+			result["logged_in_world"] = _extract_int_field(line, "logged_in_world=") == 1
+			result["player_guid"] = _extract_token_after(line, "player_guid=")
+			result["slot_count"] = _extract_int_field(line, "slot_count=")
+			result["populated_count"] = _extract_int_field(line, "populated_count=")
+		elif line.begins_with("QUEST_LOG_SLOT"):
+			result["slots"].append(_parse_quest_log_slot_line(line))
+	result["quest_log"] = {
+		"seen": result["quest_log_seen"],
+		"player_guid": result["player_guid"],
+		"slot_count": result["slot_count"],
+		"populated_count": result["populated_count"],
+		"slots": result["slots"],
+	}
 	return result
 
 

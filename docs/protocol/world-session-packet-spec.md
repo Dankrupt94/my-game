@@ -507,6 +507,16 @@ player update without any all-zero quest-log fields. For the Stage 17 accept
 proof, a player update seen with no quest-log fields is treated as an observed
 empty quest log before the accept packet.
 
+Standalone live quest-log snapshot:
+
+- Native helper command: `--quest-log-snapshot <host> <port> <account> <character-name>`.
+- Godot extension method: `AcoreProtocolClient.quest_log_snapshot(...)`.
+- Script bridge method: `ProtocolClientBridge.quest_log_snapshot(...)`.
+- Output remains numeric-only: quest ids, slot ids, state flags, four objective
+  counters, timers, slot count, populated count, and status booleans.
+- Current live validation for `Codexstage` observed `slot_count=25` and
+  `populated_count=0` after the disposable quest fixture cleanup.
+
 Current detail response fields:
 
 | Field | Notes |
@@ -540,6 +550,9 @@ Observed Stage 17 result:
   `scenes/stage17_questgiver_view.tscn` with `accept_sent=true`,
   `accepted_confirmed=true`, `already_in_log=false`, response opcode `0x1f6`,
   and the accepted quest present in the after snapshot.
+- `tools/quest_log_bridge_smoke.gd` passed through the Godot native extension,
+  proving a standalone read-only quest-log snapshot reaches the script bridge
+  with `slot_count=25`.
 - The Godot surface and helper fallback intentionally keep committed output to
   ids, flags, counts, and money/xp values. Quest title/body/objective text and
   icons remain a future local-only data/asset pipeline concern.

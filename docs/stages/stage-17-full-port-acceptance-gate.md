@@ -335,6 +335,23 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
   replace mock text through the local-only quest data pipeline, and move the
   panel into the normal gameplay HUD.
 
+### 2026-07-02 - Live Quest Log Snapshot Bridge
+
+- Exposed the existing read-only `read_quest_log_snapshot(...)` protocol flow as
+  native helper command `--quest-log-snapshot`, Godot GDExtension method
+  `quest_log_snapshot`, and `ProtocolClientBridge.quest_log_snapshot(...)`.
+- The path logs into the selected character and returns server-owned quest-log
+  slot state without accepting, abandoning, completing, or mutating quests.
+- Output remains numeric-only: quest ids, slot ids, state flags, objective
+  counters, timers, slot count, populated count, and status booleans.
+- Validation: native `--quest-log-snapshot` passed for `Codexstage` with
+  `logged_in_world=1`, `quest_log_seen=1`, `slot_count=25`, and
+  `populated_count=0`; `tools/quest_log_bridge_smoke.gd` passed through the
+  Godot native extension.
+- Remaining work: connect the UI-lane quest-log panel to this live snapshot in
+  the persistent HUD and continue into completion/reward-choice/objective
+  progress flows.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

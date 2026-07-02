@@ -568,6 +568,37 @@ void print_quest_log_slots(char const* prefix, PlayerQuestLogSummary const& ques
     }
 }
 
+int quest_log_snapshot(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::QuestLogSnapshotResult result = acore_protocol::read_quest_log_snapshot(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "QUEST_LOG_SNAPSHOT"
+              << " character=\"" << result.character.name << "\""
+              << " logged_in_world=" << (result.logged_in_world ? 1 : 0)
+              << " quest_log_seen=" << (result.quest_log_seen ? 1 : 0)
+              << " player_guid=0x" << std::hex << result.quest_log.player_guid << std::dec
+              << " slot_count=" << result.quest_log.slots.size()
+              << " populated_count=" << result.quest_log.populated_count
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    print_quest_log_slots("QUEST_LOG_SLOT", result.quest_log);
+    return result.logged_in_world && result.quest_log_seen ? 0 : 1;
+}
+
 int questgiver_accept_probe(
     std::string const& host,
     std::string const& port,
@@ -1663,6 +1694,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --spellbook <host> <port> <account> <character-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --action-buttons <host> <port> <account> <character-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --inventory-snapshot <host> <port> <account> <character-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --quest-log-snapshot <host> <port> <account> <character-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --swap-inventory-slots <host> <port> <account> <character-name> <source-slot> <destination-slot>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --split-inventory-stack <host> <port> <account> <character-name> <source-slot> <destination-slot> <count>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --set-action-button <host> <port> <account> <character-name> <button> <action> <type>\n"
@@ -1799,6 +1831,11 @@ int main(int argc, char** argv)
         if (argc == 6 && std::strcmp(argv[1], "--inventory-snapshot") == 0)
         {
             return inventory_snapshot(argv[2], argv[3], argv[4], argv[5]);
+        }
+
+        if (argc == 6 && std::strcmp(argv[1], "--quest-log-snapshot") == 0)
+        {
+            return quest_log_snapshot(argv[2], argv[3], argv[4], argv[5]);
         }
 
         if (argc == 8 && std::strcmp(argv[1], "--swap-inventory-slots") == 0)

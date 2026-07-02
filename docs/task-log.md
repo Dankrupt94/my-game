@@ -16,6 +16,45 @@ Plan:
 - Add a headless Godot bridge smoke test and keep committed output limited to
   quest ids, slot ids, counters, flags, timers, and status booleans.
 
+Result:
+
+- Added native helper command `--quest-log-snapshot`, which logs into the
+  selected character, observes the player's quest-log update fields, and prints
+  `QUEST_LOG_SNAPSHOT` plus populated `QUEST_LOG_SLOT` rows.
+- Added `AcoreProtocolClient.quest_log_snapshot(...)` to the Godot
+  GDExtension.
+- Added `ProtocolClientBridge.quest_log_snapshot(...)` with native-extension
+  preference and helper-process fallback parsing.
+- Added `tools/quest_log_bridge_smoke.gd` to verify both parser shape and live
+  bridge behavior.
+
+Validation:
+
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `native/protocol_client/build-compat/acore_protocol_client --self-test`
+  passed.
+- Native `--quest-log-snapshot` passed for `Codexstage` with
+  `logged_in_world=1`, `quest_log_seen=1`, `slot_count=25`, and
+  `populated_count=0`.
+- `godot-4 --headless --path . --script res://tools/godot_protocol_extension_smoke.gd`
+  passed after the extension rebuild.
+- `godot-4 --headless --path . --script res://tools/quest_log_bridge_smoke.gd`
+  passed through the Godot native extension with `slots=25`.
+- `godot-4 --headless --path . --script res://tools/protocol_bridge_smoke.gd`
+  passed when run sequentially. Running it in parallel with the quest-log smoke
+  produced a transient socket close on the same local account, matching the
+  existing sequential-live-check caveat.
+- Local `qwen-agent` advisory review reported no blockers for the snapshot
+  bridge; it noted only general error-handling, type-safety, resource,
+  security, and performance cautions.
+
+Remaining work:
+
+- Feed the UI-lane `LiveQuestLogPanel` from this snapshot in the persistent HUD
+  once the UI lane resumes.
+- Extend the live quest path with completion, reward-choice, abandon/share, and
+  objective progress updates.
+
 ## 2026-07-02 - Stage 17 Live Quest Log UI Started
 
 Goal: continue toward a playable Godot client with a UI-only questing slice that

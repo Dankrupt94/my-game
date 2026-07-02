@@ -265,6 +265,12 @@ public:
         godot::String const& account,
         godot::String const& password,
         godot::String const& character_name);
+    godot::Dictionary quest_log_snapshot(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name);
     godot::Dictionary swap_inventory_slots(
         godot::String const& host,
         godot::String const& port,

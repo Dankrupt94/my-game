@@ -731,6 +731,9 @@ void AcoreProtocolClient::_bind_methods()
         D_METHOD("inventory_snapshot", "host", "port", "account", "password", "character_name"),
         &AcoreProtocolClient::inventory_snapshot);
     ClassDB::bind_method(
+        D_METHOD("quest_log_snapshot", "host", "port", "account", "password", "character_name"),
+        &AcoreProtocolClient::quest_log_snapshot);
+    ClassDB::bind_method(
         D_METHOD("swap_inventory_slots", "host", "port", "account", "password", "character_name", "source_slot", "destination_slot"),
         &AcoreProtocolClient::swap_inventory_slots);
     ClassDB::bind_method(
@@ -2214,6 +2217,44 @@ Dictionary AcoreProtocolClient::inventory_snapshot(
         result["item_template_count"] = static_cast<int>(flow.inventory.item_template_count);
         result["slots"] = inventory_slot_array(flow.inventory.slots);
         result["inventory"] = inventory_dictionary(flow.inventory);
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::quest_log_snapshot(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name)
+{
+    try
+    {
+        acore_protocol::QuestLogSnapshotResult flow = acore_protocol::read_quest_log_snapshot(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name));
+
+        Dictionary result;
+        result["ok"] = flow.quest_log_seen;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["quest_log_seen"] = flow.quest_log_seen;
+        result["logged_in_world"] = flow.logged_in_world;
+        result["player_guid"] = guid_to_hex(flow.quest_log.player_guid);
+        result["slot_count"] = static_cast<int>(flow.quest_log.slots.size());
+        result["populated_count"] = static_cast<int>(flow.quest_log.populated_count);
+        result["quest_log"] = quest_log_dictionary(flow.quest_log);
+        result["slots"] = quest_log_slot_array(flow.quest_log.slots);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

@@ -136,9 +136,10 @@ The immediate Stage 17 work is still a narrow slice inside this larger spec:
 - Treat `stage17_questgiver_view.tscn` as quest list, quest detail, and first
   quest-accept proof. Treat `quest_view.tscn` plus
   `scripts/live_quest_log_panel.gd` as the first UI-lane quest-log slot
-  snapshot surface until it is fed from persistent live quest-log state and
-  expanded into completion, reward choice, objective tracking, abandon/share,
-  local-only text/icon rendering, in-world click targeting, and
+  snapshot surface. `ProtocolClientBridge.quest_log_snapshot(...)` is now the
+  read-only live data path for feeding that surface; it still needs persistent
+  HUD wiring and expansion into completion, reward choice, objective tracking,
+  abandon/share, local-only text/icon rendering, in-world click targeting, and
   persistent-session behavior.
 - Document every proof as a step toward this full spec, not as final parity by itself.
 
