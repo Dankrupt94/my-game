@@ -16,7 +16,14 @@ const PANEL_DEFAULT_SIZE := Vector2(560.0, 380.0)
 const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
-const PANEL_NAMES := ["chat", "spells", "actions", "quests", "options"]
+const PANEL_NAMES := ["chat", "spells", "actions", "quests", "options", "inventory"]
+const INVENTORY_SLOT_NAMES := [
+	"Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands",
+	"Finger 1", "Finger 2", "Trinket 1", "Trinket 2", "Back", "Main Hand", "Off Hand", "Ranged", "Tabard",
+	"Bag 1", "Bag 2", "Bag 3", "Bag 4",
+	"Backpack 1", "Backpack 2", "Backpack 3", "Backpack 4", "Backpack 5", "Backpack 6", "Backpack 7", "Backpack 8",
+	"Backpack 9", "Backpack 10", "Backpack 11", "Backpack 12", "Backpack 13", "Backpack 14", "Backpack 15", "Backpack 16",
+]
 
 var player_marker: CharacterBody3D
 var target_marker: MeshInstance3D
@@ -39,6 +46,8 @@ var camera_yaw := 0.0
 var marker_velocity := Vector3.ZERO
 var authoritative_marker_position := Vector3.ZERO
 var visible_object_count := 0
+var session_inventory_slots: Array = []
+var session_coinage := -1
 var selected_target_index := -1
 var target_was_pressed := false
 var attack_was_pressed := false
@@ -201,6 +210,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Spells", "spells")
 	_add_panel_button(nav_bar, "Actions", "actions")
 	_add_panel_button(nav_bar, "Quests", "quests")
+	_add_panel_button(nav_bar, "Bags", "inventory")
 	_add_panel_button(nav_bar, "Options", "options")
 	_add_scene_button(nav_bar, "Roster", CHARACTER_SELECT_SCENE)
 	_add_scene_button(nav_bar, "Dashboard", DASHBOARD_SCENE)
@@ -244,11 +254,72 @@ func _apply_session_data(character: Dictionary, enter_result: Dictionary, source
 		wow_z,
 	]
 	visible_object_count = int(update.get("visible_object_count", 0))
+	session_inventory_slots = _extract_inventory_slots(character, enter_result)
+	session_coinage = _extract_coinage(character, enter_result)
 	selected_target_index = -1
 	_refresh_target_label()
 	quest_label.text = "Quest tracker: waiting for live quest-log integration."
 	session_label.text = source_text
 	_update_camera()
+
+
+func _extract_inventory_slots(character: Dictionary, enter_result: Dictionary) -> Array:
+	var candidates := [
+		character.get("inventory", {}),
+		enter_result.get("inventory", {}),
+		enter_result.get("inventory_after", {}),
+		enter_result.get("inventory_snapshot", {}),
+		enter_result.get("after_inventory", {}),
+		enter_result.get("update", {}).get("inventory", {}) if enter_result.get("update", {}) is Dictionary else {},
+		enter_result.get("slots", []),
+	]
+	for candidate in candidates:
+		if candidate is Dictionary:
+			var slots = candidate.get("slots", [])
+			if slots is Array and not slots.is_empty():
+				return _normalize_inventory_slots(slots)
+		elif candidate is Array and not candidate.is_empty():
+			return _normalize_inventory_slots(candidate)
+	return []
+
+
+func _extract_coinage(character: Dictionary, enter_result: Dictionary) -> int:
+	var candidates := [
+		character,
+		enter_result,
+		character.get("inventory", {}),
+		enter_result.get("inventory", {}),
+		enter_result.get("inventory_after", {}),
+		enter_result.get("inventory_snapshot", {}),
+		enter_result.get("after_inventory", {}),
+	]
+	for candidate in candidates:
+		if not candidate is Dictionary:
+			continue
+		for key in ["coinage", "money", "copper"]:
+			if candidate.has(key):
+				return int(candidate.get(key, -1))
+	return -1
+
+
+func _normalize_inventory_slots(raw_slots: Array) -> Array:
+	var slots: Array = []
+	for raw_slot in raw_slots:
+		if not raw_slot is Dictionary:
+			continue
+		var slot: Dictionary = raw_slot.duplicate(true)
+		if not slot.has("slot") and slot.has("slot_index"):
+			slot["slot"] = int(slot.get("slot_index", -1))
+		if not slot.has("populated"):
+			var item_name := str(slot.get("item_name", "")).strip_edges()
+			var item_guid := str(slot.get("item_guid", "0x0")).strip_edges()
+			slot["populated"] = (
+				not item_name.is_empty()
+				or int(slot.get("item_entry", 0)) > 0
+				or (not item_guid.is_empty() and item_guid != "0x0" and item_guid != "0")
+			)
+		slots.append(slot)
+	return slots
 
 
 func _update_camera_input(delta: float) -> void:
@@ -555,6 +626,8 @@ func _panel_title(panel_name: String) -> String:
 			return "Actions"
 		"quests":
 			return "Quests"
+		"inventory":
+			return "Bags"
 		"options":
 			return "Options"
 		_:
@@ -584,7 +657,7 @@ func _build_shortcut_slots(parent: Control) -> void:
 	_add_shortcut_slot(parent, "8", "Options", Callable(self, "_show_session_panel").bind("options"))
 	_add_shortcut_slot(parent, "9", "Reset", Callable(self, "_reset_marker_to_session"))
 	_add_shortcut_slot(parent, "0", "Jump", Callable(self, "_queue_jump"))
-	_add_shortcut_slot(parent, "-", "Bag", Callable(self, "_show_session_panel").bind("actions"))
+	_add_shortcut_slot(parent, "-", "Bag", Callable(self, "_show_session_panel").bind("inventory"))
 	_add_shortcut_slot(parent, "=", "Map", Callable(self, "_show_session_panel").bind("quests"))
 
 
@@ -631,6 +704,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_actions_panel()
 		"quests":
 			_build_quests_panel()
+		"inventory":
+			_build_inventory_panel()
 		"options":
 			_build_options_panel()
 		_:
@@ -855,6 +930,111 @@ func _build_quests_panel() -> void:
 	panel_body.add_child(_panel_label("Tracked objective rows: none in this session yet.", 13))
 
 
+func _build_inventory_panel() -> void:
+	panel_title_label.text = "Bags"
+	if session_coinage >= 0:
+		panel_body.add_child(_panel_label("Money: " + _money_text(session_coinage), 13))
+	else:
+		panel_body.add_child(_panel_label("Money: waiting for session inventory state.", 13))
+
+	if session_inventory_slots.is_empty():
+		panel_body.add_child(_panel_label("Inventory snapshot: waiting for the live world session.", 13))
+		panel_body.add_child(_panel_label("The Bag shortcut now opens this in-session window instead of leaving the HUD.", 13))
+		return
+
+	panel_body.add_child(_panel_label("Slots: %s  Filled: %s" % [
+		str(INVENTORY_SLOT_NAMES.size()),
+		str(_inventory_populated_count(session_inventory_slots)),
+	], 13))
+
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	panel_body.add_child(grid)
+
+	for index in range(INVENTORY_SLOT_NAMES.size()):
+		var slot := _inventory_slot_at(index)
+		grid.add_child(_inventory_slot_button(slot, index))
+
+
+func _inventory_slot_button(slot: Dictionary, index: int) -> Button:
+	var button := Button.new()
+	button.text = _inventory_slot_name(index) + "\n" + _inventory_slot_state(slot)
+	button.tooltip_text = _inventory_slot_detail(slot, index)
+	button.custom_minimum_size = Vector2(122.0, 58.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_inventory_slot.bind(slot, index))
+	if bool(slot.get("populated", false)):
+		button.add_theme_color_override("font_color", Color(0.96, 0.86, 0.48))
+	else:
+		button.add_theme_color_override("font_color", Color(0.70, 0.75, 0.74))
+	return button
+
+
+func _show_inventory_slot(slot: Dictionary, index: int) -> void:
+	session_label.text = _inventory_slot_detail(slot, index)
+
+
+func _inventory_slot_at(index: int) -> Dictionary:
+	for slot in session_inventory_slots:
+		if slot is Dictionary and int(slot.get("slot", -1)) == index:
+			return slot
+	return {
+		"slot": index,
+		"field_seen": false,
+		"populated": false,
+		"item_guid": "0x0",
+	}
+
+
+func _inventory_slot_name(index: int) -> String:
+	if index >= 0 and index < INVENTORY_SLOT_NAMES.size():
+		return INVENTORY_SLOT_NAMES[index]
+	return "Slot " + str(index)
+
+
+func _inventory_slot_state(slot: Dictionary) -> String:
+	if bool(slot.get("populated", false)):
+		var item_name := str(slot.get("item_name", "")).strip_edges()
+		var stack := int(slot.get("stack_count", 0))
+		if not item_name.is_empty():
+			return item_name + (" x" + str(stack) if stack > 1 else "")
+		var entry := int(slot.get("item_entry", 0))
+		if entry > 0:
+			return "Entry " + str(entry)
+		return "Item " + _short_guid(str(slot.get("item_guid", "0x0")))
+	if bool(slot.get("field_seen", false)):
+		return "Empty"
+	return "No update"
+
+
+func _inventory_slot_detail(slot: Dictionary, index: int) -> String:
+	var durability := ""
+	if int(slot.get("max_durability", 0)) > 0:
+		durability = " | durability %s/%s" % [
+			str(slot.get("durability", 0)),
+			str(slot.get("max_durability", 0)),
+		]
+	return "%s | slot %s | entry %s | stack %s | guid %s%s" % [
+		_inventory_slot_name(index),
+		str(slot.get("slot", index)),
+		str(slot.get("item_entry", 0)),
+		str(slot.get("stack_count", 0)),
+		str(slot.get("item_guid", "0x0")),
+		durability,
+	]
+
+
+func _inventory_populated_count(slots: Array) -> int:
+	var count := 0
+	for slot in slots:
+		if slot is Dictionary and bool(slot.get("populated", false)):
+			count += 1
+	return count
+
+
 func _build_options_panel() -> void:
 	panel_title_label.text = "Options"
 	var settings := SettingsRuntime.load_settings()
@@ -900,6 +1080,20 @@ func _panel_label(text: String, font_size: int = 14) -> Label:
 	label.add_theme_font_size_override("font_size", font_size)
 	label.modulate = Color(0.91, 0.94, 0.92)
 	return label
+
+
+func _short_guid(guid: String) -> String:
+	if guid.length() <= 8:
+		return guid
+	return guid.substr(guid.length() - 8, 8)
+
+
+func _money_text(copper: int) -> String:
+	var positive: int = int(max(0, copper))
+	var gold: int = int(positive / 10000)
+	var silver: int = int((positive % 10000) / 100)
+	var copper_piece: int = positive % 100
+	return "%sg %ss %sc" % [str(gold), str(silver), str(copper_piece)]
 
 
 func _key_name(keycode: int) -> String:
@@ -1074,6 +1268,35 @@ func _run_self_test() -> void:
 		"update": {
 			"visible_object_count": 3,
 		},
+		"inventory": {
+			"coinage": 123456,
+			"slots": [
+				{
+					"slot": 15,
+					"populated": true,
+					"item_name": "Practice Blade",
+					"item_guid": "0x4000000000000100",
+					"item_entry": 100,
+					"stack_count": 1,
+					"durability": 21,
+					"max_durability": 25,
+				},
+				{
+					"slot": 23,
+					"populated": true,
+					"item_name": "Packed Lunch",
+					"item_guid": "0x4000000000000101",
+					"item_entry": 101,
+					"stack_count": 3,
+				},
+				{
+					"slot": 24,
+					"field_seen": true,
+					"populated": false,
+					"item_guid": "0x0",
+				},
+			],
+		},
 	}
 
 	var no_target_result := synthetic_result.duplicate(true)
@@ -1116,18 +1339,47 @@ func _run_self_test() -> void:
 	var options_shell := _panel_shell("options")
 	var options_title: Label = session_panels.get("options", {}).get("title", null)
 	var options_panel_ok := options_shell != null and options_shell.visible and options_title != null and options_title.text == "Options"
-	var multi_panel_ok := chat_shell != null and actions_shell != null and chat_shell != actions_shell and chat_shell.visible and actions_shell.visible
+	_show_session_panel("inventory")
+	var inventory_shell := _panel_shell("inventory")
+	var inventory_title: Label = session_panels.get("inventory", {}).get("title", null)
+	var inventory_body: VBoxContainer = session_panels.get("inventory", {}).get("body", null)
+	var inventory_grid_ok := false
+	if inventory_body != null:
+		for child in inventory_body.get_children():
+			if child is GridContainer and child.get_child_count() == INVENTORY_SLOT_NAMES.size():
+				inventory_grid_ok = true
+				break
+	var inventory_panel_ok := (
+		inventory_shell != null
+		and inventory_shell.visible
+		and inventory_title != null
+		and inventory_title.text == "Bags"
+		and session_inventory_slots.size() == 3
+		and session_coinage == 123456
+		and _inventory_slot_state(_inventory_slot_at(23)) == "Packed Lunch x3"
+		and inventory_grid_ok
+	)
+	var multi_panel_ok := (
+		chat_shell != null
+		and actions_shell != null
+		and inventory_shell != null
+		and chat_shell != actions_shell
+		and chat_shell != inventory_shell
+		and chat_shell.visible
+		and actions_shell.visible
+		and inventory_shell.visible
+	)
 	for panel_name in PANEL_NAMES:
 		_hide_session_panel(panel_name)
 
 	var marker_ok := player_marker != null and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 7
+	var actions_ok := action_buttons.size() == 8
 	var shortcut_ok := shortcut_slots.size() == 12
 	var input_ok := no_target_key_ok and no_target_action_ok and no_target_interact_ok and target_key_ok and action_key_ok and interact_key_ok
-	var panel_ok := chat_panel_ok and actions_panel_ok and spells_panel_ok and quests_panel_ok and options_panel_ok and multi_panel_ok
+	var panel_ok := chat_panel_ok and actions_panel_ok and spells_panel_ok and quests_panel_ok and options_panel_ok and inventory_panel_ok and multi_panel_ok
 	if marker_ok and hud_ok and actions_ok and shortcut_ok and input_ok and panel_ok:
-		print("WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 actions=%s shortcuts=%s input=true panels=true marker=(%.2f,%.2f,%.2f)" % [
+		print("WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 actions=%s shortcuts=%s input=true panels=true inventory=true marker=(%.2f,%.2f,%.2f)" % [
 			str(action_buttons.size()),
 			str(shortcut_slots.size()),
 			player_marker.position.x,
@@ -1137,12 +1389,13 @@ func _run_self_test() -> void:
 		get_tree().quit(0)
 		return
 
-	push_error("WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s" % [
+	push_error("WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s inventory_panel_ok=%s" % [
 		str(marker_ok),
 		str(hud_ok),
 		str(actions_ok),
 		str(shortcut_ok),
 		str(input_ok),
 		str(panel_ok),
+		str(inventory_panel_ok),
 	])
 	get_tree().quit(1)

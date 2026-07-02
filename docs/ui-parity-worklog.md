@@ -22,6 +22,36 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-01 - World Session Bags Panel (Codex UI lane)
+
+Context: the world-session HUD had a Bag shortcut, but it opened the Actions
+panel. A playable client needs inventory/bag access to live inside the active
+world view instead of only in a separate Stage 17 proof scene.
+
+Result:
+
+- Added a resident `Bags` HUD panel to `scripts/world_session_view.gd`.
+- The Bag shortcut and nav button now open the Bags panel in the world-session
+  overlay.
+- The panel renders a 39-slot equipment/bag/backpack grid from safe session
+  dictionaries when they are available, including money, stack counts, empty
+  slots, GUID/entry detail, and durability text.
+- When no live inventory snapshot exists yet, the panel stays in the session
+  HUD and shows a waiting state instead of calling the protocol bridge.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` now verifies the Bags panel, synthetic
+  money, populated backpack slot rendering, and a 39-slot in-session grid.
+
+Remaining work:
+
+- Feed live inventory snapshots from Claude's persistent session lane into this
+  panel.
+- Add normal player drag/drop, item use, equip/unequip, split/merge, sell/buy
+  refresh, item icons, local-only tooltip metadata, and server failure display.
+
 ## 2026-07-01 - Resizable World Session HUD Panels (Codex UI lane)
 
 Context: the world-session HUD supported multiple movable panels, but each panel
