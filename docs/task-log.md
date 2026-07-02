@@ -1,5 +1,22 @@
 # Task Log
 
+## 2026-07-02 - World Session Quest Tracker Started
+
+Goal: extend the UI-lane quest work from a resident popup panel into a small
+always-visible world-session quest tracker without touching Claude's
+native/protocol/bridge/live-session files.
+
+Plan:
+
+- Add a compact quest tracker surface to the world-session HUD that uses the
+  same safe quest slot dictionaries as the Quests panel.
+- Keep the tracker numeric-only for now: quest ids, slot ids, objective counters,
+  timers, and status flags.
+- Carry the GPU/local-AI ownership rule into this UI branch's `AGENTS.md` so
+  future Godot/UI work frees the GPU before rendering-heavy tasks.
+- Validate with headless Godot world-session checks and keep this branch
+  independent from Claude's active main-worktree edits.
+
 ## 2026-07-02 - World Session Quest Panel Started
 
 Goal: return to the UI lane after the tooling stage by adding a resident quest
