@@ -1,5 +1,20 @@
 # Task Log
 
+## 2026-07-02 - Stage 17 Live Quest Log UI Started
+
+Goal: continue toward a playable Godot client with a UI-only questing slice that
+does not touch Claude's native/protocol/bridge/live-session lane.
+
+Plan:
+
+- Add a reusable quest-log panel that renders server-owned quest-log slot
+  dictionaries already returned by the Stage 17 quest accept proof.
+- Mount the panel in `scenes/stage17_questgiver_view.tscn` so accepting a quest
+  visibly updates a journal/tracker-style surface instead of only appending
+  proof rows.
+- Add a synthetic UI self-test for the panel and keep committed content numeric
+  only until the local-only quest text/icon pipeline is ready.
+
 ## 2026-07-01 - Stage 17 Quest Accept Proof Slice
 
 Goal: extend the live quest-giver path from list/details into a repeatable
