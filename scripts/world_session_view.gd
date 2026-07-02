@@ -1,5 +1,7 @@
 extends Node3D
 
+const SettingsRuntime = preload("res://scripts/settings_runtime.gd")
+
 const DASHBOARD_SCENE := "res://main.tscn"
 const CHARACTER_SELECT_SCENE := "res://scenes/character_select_view.tscn"
 const CHAT_SCENE := "res://scenes/stage16_chat_view.tscn"
@@ -11,6 +13,7 @@ const SETTINGS_SCENE := "res://scenes/settings_view.tscn"
 const WORLD_TO_GODOT_SCALE := 0.02
 const GRID_EXTENT := 220
 const GRID_STEP := 20
+const MARKER_MOVE_SPEED := 14.0
 
 var player_marker: CharacterBody3D
 var target_marker: MeshInstance3D
@@ -24,19 +27,31 @@ var action_buttons: Array[Button] = []
 
 var camera_yaw := 0.0
 var marker_velocity := Vector3.ZERO
+var authoritative_marker_position := Vector3.ZERO
+var visible_object_count := 0
+var selected_target_index := -1
+var target_was_pressed := false
+var attack_was_pressed := false
+var interact_was_pressed := false
+var reset_was_pressed := false
+var jump_was_pressed := false
 
 
 func _ready() -> void:
+	_apply_saved_keybindings()
 	_build_world()
 	_build_hud()
 	_apply_session_context()
-	if OS.get_environment("ACORE_WORLD_SESSION_SELF_TEST") == "1":
+	if OS.get_environment("ACORE_WORLD_SESSION_KEYBIND_SELF_TEST") == "1":
+		call_deferred("_run_keybind_settings_self_test")
+	elif OS.get_environment("ACORE_WORLD_SESSION_SELF_TEST") == "1":
 		call_deferred("_run_self_test")
 
 
 func _physics_process(delta: float) -> void:
 	_update_camera_input(delta)
 	_update_marker_movement(delta)
+	_update_key_actions()
 	_update_camera()
 
 
@@ -182,6 +197,7 @@ func _apply_session_data(character: Dictionary, enter_result: Dictionary, source
 	var marker_position := _godot_position(wow_x, wow_y, wow_z)
 
 	player_marker.position = marker_position
+	authoritative_marker_position = marker_position
 	target_marker.position = Vector3(marker_position.x, 0.04, marker_position.z)
 	var name_label := player_marker.get_node_or_null("CharacterLabel")
 	if name_label is Label3D:
@@ -197,32 +213,123 @@ func _apply_session_data(character: Dictionary, enter_result: Dictionary, source
 		wow_y,
 		wow_z,
 	]
-	var visible_count := int(update.get("visible_object_count", 0))
-	target_label.text = "Visible objects: %s. Use the linked panels for chat, spells, action bars, quests, and options." % str(visible_count)
+	visible_object_count = int(update.get("visible_object_count", 0))
+	selected_target_index = -1
+	_refresh_target_label()
 	quest_label.text = "Quest tracker: waiting for live quest-log integration."
 	session_label.text = source_text
 	_update_camera()
 
 
 func _update_camera_input(delta: float) -> void:
-	if Input.is_action_pressed("ui_left"):
+	if Input.is_action_pressed("camera_left"):
 		camera_yaw += 1.8 * delta
-	if Input.is_action_pressed("ui_right"):
+	if Input.is_action_pressed("camera_right"):
 		camera_yaw -= 1.8 * delta
 
 
 func _update_marker_movement(delta: float) -> void:
+	var input := Vector3.ZERO
+	if Input.is_action_pressed("move_forward"):
+		input.z -= 1.0
+	if Input.is_action_pressed("move_backward"):
+		input.z += 1.0
+	if Input.is_action_pressed("move_left"):
+		input.x -= 1.0
+	if Input.is_action_pressed("move_right"):
+		input.x += 1.0
+
 	var direction := Vector3.ZERO
-	if Input.is_action_pressed("ui_up"):
-		direction.z -= 1.0
-	if Input.is_action_pressed("ui_down"):
-		direction.z += 1.0
-	if direction.length() > 0.0:
-		direction = direction.normalized().rotated(Vector3.UP, camera_yaw)
-	marker_velocity.x = direction.x * 14.0
-	marker_velocity.z = direction.z * 14.0
+	if input.length() > 0.0:
+		var basis := Basis(Vector3.UP, camera_yaw)
+		direction = (basis * input).normalized()
+	marker_velocity.x = direction.x * MARKER_MOVE_SPEED
+	marker_velocity.z = direction.z * MARKER_MOVE_SPEED
 	player_marker.velocity = marker_velocity
 	player_marker.move_and_slide()
+	_sync_target_marker()
+
+
+func _update_key_actions() -> void:
+	var target_pressed := Input.is_action_pressed("target_next")
+	if target_pressed and not target_was_pressed:
+		_select_next_target()
+	target_was_pressed = target_pressed
+
+	var attack_pressed := Input.is_action_pressed("attack_primary")
+	if attack_pressed and not attack_was_pressed:
+		_queue_primary_action()
+	attack_was_pressed = attack_pressed
+
+	var interact_pressed := Input.is_action_pressed("interact")
+	if interact_pressed and not interact_was_pressed:
+		_queue_interact()
+	interact_was_pressed = interact_pressed
+
+	var reset_pressed := Input.is_action_pressed("reset_sandbox")
+	if reset_pressed and not reset_was_pressed:
+		_reset_marker_to_session()
+	reset_was_pressed = reset_pressed
+
+	var jump_pressed := Input.is_action_pressed("jump")
+	if jump_pressed and not jump_was_pressed:
+		_queue_jump()
+	jump_was_pressed = jump_pressed
+
+
+func _select_next_target() -> void:
+	if visible_object_count <= 0:
+		selected_target_index = -1
+		status_label.text = "Targeting is waiting for a live visible-object snapshot."
+		_refresh_target_label()
+		return
+
+	selected_target_index = (selected_target_index + 1) % visible_object_count
+	status_label.text = "Target selected from the latest world-session snapshot."
+	_refresh_target_label()
+
+
+func _queue_primary_action() -> void:
+	if selected_target_index < 0:
+		status_label.text = "Primary action queued; select a visible target when live targeting is attached."
+		return
+	status_label.text = "Primary action queued for target %s; combat execution waits for the persistent live session." % str(selected_target_index + 1)
+
+
+func _queue_interact() -> void:
+	if selected_target_index < 0:
+		quest_label.text = "Interaction queued; live NPC/gameobject selection is not attached yet."
+		return
+	quest_label.text = "Interaction queued for target %s; NPC panels will attach here after the live click bridge lands." % str(selected_target_index + 1)
+
+
+func _reset_marker_to_session() -> void:
+	player_marker.position = authoritative_marker_position
+	player_marker.velocity = Vector3.ZERO
+	marker_velocity = Vector3.ZERO
+	_sync_target_marker()
+	status_label.text = "Marker returned to the last server-reported position."
+	_update_camera()
+
+
+func _queue_jump() -> void:
+	status_label.text = "Jump input received; server-synchronized vertical movement remains a live-session task."
+
+
+func _refresh_target_label() -> void:
+	if visible_object_count <= 0:
+		target_label.text = "Visible objects: 0. Target cycling is waiting for the live object stream."
+		return
+	if selected_target_index < 0:
+		target_label.text = "Visible objects: %s. Press the saved target key to cycle the snapshot." % str(visible_object_count)
+		return
+	target_label.text = "Target %s of %s selected from the latest visible-object snapshot." % [
+		str(selected_target_index + 1),
+		str(visible_object_count),
+	]
+
+
+func _sync_target_marker() -> void:
 	target_marker.position = Vector3(player_marker.position.x, 0.04, player_marker.position.z)
 
 
@@ -320,6 +427,53 @@ func _session_context() -> Node:
 	return get_node_or_null("/root/SessionContext")
 
 
+func _apply_saved_keybindings(path: String = SettingsRuntime.SETTINGS_FILE_PATH) -> void:
+	SettingsRuntime.apply_keybindings(SettingsRuntime.load_settings(path))
+
+
+func _input_action_has_key(action: String, keycode: int) -> bool:
+	var events := InputMap.action_get_events(action)
+	for event in events:
+		if event is InputEventKey and event.physical_keycode == keycode:
+			return true
+	return false
+
+
+func _run_keybind_settings_self_test() -> void:
+	var test_settings := SettingsRuntime.default_settings()
+	test_settings["keybindings"]["move_forward"] = KEY_UP
+	test_settings["keybindings"]["camera_left"] = KEY_LEFT
+	test_settings["keybindings"]["target_next"] = KEY_T
+	test_settings["keybindings"]["attack_primary"] = KEY_2
+	test_settings["keybindings"]["interact"] = KEY_G
+	test_settings["keybindings"]["reset_sandbox"] = KEY_BACKSPACE
+	test_settings["keybindings"]["jump"] = KEY_SPACE
+	var save_error := SettingsRuntime.save_settings(test_settings, SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH)
+	if save_error != OK:
+		push_error("WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_FAILED: could not save temporary settings")
+		get_tree().quit(1)
+		return
+
+	_apply_saved_keybindings(SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH)
+	var bindings_ok := (
+		_input_action_has_key("move_forward", KEY_UP)
+		and _input_action_has_key("camera_left", KEY_LEFT)
+		and _input_action_has_key("target_next", KEY_T)
+		and _input_action_has_key("attack_primary", KEY_2)
+		and _input_action_has_key("interact", KEY_G)
+		and _input_action_has_key("reset_sandbox", KEY_BACKSPACE)
+		and _input_action_has_key("jump", KEY_SPACE)
+	)
+	SettingsRuntime.delete_settings_file(SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH)
+	if not bindings_ok:
+		push_error("WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_FAILED: saved bindings were not applied")
+		get_tree().quit(1)
+		return
+
+	print("WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_OK move_forward=KEY_UP camera_left=KEY_LEFT target_next=KEY_T")
+	get_tree().quit(0)
+
+
 func _run_self_test() -> void:
 	var synthetic_character := {
 		"name": "Codexstage",
@@ -344,13 +498,34 @@ func _run_self_test() -> void:
 			"visible_object_count": 3,
 		},
 	}
+
+	var no_target_result := synthetic_result.duplicate(true)
+	no_target_result["update"]["visible_object_count"] = 0
+	_apply_session_data(synthetic_character, no_target_result, "Synthetic no-target world-session self-test.")
+	_select_next_target()
+	var no_target_key_ok := selected_target_index == -1 and target_label.text.find("Visible objects: 0") != -1
+	_queue_primary_action()
+	var no_target_action_ok := status_label.text.find("select a visible target") != -1
+	_queue_interact()
+	var no_target_interact_ok := quest_label.text.find("not attached yet") != -1
+
 	_apply_session_data(synthetic_character, synthetic_result, "Synthetic world-session self-test.")
 
+	_select_next_target()
+	var target_key_ok := target_label.text.find("Target 1 of 3") != -1
+	_queue_primary_action()
+	var action_key_ok := status_label.text.find("Primary action queued for target 1") != -1
+	_queue_interact()
+	var interact_key_ok := quest_label.text.find("Interaction queued for target 1") != -1
+	player_marker.position += Vector3(8.0, 0.0, 0.0)
+	_reset_marker_to_session()
+
 	var marker_ok := player_marker != null and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
-	var hud_ok := detail_label.text.find("Codexstage") != -1 and target_label.text.find("Visible objects: 3") != -1
+	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
 	var actions_ok := action_buttons.size() == 7
-	if marker_ok and hud_ok and actions_ok:
-		print("WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 actions=%s marker=(%.2f,%.2f,%.2f)" % [
+	var input_ok := no_target_key_ok and no_target_action_ok and no_target_interact_ok and target_key_ok and action_key_ok and interact_key_ok
+	if marker_ok and hud_ok and actions_ok and input_ok:
+		print("WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 actions=%s input=true marker=(%.2f,%.2f,%.2f)" % [
 			str(action_buttons.size()),
 			player_marker.position.x,
 			player_marker.position.y,
@@ -359,9 +534,10 @@ func _run_self_test() -> void:
 		get_tree().quit(0)
 		return
 
-	push_error("WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s actions_ok=%s" % [
+	push_error("WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s actions_ok=%s input_ok=%s" % [
 		str(marker_ok),
 		str(hud_ok),
 		str(actions_ok),
+		str(input_ok),
 	])
 	get_tree().quit(1)

@@ -1,9 +1,8 @@
-# UI Parity Worklog (Claude lane)
+# UI Parity Worklog (Godot UI lane)
 
-This is the Claude agent's worklog for the Godot UI view layer. It is kept
-separate from `docs/task-log.md` (maintained by Codex on the native/protocol
-lane) so the two agents do not clobber each other's documentation. See the
-lane split in the header of this file.
+This is the shared worklog for the Godot UI view layer. It is kept separate
+from `docs/task-log.md` so the two agents do not clobber each other's
+documentation. See the lane split in the header of this file.
 
 ## Agent Lanes
 
@@ -22,6 +21,42 @@ lane split in the header of this file.
 - **Git hygiene:** each agent stages only its own explicit paths (never
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
+
+## 2026-07-01 - World Session Keybinding Input (Codex UI lane)
+
+Context: the world-session shell was reachable after character select, but its
+marker/camera still used Godot's generic UI arrow actions. The next UI-only
+step was to make the shell consume the same saved keybindings as the options
+menu and gameplay sandbox, without touching the native/protocol/live-session
+lane that Claude is editing.
+
+Result:
+
+- `scripts/world_session_view.gd` now applies saved `SettingsRuntime`
+  keybindings at startup.
+- Marker movement uses `move_forward`, `move_backward`, `move_left`, and
+  `move_right`; camera yaw uses `camera_left` and `camera_right`.
+- Target-next, primary action, interact, reset, and jump keys now update HUD
+  state in the world-session shell. These are UI feedback hooks only; they do
+  not send protocol packets or modify the live bridge.
+- Reset returns the marker to the last server-reported position captured from
+  `SessionContext`.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` validates the shell with synthetic
+  session data plus target/action/interact/reset feedback.
+- `ACORE_WORLD_SESSION_KEYBIND_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` validates saved keybinding consumption
+  for movement, camera, target, action, interact, reset, and jump actions.
+
+Remaining work:
+
+- Replace HUD-only action feedback with live target, combat, interaction, and
+  movement execution once the persistent world-session bridge is ready.
+- Add mouse-look, camera sensitivity, UI scale, and complete action-bar keybind
+  integration.
 
 ## 2026-07-01 - World Session Shell (Codex UI lane)
 
