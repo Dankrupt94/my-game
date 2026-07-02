@@ -1965,4 +1965,18 @@ Remaining work:
 - The irreversible turn-in (`CMSG_QUESTGIVER_CHOOSE_REWARD`) builder is
   self-test-covered; live end-to-end turn-in should run on a disposable fixture
   character (trainer-buy-success precedent).
-- Godot extension/bridge/scene exposure of the reward probe (this lane, next).
+
+Godot exposure (same day):
+
+- Extension binding `questgiver_reward_probe(_selector)` (+ `quest_reward_item_array`
+  helper), bridge methods `questgiver_reward_probe(_selector)` (native + helper
+  `--questgiver-reward` fallback with a text parser), and
+  `scenes/stage17_questgiver_reward_view.tscn` showing the completion-screen
+  classification (offer / request-items / invalid), reward money/xp/spell, and
+  reward item ids.
+- `./tools/build_godot_protocol_extension_compat.sh` rebuilt the extension.
+- `ACORE_QUESTGIVER_REWARD_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_questgiver_reward_view.tscn`
+  passed through the native extension: `QUESTGIVER_REWARD_SELF_TEST_OK
+  offer=false request_items=false invalid=true` (server `SMSG_QUESTGIVER_QUEST_INVALID`
+  0x18F for the not-yet-takeable Willem quest 6, confirming the opcode fix over
+  the extension path).
