@@ -22,6 +22,34 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Action Bar Data (Codex UI lane)
+
+Context: the world-session HUD had twelve shortcut buttons, but they stayed
+static even when action-button data could be provided by the session.
+
+Result:
+
+- Added safe action-slot extraction to `scripts/world_session_view.gd`.
+- The bottom twelve-slot HUD action bar now renders Stage 16-style action slot
+  dictionaries: button, action id, action type, packed value, and populated
+  state.
+- The resident `Actions` panel now reports loaded action-slot count and lists
+  safe slot/action/type rows.
+- This remains UI-lane work only and does not call or edit the protocol bridge.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `action_slots=true`.
+
+Remaining work:
+
+- Feed live `SMSG_ACTION_BUTTONS` snapshots from Claude's persistent session
+  lane into the world-session context.
+- Replace numeric action labels with local-only spell/item names and icons, add
+  real casting/item-use calls through the live session lane, drag/drop action
+  assignment, paging, cooldowns, macros, and failure feedback.
+
 ## 2026-07-02 - World Session Target Panel (Codex UI lane)
 
 Context: the world-session HUD could cycle a target count, but it did not have

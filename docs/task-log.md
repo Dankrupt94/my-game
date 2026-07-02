@@ -16,6 +16,30 @@ Plan:
 - Extend the resident `Actions` panel with the same safe slot data.
 - Validate with headless Godot world-session checks.
 
+Result:
+
+- Added safe action-slot extraction to `scripts/world_session_view.gd` for the
+  Stage 16-style `button`, `action`, `type`, `packed`, and `populated`
+  dictionaries.
+- The bottom twelve-slot HUD action bar now renders session action labels when
+  present, while keeping the existing safe local button behavior.
+- The resident `Actions` panel now reports loaded action-slot count and lists
+  safe slot/action/type rows.
+- The fallback static labels still work when no action-slot snapshot is present.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `action_slots=true`.
+
+Remaining work:
+
+- Feed live `SMSG_ACTION_BUTTONS` snapshots from Claude's persistent session
+  lane into the world-session context.
+- Replace numeric action labels with local-only spell/item names and icons, add
+  real casting/item-use calls through the live session lane, drag/drop action
+  assignment, paging, cooldowns, macros, and failure feedback.
+
 ## 2026-07-02 - World Session Target Panel Started
 
 Goal: add UI-lane target visibility to the persistent world-session HUD so

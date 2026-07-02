@@ -19,6 +19,8 @@ const PANEL_DRAG_GRID := 10.0
 const PANEL_NAMES := [
 	"chat", "spells", "actions", "targets", "quests", "map", "options", "inventory"
 ]
+const ACTION_BAR_DISPLAY_COUNT := 12
+const ACTION_BAR_KEYS := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="]
 const QUEST_LOG_SLOT_COUNT := 25
 const INVENTORY_SLOT_NAMES := [
 	"Head",
@@ -89,6 +91,7 @@ var session_wow_position := Vector3.ZERO
 var session_orientation := 0.0
 var visible_object_count := 0
 var visible_objects: Array = []
+var session_action_slots: Array = []
 var session_inventory_slots: Array = []
 var session_coinage := -1
 var selected_target_index := -1
@@ -460,10 +463,12 @@ func _apply_session_data(
 	visible_objects = _extract_visible_objects(character, enter_result)
 	if not visible_objects.is_empty():
 		visible_object_count = max(visible_object_count, visible_objects.size())
+	session_action_slots = _extract_action_slots(character, enter_result)
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
 	session_quest_slots = _extract_quest_slots(character, enter_result)
 	selected_target_index = -1
+	_refresh_shortcut_slots()
 	_refresh_target_label()
 	var active_quest_count := _quest_active_count()
 	if active_quest_count > 0:
@@ -521,6 +526,56 @@ func _normalize_visible_objects(raw_objects: Array) -> Array:
 					break
 		rows.append(row)
 	return rows
+
+
+func _extract_action_slots(character: Dictionary, enter_result: Dictionary) -> Array:
+	var candidates: Array = [
+		character.get("action_buttons", {}),
+		character.get("action_bar", {}),
+		character.get("action_slots", []),
+		enter_result.get("action_buttons", {}),
+		enter_result.get("action_bar", {}),
+		enter_result.get("action_slots", []),
+		enter_result.get("buttons", []),
+	]
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("action_buttons", {}))
+		candidates.append(update.get("action_bar", {}))
+		candidates.append(update.get("action_slots", []))
+
+	for candidate in candidates:
+		var raw_slots = []
+		if candidate is Dictionary:
+			raw_slots = candidate.get("buttons", candidate.get("slots", []))
+		elif candidate is Array:
+			raw_slots = candidate
+		if raw_slots is Array and not raw_slots.is_empty():
+			var normalized := _normalize_action_slots(raw_slots)
+			if not normalized.is_empty():
+				return normalized
+	return []
+
+
+func _normalize_action_slots(raw_slots: Array) -> Array:
+	var slots: Array = []
+	for raw_slot in raw_slots:
+		if not raw_slot is Dictionary:
+			continue
+		var slot: Dictionary = raw_slot.duplicate(true)
+		if not slot.has("button"):
+			if slot.has("slot"):
+				slot["button"] = int(slot.get("slot", -1))
+			elif slot.has("index"):
+				slot["button"] = int(slot.get("index", -1))
+		if not slot.has("action") and slot.has("action_id"):
+			slot["action"] = int(slot.get("action_id", 0))
+		if not slot.has("type") and slot.has("action_type"):
+			slot["type"] = int(slot.get("action_type", 0))
+		if not slot.has("populated"):
+			slot["populated"] = int(slot.get("action", 0)) > 0 or int(slot.get("type", -1)) >= 0
+		slots.append(slot)
+	return slots
 
 
 func _extract_inventory_slots(character: Dictionary, enter_result: Dictionary) -> Array:
@@ -1051,6 +1106,19 @@ func _add_shortcut_slot(
 	shortcut_slots.append(button)
 
 
+func _refresh_shortcut_slots() -> void:
+	for index in range(shortcut_slots.size()):
+		var button := shortcut_slots[index]
+		if index < ACTION_BAR_DISPLAY_COUNT:
+				var slot := _action_slot_at(index)
+				if not slot.is_empty():
+					var key_text: String = (
+						ACTION_BAR_KEYS[index] if index < ACTION_BAR_KEYS.size() else str(index)
+					)
+					button.text = "%s\n%s" % [key_text, _action_slot_label(slot)]
+				button.tooltip_text = _action_slot_detail(slot)
+
+
 func _add_panel_button(parent: Control, label_text: String, panel_name: String) -> void:
 	var button := Button.new()
 	button.text = label_text
@@ -1312,12 +1380,67 @@ func _build_actions_panel() -> void:
 	var rows := [
 		"Target: " + ("none" if selected_target_index < 0 else str(selected_target_index + 1)),
 		"Visible objects: " + str(visible_object_count),
+		"Action slots loaded: " + str(_action_populated_count()),
 		"Primary: queued in HUD.",
 		"Interact: queued in HUD.",
 		"Reset: returns the marker to the last server-reported position.",
 	]
 	for row in rows:
 		panel_body.add_child(_panel_label(row, 13))
+	if session_action_slots.is_empty():
+		panel_body.add_child(_panel_label("Action slot rows: waiting for session data.", 13))
+		return
+	for index in range(ACTION_BAR_DISPLAY_COUNT):
+		var slot := _action_slot_at(index)
+		if slot.is_empty():
+			continue
+		panel_body.add_child(_panel_label(_action_slot_detail(slot), 13))
+
+
+func _action_slot_at(slot_index: int) -> Dictionary:
+	for slot in session_action_slots:
+		if slot is Dictionary and int(slot.get("button", -1)) == slot_index:
+			return slot
+	return {}
+
+
+func _action_populated_count() -> int:
+	var count := 0
+	for slot in session_action_slots:
+		if slot is Dictionary and bool(slot.get("populated", true)):
+			count += 1
+	return count
+
+
+func _action_slot_label(slot: Dictionary) -> String:
+	if slot.is_empty() or not bool(slot.get("populated", true)):
+		return "empty"
+	return _action_type_name(int(slot.get("type", 0))) + " " + str(slot.get("action", 0))
+
+
+func _action_slot_detail(slot: Dictionary) -> String:
+	return "slot %s | %s | action %s | packed %s" % [
+		str(slot.get("button", "?")),
+		_action_type_name(int(slot.get("type", 0))),
+		str(slot.get("action", 0)),
+		str(slot.get("packed", "")),
+	]
+
+
+func _action_type_name(action_type: int) -> String:
+	match action_type:
+		0:
+			return "spell"
+		64:
+			return "macro"
+		65:
+			return "item"
+		66:
+			return "equipment"
+		128:
+			return "companion"
+		_:
+			return "type " + str(action_type)
 
 
 func _build_targets_panel() -> void:
@@ -2033,6 +2156,33 @@ func _run_self_test() -> void:
 				},
 			],
 		},
+		"action_buttons":
+		{
+			"buttons":
+			[
+				{
+					"button": 0,
+					"action": 78,
+					"type": 0,
+					"packed": 78,
+					"populated": true,
+				},
+				{
+					"button": 1,
+					"action": 6603,
+					"type": 0,
+					"packed": 6603,
+					"populated": true,
+				},
+				{
+					"button": 2,
+					"action": 6948,
+					"type": 65,
+					"packed": 1098907648,
+					"populated": true,
+				},
+			],
+		},
 		"quest_log":
 		{
 			"slots":
@@ -2095,6 +2245,9 @@ func _run_self_test() -> void:
 		and actions_shell.visible
 		and actions_title != null
 		and actions_title.text == "Actions"
+		and _action_populated_count() == 3
+		and _control_tree_text_contains(actions_shell, "action 78")
+		and _control_tree_text_contains(actions_shell, "action 6948")
 	)
 	_show_session_panel("targets")
 	var targets_shell := _panel_shell("targets")
@@ -2210,7 +2363,11 @@ func _run_self_test() -> void:
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
 	var actions_ok := action_buttons.size() == 10
-	var shortcut_ok := shortcut_slots.size() == 12
+	var shortcut_ok := (
+		shortcut_slots.size() == 12
+		and shortcut_slots[0].text.find("spell 78") != -1
+		and shortcut_slots[2].text.find("item 6948") != -1
+	)
 	var input_ok := (
 		no_target_key_ok
 		and no_target_action_ok
@@ -2238,7 +2395,7 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "inventory=true quests=true tracker=true map_panel=true "
-				+ "targets=true "
+				+ "targets=true action_slots=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
 			)
 			% [
