@@ -22,6 +22,22 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Auction Panel Started (Codex UI lane)
+
+Goal: add a resident auction-house surface to the active world-session HUD so
+safe browse, bid, and owned-auction snapshots can display in the normal
+gameplay view.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render session-provided auction browse/search rows, bid rows, owned-auction
+  rows, prices, quantities, owners, bidders, and time-left summaries without
+  calling or editing the protocol bridge.
+- Keep live auctioneer discovery, browse/search packets, bid, buyout, sell,
+  cancel, deposit, delivery, mailbox handoff, and server failure states in
+  Claude's live-session lane.
+
 ## 2026-07-02 - World Session Aura And Unit Status Panel (Codex UI lane)
 
 Context: a separate aura simulation existed, but the active world-session HUD
