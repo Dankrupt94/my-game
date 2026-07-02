@@ -34,17 +34,28 @@ Confirmed present on this machine:
 - **GDScript Quality:** `gdformat` and `gdlint`.
 - **Shell/Workflow Helpers:** `delta`, `btop`, `entr`, `direnv`, and `shellcheck`.
 
-Missing or deferred developer/debugging tools:
+Developer/debugging tools added after the first audit:
+
+- **Graphics/Visuals:** `blender`, `assimp`, `gltf-transform`, `gltfpack`,
+  `magick`, and `convert`.
+- **Multi-Client Test Automation:** `xdotool` and `wmctrl`.
+- **Headless GUI Testing:** `xvfb-run`.
+- **Rust GDExtension Building:** `cargo-watch`.
+- **Local DB Exporters:** `sqlite-utils`.
+- **Protocol Crafting:** `scapy`.
+- **Client Automation:** `wine`.
+- **Graphics Diagnostics:** `apitrace`.
+
+Still missing or deferred developer/debugging tools:
 
 - **MPQ Parsing:** `mpqtool` (recommended MPQ viewer/extractor).
-- **Multi-Client Test Automation:** `xdotool` (recommended for simulating keyboard/mouse inputs) and `wmctrl` (recommended for managing window positioning of test clients).
-- **Headless GUI Testing:** `xvfb-run` (recommended virtual framebuffer runner).
-- **Rust GDExtension Building:** `cargo-watch` (recommended automatic recompiler utility).
-- **Local DB Exporters:** `sqlite-utils` (recommended Python sqlite table exporter).
-- **Protocol Crafting:** `scapy` (recommended Python packet crafting and dissection framework).
-- **Graphics/Visuals:** `blender` (needed later for model conversions).
-- **Client Automation:** `wine` (needed later for launching Windows client binary).
+- **GPU Frame Debugging:** `renderdoccmd` (not available from apt or Snap on
+  this machine during the 2026-07-01 playable-toolchain pass).
 - **Other:** `go` (optional) and `podman` (optional, since Docker is present).
+
+The repeatable checker is documented in
+[playable-toolchain.md](playable-toolchain.md) and implemented at
+`tools/check_playable_toolchain.sh`.
 
 ## Client Manifest Result
 
@@ -107,4 +118,5 @@ Follow-up applied:
 - Add a Godot dashboard action that can run the local audits and show friendly status text.
 - Add read-only database summaries to the dashboard once the local AzerothCore MySQL service is reachable.
 - Add server-stack discovery so the dashboard can find or start the local MySQL/auth/world services.
-- Defer Blender/Wine installation until the project reaches the asset conversion or client-launch automation stage.
+- Use `tools/check_playable_toolchain.sh` before asset-pipeline, GUI
+  automation, or local reference-client comparison work.

@@ -43,3 +43,10 @@ extracted_client_assets/
 *.wdt
 *.wdl
 *.anim
+
+# Local-only debug captures and graphics traces.
+local_captures/
+*.pcap
+*.pcapng
+*.trace
+*.rdc

@@ -2304,3 +2304,24 @@ Plan:
   tools are ready and which are still missing.
 - Document the Git boundary for each tool category: code and tool setup may be
   committed, but client-derived inputs and outputs stay local-only.
+
+Result:
+
+- Installed local playable-port tooling for model/scene inspection, texture and
+  media conversion, glTF validation/optimization, GUI automation, virtual
+  display testing, local reference-client comparison, protocol capture review,
+  packet prototyping, graphics tracing, and faster native build loops.
+- Added `tools/check_playable_toolchain.sh` to produce a repeatable local
+  readiness report without inspecting or copying proprietary client assets.
+- Added `docs/playable-toolchain.md`.
+- Updated `.gitignore` to keep packet captures and graphics traces local-only.
+
+Validation:
+
+- `tools/check_playable_toolchain.sh` reports all required playable-port tools
+  ready.
+- `shellcheck tools/check_playable_toolchain.sh` passed.
+- Local Qwen advisory review found no concrete implementation blocker; its
+  privacy guidance was folded into `docs/playable-toolchain.md`.
+- RenderDoc remains deferred because neither apt nor Snap exposed
+  `renderdoccmd`; `apitrace` is the current graphics trace fallback.
