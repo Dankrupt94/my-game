@@ -22,6 +22,18 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Vendor Panel Started (Codex UI lane)
+
+Goal: add a resident vendor-window surface to the active world-session HUD so
+safe vendor snapshots can display in the normal gameplay view.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render session-provided vendor target, item rows, stock, price, and transaction
+  feedback without calling or editing the protocol bridge.
+- Keep buy/sell/repair actions in Claude's live-session lane.
+
 ## 2026-07-02 - World Session Loot Panel (Codex UI lane)
 
 Context: Stage 17 has live loot proof scenes, but the active world-session HUD
