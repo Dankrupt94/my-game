@@ -22,6 +22,19 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Mail Panel Started (Codex UI lane)
+
+Goal: add a resident mailbox surface to the active world-session HUD so safe
+mail snapshots can display in the normal gameplay view.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render session-provided mail lists, message rows, money/COD fields, and
+  attachment summaries without calling or editing the protocol bridge.
+- Keep mailbox discovery, read/send/delete, attachment pickup, and COD actions
+  in Claude's live-session lane.
+
 ## 2026-07-02 - World Session Social Panel (Codex UI lane)
 
 Context: the Stage 17 parity spec requires normal social, group, and guild
