@@ -1,5 +1,32 @@
 # Task Log
 
+## 2026-07-02 - World Session Character Panel
+
+Goal: add a first resident character/paper-doll style HUD surface to the
+active world-session view without touching Claude's native/protocol/bridge/live
+session files.
+
+Result:
+
+- Added a `Character` panel to the world-session movable/resizable HUD system.
+- The panel renders safe session profile fields: name, level/class, race when
+  present, map, position, orientation, zone when present, and money.
+- The panel includes a 19-slot equipment grid using the same safe inventory
+  slot summaries as the Bags panel.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `character_panel=true`.
+
+Remaining work:
+
+- Feed live character/equipment refresh snapshots from the persistent session
+  lane after equipment, money, aura, level, skill, and location changes.
+- Add local-only item names/icons/tooltips/stats, model/portrait preview,
+  paper-doll drag/drop equip/unequip, durability/repair state, and server
+  failure feedback.
+
 ## 2026-07-02 - World Session Action Bar Data Started
 
 Goal: make the persistent world-session action bar render safe session action

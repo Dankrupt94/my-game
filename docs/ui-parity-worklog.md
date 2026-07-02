@@ -22,18 +22,34 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Character Panel Started (Codex UI lane)
+## 2026-07-02 - World Session Character Panel (Codex UI lane)
 
-Goal: add the first resident character/paper-doll style HUD surface to the
-active world-session view using only safe session dictionaries.
+Context: the active world-session HUD had bags and target data, but no resident
+character/paper-doll style surface for identity, location, money, or equipped
+slot feedback.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Render character identity, position, coinage, and equipment-slot summaries
-  from data already present in the session context.
-- Do not call or edit the protocol bridge; live equipment mutation remains a
-  separate native/session-lane task.
+- Added a resident `Character` panel to `scripts/world_session_view.gd`.
+- The panel renders safe character profile data from the session handoff:
+  name, level/class, race when present, map, position, orientation, zone when
+  present, and money.
+- Added a 19-slot equipment grid using the same safe inventory-slot summaries as
+  the Bags panel.
+- This remains UI-lane work only and does not call or edit the protocol bridge.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `character_panel=true`.
+
+Remaining work:
+
+- Feed live character/equipment refresh snapshots from Claude's persistent
+  session lane after equipment, money, aura, level, skill, and location changes.
+- Add item names/icons/tooltips/stats from local-only metadata, model/portrait
+  preview, paper-doll drag/drop equip/unequip, durability/repair state, and
+  server failure feedback.
 
 ## 2026-07-02 - World Session Chat Log Data (Codex UI lane)
 

@@ -17,10 +17,11 @@ const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
 const PANEL_NAMES := [
-	"chat", "spells", "actions", "targets", "quests", "map", "options", "inventory"
+	"chat", "character", "spells", "actions", "targets", "quests", "map", "options", "inventory"
 ]
 const ACTION_BAR_DISPLAY_COUNT := 12
 const ACTION_BAR_KEYS := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="]
+const EQUIPMENT_SLOT_COUNT := 19
 const QUEST_LOG_SLOT_COUNT := 25
 const INVENTORY_SLOT_NAMES := [
 	"Head",
@@ -89,6 +90,7 @@ var authoritative_marker_position := Vector3.ZERO
 var session_map_id := 0
 var session_wow_position := Vector3.ZERO
 var session_orientation := 0.0
+var session_character_profile: Dictionary = {}
 var visible_object_count := 0
 var visible_objects: Array = []
 var session_chat_rows: Array = []
@@ -258,6 +260,7 @@ func _build_hud() -> void:
 	layout.add_child(nav_bar)
 
 	_add_panel_button(nav_bar, "Chat", "chat")
+	_add_panel_button(nav_bar, "Character", "character")
 	_add_panel_button(nav_bar, "Spells", "spells")
 	_add_panel_button(nav_bar, "Actions", "actions")
 	_add_panel_button(nav_bar, "Targets", "targets")
@@ -439,6 +442,9 @@ func _apply_session_data(
 	session_map_id = map_id
 	session_wow_position = Vector3(wow_x, wow_y, wow_z)
 	session_orientation = float(login.get("orientation", character.get("orientation", 0.0)))
+	session_character_profile = _character_profile(
+		character, enter_result, character_name, map_id, wow_x, wow_y, wow_z
+	)
 	var marker_position := _godot_position(wow_x, wow_y, wow_z)
 
 	player_marker.position = marker_position
@@ -488,6 +494,31 @@ func _apply_session_data(
 	_refresh_quest_tracker()
 	session_label.text = source_text
 	_update_camera()
+
+
+func _character_profile(
+	character: Dictionary,
+	enter_result: Dictionary,
+	character_name: String,
+	map_id: int,
+	wow_x: float,
+	wow_y: float,
+	wow_z: float
+) -> Dictionary:
+	return {
+		"name": character_name,
+		"level": character.get("level", enter_result.get("level", "?")),
+		"race": character.get("race", enter_result.get("race", "")),
+		"class": character.get("class", enter_result.get("class", "")),
+		"gender": character.get("gender", enter_result.get("gender", "")),
+		"guid": character.get("guid", enter_result.get("guid", "")),
+		"zone": character.get("zone", enter_result.get("zone", "")),
+		"map": map_id,
+		"x": wow_x,
+		"y": wow_y,
+		"z": wow_z,
+		"orientation": session_orientation,
+	}
 
 
 func _extract_visible_objects(character: Dictionary, enter_result: Dictionary) -> Array:
@@ -1170,6 +1201,8 @@ func _panel_title(panel_name: String) -> String:
 	match panel_name:
 		"chat":
 			return "Chat"
+		"character":
+			return "Character"
 		"spells":
 			return "Spells"
 		"actions":
@@ -1271,6 +1304,8 @@ func _show_session_panel(panel_name: String) -> void:
 	match panel_name:
 		"chat":
 			_build_chat_panel()
+		"character":
+			_build_character_panel()
 		"spells":
 			_build_spells_panel()
 		"actions":
@@ -1468,6 +1503,57 @@ func _clear_panel_body() -> void:
 func _clear_children(parent: Node) -> void:
 	for child in parent.get_children():
 		child.queue_free()
+
+
+func _build_character_panel() -> void:
+	panel_title_label.text = "Character"
+	var rows: Array[String] = [
+		"Name: " + str(session_character_profile.get("name", "Unknown")),
+		_character_level_line(),
+		"Map: " + str(session_character_profile.get("map", session_map_id)),
+		(
+			"Position: %.2f, %.2f, %.2f"
+			% [
+				float(session_character_profile.get("x", session_wow_position.x)),
+				float(session_character_profile.get("y", session_wow_position.y)),
+				float(session_character_profile.get("z", session_wow_position.z)),
+			]
+		),
+		"Orientation: %.3f" % float(session_character_profile.get("orientation", session_orientation)),
+	]
+	var race_text := str(session_character_profile.get("race", "")).strip_edges()
+	if not race_text.is_empty():
+		rows.insert(2, "Race: " + race_text)
+	var zone_text := str(session_character_profile.get("zone", "")).strip_edges()
+	if not zone_text.is_empty():
+		rows.append("Zone: " + zone_text)
+	if session_coinage >= 0:
+		rows.append("Money: " + _money_text(session_coinage))
+	for row in rows:
+		panel_body.add_child(_panel_label(row, 13))
+
+	panel_body.add_child(_panel_label("Equipment", 14))
+	if session_inventory_slots.is_empty():
+		panel_body.add_child(_panel_label("Equipment snapshot: waiting for session data.", 13))
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	panel_body.add_child(grid)
+
+	for index in range(EQUIPMENT_SLOT_COUNT):
+		var slot := _inventory_slot_at(index)
+		grid.add_child(_inventory_slot_button(slot, index))
+
+
+func _character_level_line() -> String:
+	var level_text := str(session_character_profile.get("level", "?")).strip_edges()
+	var class_text := str(session_character_profile.get("class", "")).strip_edges()
+	if class_text.is_empty():
+		return "Level " + level_text
+	return "Level %s %s" % [level_text, class_text]
 
 
 func _build_chat_panel() -> void:
@@ -2490,6 +2576,28 @@ func _run_self_test() -> void:
 		and _control_tree_text_contains(chat_body, "Session hello")
 		and _control_tree_text_contains(chat_body, "World session ready")
 	)
+	_show_session_panel("character")
+	var character_shell := _panel_shell("character")
+	var character_title: Label = session_panels.get("character", {}).get("title", null)
+	var character_body: VBoxContainer = session_panels.get("character", {}).get("body", null)
+	var character_grid_ok := false
+	if character_body != null:
+		for child in character_body.get_children():
+			if child is GridContainer and child.get_child_count() == EQUIPMENT_SLOT_COUNT:
+				character_grid_ok = true
+				break
+	var character_panel_ok := (
+		character_shell != null
+		and character_shell.visible
+		and character_title != null
+		and character_title.text == "Character"
+		and character_body != null
+		and _control_tree_text_contains(character_body, "Name: Codexstage")
+		and _control_tree_text_contains(character_body, "Level 80 Warrior")
+		and _control_tree_text_contains(character_body, "Money: 12g 34s 56c")
+		and _inventory_slot_state(_inventory_slot_at(15)) == "Practice Blade"
+		and character_grid_ok
+	)
 	_show_session_panel("actions")
 	var actions_shell := _panel_shell("actions")
 	var actions_title: Label = session_panels.get("actions", {}).get("title", null)
@@ -2621,7 +2729,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 10
+	var actions_ok := action_buttons.size() == 11
 	var shortcut_ok := (
 		shortcut_slots.size() == 12
 		and shortcut_slots[0].text.find("spell 78") != -1
@@ -2637,6 +2745,7 @@ func _run_self_test() -> void:
 	)
 	var panel_ok := (
 		chat_panel_ok
+		and character_panel_ok
 		and actions_panel_ok
 		and targets_panel_ok
 		and target_frame_ok
@@ -2653,7 +2762,8 @@ func _run_self_test() -> void:
 			(
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
-				+ "chat=true inventory=true quests=true tracker=true map_panel=true "
+				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
+				+ "map_panel=true "
 				+ "targets=true action_slots=true spellbook=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
 			)
@@ -2674,7 +2784,7 @@ func _run_self_test() -> void:
 			"WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s "
 			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
 			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
-			+ "targets_panel_ok=%s target_frame_ok=%s"
+			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s"
 		)
 		% [
 			str(marker_ok),
@@ -2688,6 +2798,7 @@ func _run_self_test() -> void:
 			str(map_panel_ok),
 			str(targets_panel_ok),
 			str(target_frame_ok),
+			str(character_panel_ok),
 		]
 	)
 	push_error(self_test_error)
