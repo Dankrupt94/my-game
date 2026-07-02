@@ -318,6 +318,23 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
   gossip, map overlays, persistent sessions, in-world click targeting, and
   local-only quest text/icon rendering.
 
+### 2026-07-02 - UI-Lane Quest Slot Snapshot Panel
+
+- Added `scripts/live_quest_log_panel.gd`, a reusable Godot UI component for
+  quest-log slot dictionaries shaped like the live Stage 17 quest-log parser
+  output.
+- Integrated the panel into the non-`stage17_*` `scenes/quest_view.tscn` as a
+  `Quest Slot Snapshot` tab, keeping Codex's work inside the current UI lane
+  and away from Claude's live-protocol scene ownership.
+- The panel renders quest ids, slot ids, state flags, objective counters, and
+  timers only. It does not commit quest title/body/objective text or icons.
+- Validation: `tools/live_quest_log_panel_smoke.gd` passed with two synthetic
+  slots, and `ACORE_QUEST_SELF_TEST=1` passed with panel checks after simulated
+  accept, progress, and completion.
+- Remaining work: feed this component from a real persistent quest-log snapshot,
+  replace mock text through the local-only quest data pipeline, and move the
+  panel into the normal gameplay HUD.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

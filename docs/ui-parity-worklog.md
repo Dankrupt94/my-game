@@ -71,3 +71,22 @@ Remaining work (real parity gap):
 - Deepen WotLK visual fidelity of each view.
 - Build toward a persistent-session HUD that hosts these panels instead of
   one-off dashboard scenes.
+
+## 2026-07-02 - Codex UI-lane quest slot snapshot panel
+
+Result:
+
+- Added `scripts/live_quest_log_panel.gd` as a reusable UI component that
+  renders quest-log slot dictionaries using only ids, slot numbers, state flags,
+  counters, and timers.
+- Added a `Quest Slot Snapshot` tab to `scenes/quest_view.tscn` through
+  `scripts/quest_view.gd`.
+- Kept `stage17_*`, native, protocol, and bridge files out of the committed
+  implementation so Claude's lane remains unaffected.
+
+Validation:
+
+- `godot-4 --headless --path . --script res://tools/live_quest_log_panel_smoke.gd`
+  passed.
+- `ACORE_QUEST_SELF_TEST=1 godot-4 --headless --path . res://scenes/quest_view.tscn`
+  passed with panel checks after accept, progress, and completion.

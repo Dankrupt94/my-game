@@ -9,11 +9,43 @@ Plan:
 
 - Add a reusable quest-log panel that renders server-owned quest-log slot
   dictionaries already returned by the Stage 17 quest accept proof.
-- Mount the panel in `scenes/stage17_questgiver_view.tscn` so accepting a quest
-  visibly updates a journal/tracker-style surface instead of only appending
-  proof rows.
+- Mount the panel in the regular UI-lane `scenes/quest_view.tscn` so the quest
+  log surface can render the same slot-shaped data without touching Claude's
+  `stage17_*` live-protocol scene.
 - Add a synthetic UI self-test for the panel and keep committed content numeric
   only until the local-only quest text/icon pipeline is ready.
+
+Result:
+
+- Added `scripts/live_quest_log_panel.gd`, a reusable numeric quest-log slot
+  panel that shows active quest ids, slot ids, state flags, objective counters,
+  and timers.
+- Added a `Quest Slot Snapshot` tab to `scenes/quest_view.tscn` via
+  `scripts/quest_view.gd`. The current UI model feeds the panel with
+  server-shaped slot dictionaries, so Claude's live bridge lane can later swap
+  in real snapshots without reshaping the view.
+- Left `scripts/stage17_questgiver_view.gd` unchanged after checking the
+  coordination split; Codex's committed work stays in the UI-view lane.
+
+Validation:
+
+- `godot-4 --headless --path . --script res://tools/live_quest_log_panel_smoke.gd`
+  passed with two synthetic active slots and selected quest `999`.
+- `ACORE_QUEST_SELF_TEST=1 godot-4 --headless --path . res://scenes/quest_view.tscn`
+  passed, including panel checks after accept, progress, and completion.
+- `godot-4 --headless --path . res://scenes/quest_view.tscn --quit-after 1`
+  loaded the updated Quest Log scene.
+- Local `qwen-agent` advisory review reported no blockers; its risks were the
+  expected quest id, slot index, and UI synchronization concerns covered by the
+  focused self-test.
+
+Remaining work:
+
+- Feed the panel from Claude's live quest-log snapshots once that lane exposes a
+  persistent quest-log read path to the UI.
+- Replace mock quest text with local-only quest text/icon data, add completion
+  and reward-choice live flows, and move the panel into the persistent gameplay
+  HUD.
 
 ## 2026-07-01 - Stage 17 Quest Accept Proof Slice
 

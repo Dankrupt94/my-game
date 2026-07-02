@@ -1,6 +1,7 @@
 extends Control
 
 const DASHBOARD_SCENE := "res://main.tscn"
+const LiveQuestLogPanel = preload("res://scripts/live_quest_log_panel.gd")
 
 # Player state
 var player_gold := 12000 # 1 gold 20 silver in copper
@@ -32,6 +33,7 @@ var log_detail_progress: Label
 var progress_btn: Button
 var reward_option: OptionButton
 var complete_btn: Button
+var live_quest_log_panel: VBoxContainer
 
 var stats_label: Label
 var status_label: Label
@@ -105,6 +107,8 @@ func _build_view() -> void:
 
 	_build_npc_tab()
 	_build_log_tab()
+	_build_slot_snapshot_tab()
+	_refresh_live_quest_log_panel()
 
 	# Log Console
 	log_log = TextEdit.new()
@@ -265,6 +269,22 @@ func _build_log_tab() -> void:
 	action_row.add_child(complete_btn)
 
 
+func _build_slot_snapshot_tab() -> void:
+	var tab := PanelContainer.new()
+	tab.name = "Quest Slot Snapshot"
+	tab_container.add_child(tab)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_top", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_bottom", 16)
+	tab.add_child(margin)
+
+	live_quest_log_panel = LiveQuestLogPanel.new()
+	margin.add_child(live_quest_log_panel)
+
+
 func _load_mock_data() -> void:
 	available_quests = [
 		{
@@ -313,6 +333,7 @@ func _update_active_list() -> void:
 		if _is_quest_complete(quest):
 			text += " (Complete)"
 		active_list.add_item(text)
+	_refresh_live_quest_log_panel()
 
 
 func _update_stats_label() -> void:
@@ -420,6 +441,44 @@ func _is_quest_complete(quest: Dictionary) -> bool:
 	return true
 
 
+func _refresh_live_quest_log_panel() -> void:
+	if live_quest_log_panel == null:
+		return
+	var focus_quest_id := 0
+	if selected_log_idx >= 0 and selected_log_idx < active_quests.size():
+		focus_quest_id = int(active_quests[selected_log_idx]["id"])
+	elif not active_quests.is_empty():
+		focus_quest_id = int(active_quests[0]["id"])
+	live_quest_log_panel.load_from_snapshot(_active_quests_to_slot_snapshot(), focus_quest_id, "UI quest slots")
+
+
+func _active_quests_to_slot_snapshot() -> Dictionary:
+	var slots := []
+	var slot_index := 0
+	for quest in active_quests:
+		var counters := [0, 0, 0, 0]
+		var objectives: Array = quest.get("objectives", [])
+		for objective_idx in range(min(objectives.size(), counters.size())):
+			counters[objective_idx] = int(objectives[objective_idx].get("current", 0))
+		slots.append({
+			"slot": slot_index,
+			"quest_id": int(quest["id"]),
+			"state": 0x8 if _is_quest_complete(quest) else 0x0,
+			"counter_1": counters[0],
+			"counter_2": counters[1],
+			"counter_3": counters[2],
+			"counter_4": counters[3],
+			"time_left": 0,
+			"populated": true,
+		})
+		slot_index += 1
+	return {
+		"seen": true,
+		"populated_count": slots.size(),
+		"slots": slots,
+	}
+
+
 func _on_accept_pressed() -> void:
 	if selected_npc_idx < 0:
 		return
@@ -431,6 +490,7 @@ func _on_accept_pressed() -> void:
 	_select_npc_quest(-1)
 	_update_available_list()
 	_update_active_list()
+	_refresh_live_quest_log_panel()
 
 
 func _on_simulate_progress_pressed() -> void:
@@ -445,6 +505,7 @@ func _on_simulate_progress_pressed() -> void:
 
 	_select_log_quest(selected_log_idx)
 	_update_active_list()
+	_refresh_live_quest_log_panel()
 
 
 func _on_complete_pressed() -> void:
@@ -472,6 +533,7 @@ func _on_complete_pressed() -> void:
 	_select_log_quest(-1)
 	_update_active_list()
 	_update_stats_label()
+	_refresh_live_quest_log_panel()
 
 
 func _on_back_pressed() -> void:
@@ -500,6 +562,9 @@ func _run_self_test() -> void:
 	if active_quests.size() != 1:
 		_fail_self_test("Quest acceptance failed to add to active log list")
 		return
+	if live_quest_log_panel.get_active_count() != 1:
+		_fail_self_test("Quest slot snapshot did not show accepted quest")
+		return
 	if available_quests.size() != 1:
 		_fail_self_test("Quest acceptance failed to remove from available list")
 		return
@@ -520,6 +585,9 @@ func _run_self_test() -> void:
 	_on_simulate_progress_pressed()
 	if active_q["objectives"][0]["current"] != 1:
 		_fail_self_test("Objective progress simulation failed")
+		return
+	if live_quest_log_panel.get_selected_quest_id() != 101:
+		_fail_self_test("Quest slot snapshot lost selected quest")
 		return
 	if not _is_quest_complete(active_q):
 		_fail_self_test("Quest objectives should be marked met")
@@ -553,6 +621,9 @@ func _run_self_test() -> void:
 		return
 	if active_quests.size() != 0:
 		_fail_self_test("Quest log was not cleared after completion")
+		return
+	if live_quest_log_panel.get_active_count() != 0:
+		_fail_self_test("Quest slot snapshot was not cleared after completion")
 		return
 
 	print("QUEST_SELF_TEST_OK: available NPC gossip loading, active log tracking, progress simulation, and item reward selection complete checks passed.")

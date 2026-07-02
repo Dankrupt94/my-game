@@ -134,9 +134,12 @@ The immediate Stage 17 work is still a narrow slice inside this larger spec:
 - Add common NPC service slices through `scenes/stage17_trainer_view.tscn` and `scenes/stage17_vendor_view.tscn`, while keeping learn-spell, buy/sell/repair, quest, and other service mutations explicitly tracked.
 - Treat `stage17_vendor_view.tscn` as a vendor list plus selected-row buy/sell proof with transaction inventory feedback until a persistent inventory panel refresh, repair, item metadata, stock refresh, failure-code handling, in-world click targeting, and persistent-session behavior are implemented and validated.
 - Treat `stage17_questgiver_view.tscn` as quest list, quest detail, and first
-  quest-accept proof until completion, reward choice, objective tracking, full
-  quest-log UI, abandon/share, local-only text/icon rendering, in-world click
-  targeting, and persistent-session behavior are implemented and validated.
+  quest-accept proof. Treat `quest_view.tscn` plus
+  `scripts/live_quest_log_panel.gd` as the first UI-lane quest-log slot
+  snapshot surface until it is fed from persistent live quest-log state and
+  expanded into completion, reward choice, objective tracking, abandon/share,
+  local-only text/icon rendering, in-world click targeting, and
+  persistent-session behavior.
 - Document every proof as a step toward this full spec, not as final parity by itself.
 
 ## Full-Port Exit Rule
