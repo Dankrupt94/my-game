@@ -492,6 +492,61 @@ int questgiver_list_probe(
             || (result.gossip_fallback_seen && result.gossip.quest_count > 0)) ? 0 : 1;
 }
 
+int questgiver_details_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_selector,
+    std::string const& quest_id,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::QuestGiverDetailsProbeResult result = acore_protocol::questgiver_details_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_selector),
+        static_cast<std::uint32_t>(std::stoul(quest_id)),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "QUESTGIVER_DETAILS_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " query_quest_id=" << result.query_quest_id
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " questgiver_hello_sent=" << (result.questgiver_hello_sent ? 1 : 0)
+              << " query_quest_sent=" << (result.query_quest_sent ? 1 : 0)
+              << " details_response_seen=" << (result.details_response_seen ? 1 : 0)
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " details_quest_id=" << result.details.quest_id
+              << " reward_choice_count=" << result.details.reward_choice_count
+              << " reward_item_count=" << result.details.reward_item_count
+              << " money_reward=" << result.details.money_reward
+              << " xp_reward=" << result.details.xp_reward
+              << " reward_spell=" << result.details.reward_spell
+              << "\n";
+    // Reward item ids/counts only; quest text is never printed.
+    for (QuestRewardItemSummary const& item : result.details.reward_items)
+    {
+        std::cout << "QUEST_REWARD_ITEM item_id=" << item.item_id << " count=" << item.item_count << "\n";
+    }
+    for (QuestRewardItemSummary const& item : result.details.reward_choice_items)
+    {
+        std::cout << "QUEST_CHOICE_ITEM item_id=" << item.item_id << " count=" << item.item_count << "\n";
+    }
+    return result.live_target_found && result.query_quest_sent && result.details_response_seen
+        && result.details.quest_id == result.query_quest_id ? 0 : 1;
+}
+
 int trainer_buy_spell_probe(
     std::string const& host,
     std::string const& port,
@@ -1596,6 +1651,11 @@ int main(int argc, char** argv)
         if (argc == 8 && std::strcmp(argv[1], "--questgiver-list") == 0)
         {
             return questgiver_list_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7]);
+        }
+
+        if (argc == 9 && std::strcmp(argv[1], "--questgiver-details") == 0)
+        {
+            return questgiver_details_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
         }
 
         if (argc == 9 && std::strcmp(argv[1], "--trainer-buy") == 0)

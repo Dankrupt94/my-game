@@ -1457,6 +1457,103 @@ GossipMessageSummary parse_gossip_message_response(std::span<const std::uint8_t>
     return summary;
 }
 
+std::vector<std::uint8_t> build_questgiver_query_quest_payload(std::uint64_t guid, std::uint32_t quest_id)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, guid);
+    append_u32_le(payload, quest_id);
+    append_u8(payload, 1); // unk1 (client sends 1)
+    return payload;
+}
+
+QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    QuestGiverDetailsSummary summary;
+    summary.payload_size = payload.size();
+    summary.npc_guid = read_u64_le(payload, offset);
+    (void)read_u64_le(payload, offset); // divider (active quest giver guid)
+    summary.quest_id = read_u32_le(payload, offset);
+    (void)read_c_string(payload, offset); // title (proprietary; discarded)
+    (void)read_c_string(payload, offset); // details (proprietary; discarded)
+    (void)read_c_string(payload, offset); // objectives (proprietary; discarded)
+    (void)read_u8(payload, offset); // auto finish
+    summary.quest_flags = read_u32_le(payload, offset);
+    summary.suggested_players = read_u32_le(payload, offset);
+    (void)read_u8(payload, offset); // is finished
+
+    summary.hidden_rewards = (summary.quest_flags & 0x00000200u) != 0;
+    if (summary.hidden_rewards)
+    {
+        summary.reward_choice_count = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        summary.reward_item_count = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        summary.money_reward = read_u32_le(payload, offset);
+        summary.xp_reward = read_u32_le(payload, offset);
+    }
+    else
+    {
+        summary.reward_choice_count = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        if (summary.reward_choice_count < 0 || summary.reward_choice_count > 64)
+        {
+            throw std::runtime_error("quest details has an implausible reward-choice count");
+        }
+        for (std::int32_t i = 0; i < summary.reward_choice_count; ++i)
+        {
+            QuestRewardItemSummary item;
+            item.item_id = read_u32_le(payload, offset);
+            item.item_count = read_u32_le(payload, offset);
+            (void)read_u32_le(payload, offset); // display info id
+            summary.reward_choice_items.push_back(item);
+        }
+        summary.reward_item_count = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        if (summary.reward_item_count < 0 || summary.reward_item_count > 64)
+        {
+            throw std::runtime_error("quest details has an implausible reward-item count");
+        }
+        for (std::int32_t i = 0; i < summary.reward_item_count; ++i)
+        {
+            QuestRewardItemSummary item;
+            item.item_id = read_u32_le(payload, offset);
+            item.item_count = read_u32_le(payload, offset);
+            (void)read_u32_le(payload, offset); // display info id
+            summary.reward_items.push_back(item);
+        }
+        summary.money_reward = read_u32_le(payload, offset);
+        summary.xp_reward = read_u32_le(payload, offset);
+    }
+
+    summary.honor_reward = read_u32_le(payload, offset);
+    (void)read_u32_le(payload, offset); // honor multiplier (float bits)
+    summary.reward_spell = read_u32_le(payload, offset);
+    (void)read_u32_le(payload, offset); // reward spell cast
+    (void)read_u32_le(payload, offset); // char title id
+    (void)read_u32_le(payload, offset); // bonus talents
+    (void)read_u32_le(payload, offset); // reward arena points
+    (void)read_u32_le(payload, offset); // unk
+
+    for (int i = 0; i < 5; ++i) (void)read_u32_le(payload, offset); // reward faction id
+    for (int i = 0; i < 5; ++i) (void)read_u32_le(payload, offset); // reward faction value
+    for (int i = 0; i < 5; ++i) (void)read_u32_le(payload, offset); // reward faction value override
+
+    std::uint32_t emote_count = read_u32_le(payload, offset);
+    if (emote_count > 64)
+    {
+        throw std::runtime_error("quest details has an implausible emote count");
+    }
+    for (std::uint32_t i = 0; i < emote_count; ++i)
+    {
+        (void)read_u32_le(payload, offset); // emote
+        (void)read_u32_le(payload, offset); // emote delay
+    }
+
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("quest details parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload)
 {
     std::size_t offset = 0;
@@ -2190,6 +2287,41 @@ bool world_packet_self_test()
     gossip_message_payload.insert(gossip_message_payload.end(), {'B', 0});      // title
     GossipMessageSummary gossip_message = parse_gossip_message_response(gossip_message_payload);
 
+    std::vector<std::uint8_t> quest_details_payload;
+    append_u64_le(quest_details_payload, 0xF130000123000003ULL); // npc guid
+    append_u64_le(quest_details_payload, 0);                     // divider
+    append_u32_le(quest_details_payload, 783);                   // quest id
+    quest_details_payload.insert(quest_details_payload.end(), {'T', 0}); // title
+    quest_details_payload.insert(quest_details_payload.end(), {'D', 0}); // details
+    quest_details_payload.insert(quest_details_payload.end(), {'O', 0}); // objectives
+    append_u8(quest_details_payload, 1);                         // auto finish
+    append_u32_le(quest_details_payload, 8);                     // quest flags (no hidden bit)
+    append_u32_le(quest_details_payload, 0);                     // suggested players
+    append_u8(quest_details_payload, 0);                         // is finished
+    append_u32_le(quest_details_payload, 1);                     // reward choice count
+    append_u32_le(quest_details_payload, 100);                   // choice item id
+    append_u32_le(quest_details_payload, 1);                     // choice item count
+    append_u32_le(quest_details_payload, 5);                     // choice display id
+    append_u32_le(quest_details_payload, 1);                     // reward item count
+    append_u32_le(quest_details_payload, 200);                   // reward item id
+    append_u32_le(quest_details_payload, 2);                     // reward item count
+    append_u32_le(quest_details_payload, 6);                     // reward display id
+    append_u32_le(quest_details_payload, 1200);                  // money reward
+    append_u32_le(quest_details_payload, 450);                   // xp reward
+    append_u32_le(quest_details_payload, 0);                     // honor
+    append_u32_le(quest_details_payload, 0);                     // honor multiplier (float bits)
+    append_u32_le(quest_details_payload, 0);                     // reward spell
+    append_u32_le(quest_details_payload, 0);                     // reward spell cast
+    append_u32_le(quest_details_payload, 0);                     // char title id
+    append_u32_le(quest_details_payload, 0);                     // bonus talents
+    append_u32_le(quest_details_payload, 0);                     // reward arena points
+    append_u32_le(quest_details_payload, 0);                     // unk
+    for (int i = 0; i < 15; ++i) append_u32_le(quest_details_payload, 0); // 3x5 reputation arrays
+    append_u32_le(quest_details_payload, 1);                     // emote count
+    append_u32_le(quest_details_payload, 1);                     // emote
+    append_u32_le(quest_details_payload, 0);                     // emote delay
+    QuestGiverDetailsSummary quest_details = parse_questgiver_quest_details_response(quest_details_payload);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -2328,6 +2460,17 @@ bool world_packet_self_test()
         && gossip_message.quests[0].quest_id == 62
         && gossip_message.quests[1].quest_id == 63
         && gossip_message.quests[1].quest_level == 6
+        && quest_details.parsed
+        && quest_details.quest_id == 783
+        && quest_details.reward_choice_count == 1
+        && quest_details.reward_item_count == 1
+        && quest_details.money_reward == 1200
+        && quest_details.xp_reward == 450
+        && quest_details.reward_choice_items.size() == 1
+        && quest_details.reward_choice_items[0].item_id == 100
+        && quest_details.reward_items.size() == 1
+        && quest_details.reward_items[0].item_id == 200
+        && quest_details.reward_items[0].item_count == 2
         && trainer_buy_success.parsed
         && trainer_buy_success.succeeded
         && !trainer_buy_success.failed
