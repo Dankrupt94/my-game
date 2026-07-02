@@ -168,6 +168,13 @@ constexpr std::uint32_t UnitDynamicFlags = 0x0006 + 0x0049;
 constexpr std::uint32_t ItemFieldStackCount = 0x0006 + 0x0008;
 constexpr std::uint32_t ItemFieldDurability = 0x0006 + 0x0036;
 constexpr std::uint32_t ItemFieldMaxDurability = 0x0006 + 0x0037;
+constexpr std::uint32_t PlayerQuestLogFirst = UnitEndField + 0x000A;
+constexpr std::uint8_t PlayerQuestLogSize = 25;
+constexpr std::uint8_t QuestLogFieldStride = 5;
+constexpr std::uint8_t QuestLogIdOffset = 0;
+constexpr std::uint8_t QuestLogStateOffset = 1;
+constexpr std::uint8_t QuestLogCountsOffset = 2;
+constexpr std::uint8_t QuestLogTimeOffset = 4;
 constexpr std::uint32_t PlayerFieldInvSlotHead = UnitEndField + 0x00B0;
 constexpr std::uint32_t PlayerFieldPackSlot1 = UnitEndField + 0x00DE;
 constexpr std::uint32_t PlayerFieldCoinage = UnitEndField + 0x03FE;
@@ -405,6 +412,123 @@ InventoryItemObjectSummary parse_inventory_item_object(
     summary.durability_seen = update_value_at(values, ItemFieldDurability, summary.durability);
     summary.max_durability_seen = update_value_at(values, ItemFieldMaxDurability, summary.max_durability);
     return summary;
+}
+
+QuestLogSlotSummary make_quest_log_slot(std::uint8_t slot)
+{
+    QuestLogSlotSummary summary;
+    summary.slot = slot;
+    return summary;
+}
+
+QuestLogSlotSummary& quest_log_slot(PlayerQuestLogSummary& quest_log, std::uint8_t slot)
+{
+    for (QuestLogSlotSummary& summary : quest_log.slots)
+    {
+        if (summary.slot == slot)
+        {
+            return summary;
+        }
+    }
+
+    quest_log.slots.push_back(make_quest_log_slot(slot));
+    return quest_log.slots.back();
+}
+
+void ensure_quest_log_slots(PlayerQuestLogSummary& quest_log)
+{
+    for (std::uint8_t slot = 0; slot < PlayerQuestLogSize; ++slot)
+    {
+        (void)quest_log_slot(quest_log, slot);
+    }
+    std::sort(
+        quest_log.slots.begin(),
+        quest_log.slots.end(),
+        [](QuestLogSlotSummary const& left, QuestLogSlotSummary const& right)
+        {
+            return left.slot < right.slot;
+        });
+}
+
+std::uint32_t quest_log_field_index_for_slot(std::uint8_t slot, std::uint8_t offset)
+{
+    return PlayerQuestLogFirst
+        + static_cast<std::uint32_t>(slot) * QuestLogFieldStride
+        + static_cast<std::uint32_t>(offset);
+}
+
+void update_quest_log_populated_count(PlayerQuestLogSummary& quest_log)
+{
+    quest_log.populated_count = 0;
+    for (QuestLogSlotSummary const& slot : quest_log.slots)
+    {
+        if (slot.populated)
+        {
+            ++quest_log.populated_count;
+        }
+    }
+}
+
+void apply_player_quest_log_values(
+    PlayerQuestLogSummary& quest_log,
+    std::uint64_t player_guid,
+    std::vector<UpdateFieldValue> const& values)
+{
+    bool touched = false;
+    quest_log.player_guid = player_guid;
+
+    for (std::uint8_t slot = 0; slot < PlayerQuestLogSize; ++slot)
+    {
+        std::uint32_t quest_id = 0;
+        std::uint32_t state = 0;
+        std::uint32_t counts_low = 0;
+        std::uint32_t counts_high = 0;
+        std::uint32_t time_left = 0;
+        bool const quest_id_seen = update_value_at(values, quest_log_field_index_for_slot(slot, QuestLogIdOffset), quest_id);
+        bool const state_seen = update_value_at(values, quest_log_field_index_for_slot(slot, QuestLogStateOffset), state);
+        bool const counts_low_seen = update_value_at(values, quest_log_field_index_for_slot(slot, QuestLogCountsOffset), counts_low);
+        bool const counts_high_seen = update_value_at(values, quest_log_field_index_for_slot(slot, QuestLogCountsOffset + 1), counts_high);
+        bool const time_seen = update_value_at(values, quest_log_field_index_for_slot(slot, QuestLogTimeOffset), time_left);
+        if (!quest_id_seen && !state_seen && !counts_low_seen && !counts_high_seen && !time_seen)
+        {
+            continue;
+        }
+
+        QuestLogSlotSummary& summary = quest_log_slot(quest_log, slot);
+        summary.field_seen = true;
+        if (quest_id_seen)
+        {
+            summary.quest_id = quest_id;
+            summary.quest_id_seen = true;
+        }
+        if (state_seen)
+        {
+            summary.state = state;
+            summary.state_seen = true;
+        }
+        if (counts_low_seen || counts_high_seen)
+        {
+            summary.counter_1 = static_cast<std::uint16_t>(counts_low & 0xFFFFu);
+            summary.counter_2 = static_cast<std::uint16_t>((counts_low >> 16) & 0xFFFFu);
+            summary.counter_3 = static_cast<std::uint16_t>(counts_high & 0xFFFFu);
+            summary.counter_4 = static_cast<std::uint16_t>((counts_high >> 16) & 0xFFFFu);
+            summary.counts_seen = true;
+        }
+        if (time_seen)
+        {
+            summary.time_left = time_left;
+            summary.time_seen = true;
+        }
+        summary.populated = summary.quest_id != 0;
+        touched = true;
+    }
+
+    if (touched)
+    {
+        quest_log.seen = true;
+        ensure_quest_log_slots(quest_log);
+        update_quest_log_populated_count(quest_log);
+    }
 }
 
 InventorySlotSummary make_inventory_slot(std::uint8_t slot)
@@ -1466,6 +1590,15 @@ std::vector<std::uint8_t> build_questgiver_query_quest_payload(std::uint64_t gui
     return payload;
 }
 
+std::vector<std::uint8_t> build_questgiver_accept_quest_payload(std::uint64_t guid, std::uint32_t quest_id)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, guid);
+    append_u32_le(payload, quest_id);
+    append_u32_le(payload, 0);
+    return payload;
+}
+
 QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const std::uint8_t> payload)
 {
     std::size_t offset = 0;
@@ -1757,6 +1890,7 @@ UpdateObjectSummary parse_update_object_summary(
                 if (guid == player_guid)
                 {
                     apply_player_inventory_values(summary.inventory, guid, values);
+                    apply_player_quest_log_values(summary.quest_log, guid, values);
                 }
                 if (high_guid_has_entry(high_guid(guid)) && !high_guid_is_item(high_guid(guid)))
                 {
@@ -1784,6 +1918,7 @@ UpdateObjectSummary parse_update_object_summary(
                 if (guid == player_guid)
                 {
                     apply_player_inventory_values(summary.inventory, guid, values);
+                    apply_player_quest_log_values(summary.quest_log, guid, values);
                 }
                 if (!item_object)
                 {
@@ -2037,6 +2172,11 @@ bool world_packet_self_test()
     }
     append_u8(update_payload, 37); // value update mask blocks through coinage
     std::vector<std::uint32_t> update_masks(37, 0);
+    update_masks[PlayerQuestLogFirst / 32] |= 1u << (PlayerQuestLogFirst % 32);
+    update_masks[(PlayerQuestLogFirst + 1) / 32] |= 1u << ((PlayerQuestLogFirst + 1) % 32);
+    update_masks[(PlayerQuestLogFirst + 2) / 32] |= 1u << ((PlayerQuestLogFirst + 2) % 32);
+    update_masks[(PlayerQuestLogFirst + 3) / 32] |= 1u << ((PlayerQuestLogFirst + 3) % 32);
+    update_masks[(PlayerQuestLogFirst + 4) / 32] |= 1u << ((PlayerQuestLogFirst + 4) % 32);
     update_masks[PlayerFieldInvSlotHead / 32] |= 1u << (PlayerFieldInvSlotHead % 32);
     update_masks[(PlayerFieldInvSlotHead + 1) / 32] |= 1u << ((PlayerFieldInvSlotHead + 1) % 32);
     update_masks[PlayerFieldCoinage / 32] |= 1u << (PlayerFieldCoinage % 32);
@@ -2044,6 +2184,11 @@ bool world_packet_self_test()
     {
         append_u32_le(update_payload, mask);
     }
+    append_u32_le(update_payload, 783);
+    append_u32_le(update_payload, 0x0001);
+    append_u32_le(update_payload, 0x00020001);
+    append_u32_le(update_payload, 0x00040003);
+    append_u32_le(update_payload, 0);
     append_u32_le(update_payload, static_cast<std::uint32_t>(synthetic_item_guid & 0xFFFFFFFFu));
     append_u32_le(update_payload, static_cast<std::uint32_t>(synthetic_item_guid >> 32));
     append_u32_le(update_payload, 42);
@@ -2343,6 +2488,17 @@ bool world_packet_self_test()
         && update.inventory.slots.size() == PlayerInventorySnapshotSlots
         && update.inventory.slots[0].populated
         && update.inventory.slots[0].item_guid == synthetic_item_guid
+        && update.quest_log.seen
+        && update.quest_log.player_guid == 0xF13000033700000BULL
+        && update.quest_log.slots.size() == PlayerQuestLogSize
+        && update.quest_log.populated_count == 1
+        && update.quest_log.slots[0].populated
+        && update.quest_log.slots[0].quest_id == 783
+        && update.quest_log.slots[0].state == 0x0001
+        && update.quest_log.slots[0].counter_1 == 1
+        && update.quest_log.slots[0].counter_2 == 2
+        && update.quest_log.slots[0].counter_3 == 3
+        && update.quest_log.slots[0].counter_4 == 4
         && update.inventory_items.size() == 1
         && update.inventory_items[0].guid == synthetic_item_guid
         && update.inventory_items[0].entry == 38

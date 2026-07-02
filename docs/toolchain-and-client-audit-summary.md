@@ -28,6 +28,9 @@ Confirmed present on this machine:
 - **Database Convenience:** `mycli`.
 - **Protocol/Socket Diagnostics:** `tshark`, `termshark`, `socat`, `ss`, and `tc`.
 - **Binary/Native Debugging:** `hexyl`, `strace`, `lsof`, `gdb`, and `heaptrack`.
+- **Native Build Speed/IDE Tools:** `ninja-build`, `ccache`, `clang-tidy`,
+  `clangd`, and `lldb` were installed on 2026-07-01 for faster repeated
+  protocol/Godot extension work and easier native debugging.
 - **GDScript Quality:** `gdformat` and `gdlint`.
 - **Shell/Workflow Helpers:** `delta`, `btop`, `entr`, `direnv`, and `shellcheck`.
 
@@ -88,6 +91,19 @@ Follow-up applied:
 
 ## Next Tooling Actions
 
+- Standing project preference: install or integrate needed development tools
+  proactively as the Godot port demands them, then record the reason, validation,
+  and Git/privacy boundary in the project docs.
+- Use `tools/build_godot_protocol_build_image.sh` to build the cached Docker
+  image `acore-godot-protocol-build:24.04`. The compatibility extension build
+  now uses this image by default and avoids reinstalling compiler packages every
+  run. The image was built locally on 2026-07-01 and the compatibility build
+  was re-run successfully through it.
+- `tools/build_godot_protocol_extension_compat.sh` now preserves existing CMake
+  build folders but uses Ninja automatically for fresh ones and enables ccache
+  for the CMake protocol/extension builds. Set
+  `ACORE_REBUILD_GODOT_EXTENSION_BUILD_IMAGE=1` when intentionally refreshing
+  the cached Docker tool image.
 - Add a Godot dashboard action that can run the local audits and show friendly status text.
 - Add read-only database summaries to the dashboard once the local AzerothCore MySQL service is reachable.
 - Add server-stack discovery so the dashboard can find or start the local MySQL/auth/world services.

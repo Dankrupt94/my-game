@@ -1,6 +1,10 @@
 # Project Instructions
 
 - Automate setup and project work where possible.
+- When the port needs a developer tool, runtime helper, local build image,
+  debugger, validator, or automation utility, install or integrate it
+  proactively, document why it was added, and keep any generated proprietary or
+  sensitive outputs local-only and ignored.
 - Keep explanations friendly for a beginner.
 - Commit before and after meaningful tasks.
 - The project owner states this is an authorized local prototype for evaluating a fully functional Godot-based WotLK client/engine port for company product-use/design review. All Blizzard/WotLK client files available on this local machine may be used as local inputs for the porting work.

@@ -1,5 +1,96 @@
 # Task Log
 
+## 2026-07-01 - Stage 17 Quest Accept Proof Slice
+
+Goal: extend the live quest-giver path from list/details into a repeatable
+server-authoritative quest accept proof through Godot.
+
+Plan:
+
+- Parse the player's quest-log update fields from `SMSG_UPDATE_OBJECT` /
+  `SMSG_COMPRESSED_UPDATE_OBJECT`.
+- Add `CMSG_QUESTGIVER_ACCEPT_QUEST` with a before/after quest-log proof.
+- Expose the result through the native helper, Godot GDExtension, and
+  `ProtocolClientBridge`.
+- Add an `Accept Quest` action and self-test to the Stage 17 quest-giver scene.
+- Keep all committed output numeric only: quest ids, slot numbers, state flags,
+  objective counters, opcodes, and failure reasons.
+- Add a local fixture helper that resets only the disposable character's chosen
+  test quest while the character is offline, then logs the mutation locally.
+
+Result:
+
+- Added `PlayerQuestLogSummary` and per-slot quest-log parsing for 25 quest
+  slots, using the AzerothCore field layout:
+  `PLAYER_QUEST_LOG_1_1 + slot * 5`.
+- Added `questgiver_accept_probe(_selector)` to the protocol flow, CLI helper,
+  Godot native extension, and GDScript bridge.
+- The accept probe records whether the quest was in the log before, whether it
+  is present after, whether it was newly accepted, or whether it was already in
+  the log.
+- `scenes/stage17_questgiver_view.tscn` now has an `Accept Quest` action and
+  renders the before/after proof in the safe numeric details panel.
+- Added `tools/prepare_quest_accept_fixture.py` for repeatable local validation
+  against the disposable `Codexstage` character.
+
+Validation:
+
+- `cmake -S native/protocol_client -B native/protocol_client/build-accept-dev`
+  passed.
+- `cmake --build native/protocol_client/build-accept-dev -j2` passed.
+- `native/protocol_client/build-accept-dev/acore_protocol_client --self-test`
+  passed, including the synthetic quest-log parser check.
+- `godot-4 --headless --path . res://scenes/stage17_questgiver_view.tscn --quit-after 1`
+  loaded the edited scene.
+- `./tools/build_godot_protocol_extension_compat.sh` passed after rebuilding
+  the Godot-loadable native extension.
+- `native/protocol_client/build-compat/acore_protocol_client --self-test`
+  passed after the compatibility rebuild.
+- `godot-4 --headless --path . --script res://tools/godot_protocol_extension_smoke.gd`
+  passed with the extension registered.
+- `godot-4 --headless --path . --script res://tools/protocol_bridge_smoke.gd`
+  passed with account auth, character enum, and world auth through the native
+  extension.
+- `python3 tools/prepare_quest_accept_fixture.py --character Codexstage --quest-id 783`
+  reset the disposable offline character's quest rows.
+- `ACORE_QUESTGIVER_ACCEPT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_questgiver_view.tscn`
+  passed with `accept_sent=true`, `accepted_confirmed=true`,
+  `already_in_log=false`, response opcode `0x1f6`, and the quest present in
+  the after snapshot.
+- A final fixture dry-run reported zero remaining rows for the disposable
+  character/quest pair after cleanup.
+
+Implementation note:
+
+- AzerothCore can omit all-zero quest-log fields from the pre-accept player
+  update. The snapshot reader now treats a seen player update with no quest-log
+  fields as an observed empty quest log, which lets the before/after proof work
+  for a clean disposable character without guessing from UI state.
+
+Tooling follow-up:
+
+- Installed host-side `ninja-build`, `ccache`, `clang-tidy`, `clangd`, and
+  `lldb`.
+- Added and built the cached Docker image
+  `acore-godot-protocol-build:24.04`.
+- Updated `tools/build_godot_protocol_extension_compat.sh` to use the cached
+  image by default, preserve existing build folders, use Ninja for fresh CMake
+  folders, and enable ccache for CMake builds.
+- Added `ACORE_REBUILD_GODOT_EXTENSION_BUILD_IMAGE=1` as an explicit refresh
+  switch for the cached build image.
+- Re-ran the compatibility build through the cached image successfully.
+- Local `qwen-agent` advisory review raised no confirmed blocker after
+  supervisor verification: the parser helper exists, the live clean-log accept
+  test covers the empty-log path, and the useful image-refresh concern was
+  addressed with the rebuild switch.
+
+Remaining work:
+
+- Add completion, reward-choice, quest-log UI, abandon/share, objective progress,
+  map objective overlays, item-started quests, full-log/full-bag failures,
+  daily reset behavior, phasing-aware gossip, persistent-session integration,
+  in-world click targeting, and local-only quest text/icon rendering.
+
 ## 2026-07-01 - Stage 17 Quest Giver Details Slice
 
 Goal: extend the live quest-giver work from offered-quest listing into a safe

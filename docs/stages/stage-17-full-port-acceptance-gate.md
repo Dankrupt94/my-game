@@ -283,6 +283,41 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Caveat: running multiple authenticated world-session checks in parallel against the same local character can produce transient socket closes. Run live protocol checks sequentially until the persistent-session lane owns connection multiplexing.
 - Remaining work: accept, complete, reward choice, quest log, abandon/share, objective progress, item-started quests, daily reset behavior, phasing-aware gossip, in-world click targeting, persistent-session integration, and local-only text/icon rendering.
 
+### 2026-07-01 - Quest Accept Quest-Log Proof
+
+- Added player quest-log parsing from private player update fields, covering 25
+  slots with quest id, state, objective counters, and timer values.
+- Added `CMSG_QUESTGIVER_ACCEPT_QUEST` support through the native protocol flow,
+  helper CLI, Godot GDExtension, and `ProtocolClientBridge`.
+- `scenes/stage17_questgiver_view.tscn` now includes an `Accept Quest` action
+  and `ACORE_QUESTGIVER_ACCEPT_SELF_TEST=1`.
+- The accept proof checks the local character's quest log before and after the
+  accept packet, reporting `accepted_confirmed` only when the quest was absent
+  before and present after. `already_in_log` is reported separately for normal
+  user clicks against a quest that was already accepted.
+- Added `tools/prepare_quest_accept_fixture.py` to reset only the disposable
+  character's selected test quest while offline and record the local database
+  mutation in `local_runtime/database-transactions.log`.
+- Safe-output rule remains in force: committed logs and UI rows use only quest
+  ids, slot ids, counters, flags, opcodes, and failure codes.
+- Empty clean quest logs may omit all-zero quest-log update fields. The protocol
+  reader treats a seen player update with no quest-log fields as an observed
+  empty quest log before the accept packet.
+- Validation: native helper configure/build passed, native helper `--self-test`
+  passed with synthetic quest-log parser coverage, the compatibility
+  GDExtension build passed, Godot extension and script bridge smoke checks
+  passed, the disposable `Codexstage` quest rows were reset offline, and
+  `ACORE_QUESTGIVER_ACCEPT_SELF_TEST=1` passed with `accept_sent=true`,
+  `accepted_confirmed=true`, `already_in_log=false`, response opcode `0x1f6`,
+  and the accepted quest present in the after snapshot. The disposable
+  character/quest pair was reset afterward and a dry-run check reported zero
+  remaining quest rows.
+- Remaining quest parity: completion, reward-choice handling, full quest-log UI,
+  objective tracking, progress and completion update packets, abandon/share,
+  item-started quests, full-log/full-bag failures, daily resets, phasing-aware
+  gossip, map overlays, persistent sessions, in-world click targeting, and
+  local-only quest text/icon rendering.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

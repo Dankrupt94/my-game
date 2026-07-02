@@ -26,6 +26,8 @@ func _ready() -> void:
 		call_deferred("_run_self_test")
 	elif OS.get_environment("ACORE_QUESTGIVER_DETAILS_SELF_TEST") == "1":
 		call_deferred("_run_details_self_test")
+	elif OS.get_environment("ACORE_QUESTGIVER_ACCEPT_SELF_TEST") == "1":
+		call_deferred("_run_accept_self_test")
 
 
 func _build_view() -> void:
@@ -84,6 +86,11 @@ func _build_view() -> void:
 	details_btn.text = "Query Details"
 	details_btn.pressed.connect(_on_details_pressed)
 	row.add_child(details_btn)
+
+	var accept_btn := Button.new()
+	accept_btn.text = "Accept Quest"
+	accept_btn.pressed.connect(_on_accept_pressed)
+	row.add_child(accept_btn)
 
 	status_label = Label.new()
 	status_label.text = "Idle"
@@ -173,6 +180,22 @@ func _on_details_pressed() -> void:
 	_render_details_result(result)
 
 
+func _on_accept_pressed() -> void:
+	var entry := target_input.text.strip_edges()
+	if entry.is_empty():
+		_log("Enter a target entry id.")
+		return
+	var quest_id := quest_id_input.text.strip_edges().to_int()
+	if quest_id <= 0:
+		_log("Enter a quest id.")
+		return
+	status_label.text = "Accepting..."
+	_log("Accepting quest %d..." % quest_id)
+	var bridge := ProtocolClientBridge.new()
+	var result: Dictionary = bridge.questgiver_accept_probe_selector(TEST_CHARACTER_NAME, entry, quest_id, "Quest Giver")
+	_render_accept_result(result)
+
+
 func _render_result(result: Dictionary) -> void:
 	for child in quest_list.get_children():
 		child.queue_free()
@@ -241,6 +264,43 @@ func _render_details_result(result: Dictionary) -> void:
 		_add_detail_line(line)
 
 
+func _render_accept_result(result: Dictionary) -> void:
+	for child in details_list.get_children():
+		child.queue_free()
+	var ok := bool(result.get("ok", false))
+	var quest_id := int(result.get("quest_id", quest_id_input.text.strip_edges().to_int()))
+	var accepted := bool(result.get("accepted_confirmed", false))
+	var already := bool(result.get("already_in_log", false))
+	var after := bool(result.get("quest_in_log_after", false))
+	var failure := bool(result.get("failure_seen", false))
+	var opcode := int(result.get("response_opcode", 0))
+	status_label.text = "Quest accepted" if accepted else ("Already in log" if already else "Accept failed")
+	_log("Accept opcode=0x%x quest_id=%d accepted=%s after=%s failure=%s" % [
+		opcode,
+		quest_id,
+		str(accepted),
+		str(after),
+		str(failure),
+	])
+	if not ok and result.has("error"):
+		_add_detail_line("Error: " + str(result["error"]), Color(1.0, 0.55, 0.55))
+	_add_detail_line("Quest #%d" % quest_id)
+	_add_detail_line("Newly accepted: %s" % str(accepted))
+	_add_detail_line("Already in log before click: %s" % str(already))
+	_add_detail_line("Present after click: %s" % str(after))
+	_add_detail_line("Failure: %s opcode 0x%x reason %d" % [
+		str(failure),
+		int(result.get("failure_opcode", 0)),
+		int(result.get("failure_reason", 0)),
+	])
+	_add_detail_line("Before slots %d, after slots %d" % [
+		int(result.get("before_populated", 0)),
+		int(result.get("after_populated", 0)),
+	])
+	for line in _quest_slot_lines(result.get("quest_log_after", {}).get("slots", []), "After"):
+		_add_detail_line(line)
+
+
 func _add_detail_line(text: String, color: Color = Color(0.86, 0.88, 0.9)) -> void:
 	var label := Label.new()
 	label.text = text
@@ -258,6 +318,21 @@ func _reward_lines(items: Array, prefix: String) -> Array:
 			prefix,
 			int(item.get("item_id", 0)),
 			int(item.get("count", 0)),
+		])
+	return lines
+
+
+func _quest_slot_lines(slots: Array, prefix: String) -> Array:
+	var lines := []
+	if slots.is_empty():
+		lines.append("%s: no populated quest slots" % prefix)
+		return lines
+	for slot in slots:
+		lines.append("%s slot %d: quest #%d state 0x%x" % [
+			prefix,
+			int(slot.get("slot", 0)),
+			int(slot.get("quest_id", 0)),
+			int(slot.get("state", 0)),
 		])
 	return lines
 
@@ -318,4 +393,34 @@ func _run_details_self_test() -> void:
 		get_tree().quit(0)
 		return
 	push_error("QUESTGIVER_DETAILS_SELF_TEST_FAILED " + JSON.stringify(result))
+	get_tree().quit(1)
+
+
+func _run_accept_self_test() -> void:
+	print("QUESTGIVER_ACCEPT_SELF_TEST: starting verification...")
+	var bridge := ProtocolClientBridge.new()
+	var result: Dictionary = bridge.questgiver_accept_probe_selector(TEST_CHARACTER_NAME, DEFAULT_TARGET_ENTRY, DEFAULT_QUEST_ID, "Quest Giver")
+	var opcode := int(result.get("response_opcode", 0))
+	print("QUESTGIVER_ACCEPT_SELF_TEST_READY target_entry=%s quest_id=%s live_target_found=%s accept_sent=%s before=%s after=%s accepted_confirmed=%s already_in_log=%s failure_seen=%s opcode=0x%x" % [
+		DEFAULT_TARGET_ENTRY,
+		str(DEFAULT_QUEST_ID),
+		str(result.get("live_target_found", false)),
+		str(result.get("accept_sent", false)),
+		str(result.get("quest_in_log_before", false)),
+		str(result.get("quest_in_log_after", false)),
+		str(result.get("accepted_confirmed", false)),
+		str(result.get("already_in_log", false)),
+		str(result.get("failure_seen", false)),
+		opcode,
+	])
+	if bool(result.get("accepted_confirmed", false)) and bool(result.get("quest_in_log_after", false)):
+		print("QUESTGIVER_ACCEPT_SELF_TEST_OK quest_id=%s response_opcode=0x%x before_populated=%s after_populated=%s" % [
+			str(DEFAULT_QUEST_ID),
+			opcode,
+			str(result.get("before_populated", 0)),
+			str(result.get("after_populated", 0)),
+		])
+		get_tree().quit(0)
+		return
+	push_error("QUESTGIVER_ACCEPT_SELF_TEST_FAILED " + JSON.stringify(result))
 	get_tree().quit(1)

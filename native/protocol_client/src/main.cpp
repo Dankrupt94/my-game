@@ -547,6 +547,83 @@ int questgiver_details_probe(
         && result.details.quest_id == result.query_quest_id ? 0 : 1;
 }
 
+void print_quest_log_slots(char const* prefix, PlayerQuestLogSummary const& quest_log)
+{
+    for (QuestLogSlotSummary const& slot : quest_log.slots)
+    {
+        if (!slot.populated)
+        {
+            continue;
+        }
+        std::cout << prefix
+                  << " slot=" << static_cast<int>(slot.slot)
+                  << " quest_id=" << slot.quest_id
+                  << " state=0x" << std::hex << slot.state << std::dec
+                  << " c1=" << slot.counter_1
+                  << " c2=" << slot.counter_2
+                  << " c3=" << slot.counter_3
+                  << " c4=" << slot.counter_4
+                  << " time_left=" << slot.time_left
+                  << "\n";
+    }
+}
+
+int questgiver_accept_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_selector,
+    std::string const& quest_id,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::QuestGiverAcceptProbeResult result = acore_protocol::questgiver_accept_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_selector),
+        static_cast<std::uint32_t>(std::stoul(quest_id)),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "QUESTGIVER_ACCEPT_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " quest_id=" << result.quest_id
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " target_has_position=" << (result.target_has_position ? 1 : 0)
+              << " visible_objects=" << result.visible_objects.size()
+              << " approach_movement_sent=" << (result.approach_movement_sent ? 1 : 0)
+              << " return_movement_sent=" << (result.return_movement_sent ? 1 : 0)
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " questgiver_hello_sent=" << (result.questgiver_hello_sent ? 1 : 0)
+              << " accept_sent=" << (result.accept_sent ? 1 : 0)
+              << " failure_seen=" << (result.failure_seen ? 1 : 0)
+              << " failure_opcode=0x" << std::hex << result.failure_opcode << std::dec
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " failure_reason=" << result.failure_reason
+              << " quest_log_before_seen=" << (result.quest_log_before_seen ? 1 : 0)
+              << " quest_log_after_seen=" << (result.quest_log_after_seen ? 1 : 0)
+              << " quest_in_log_before=" << (result.quest_in_log_before ? 1 : 0)
+              << " quest_in_log_after=" << (result.quest_in_log_after ? 1 : 0)
+              << " already_in_log=" << (result.already_in_log ? 1 : 0)
+              << " accepted_confirmed=" << (result.accepted_confirmed ? 1 : 0)
+              << " before_populated=" << result.quest_log_before.populated_count
+              << " after_populated=" << result.quest_log_after.populated_count
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    print_quest_log_slots("QUEST_LOG_BEFORE_SLOT", result.quest_log_before);
+    print_quest_log_slots("QUEST_LOG_AFTER_SLOT", result.quest_log_after);
+    return result.accepted_confirmed || result.already_in_log ? 0 : 1;
+}
+
 int trainer_buy_spell_probe(
     std::string const& host,
     std::string const& port,
@@ -1575,6 +1652,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --move-heartbeat <host> <port> <account> <character-name> <delta-x> <delta-y> <delta-orientation>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --npc-interaction <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --trainer-list <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --questgiver-accept <host> <port> <account> <character-name> <target-guid-or-entry> <quest-id> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --trainer-buy <host> <port> <account> <character-name> <target-guid-or-entry> <target-name> <spell-id>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --loot-open-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
@@ -1656,6 +1734,11 @@ int main(int argc, char** argv)
         if (argc == 9 && std::strcmp(argv[1], "--questgiver-details") == 0)
         {
             return questgiver_details_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
+        }
+
+        if (argc == 9 && std::strcmp(argv[1], "--questgiver-accept") == 0)
+        {
+            return questgiver_accept_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
         }
 
         if (argc == 9 && std::strcmp(argv[1], "--trainer-buy") == 0)

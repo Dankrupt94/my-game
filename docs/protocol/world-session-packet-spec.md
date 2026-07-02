@@ -481,6 +481,32 @@ Quest detail request payload:
 | quest-giver GUID | 8 | Raw little-endian object GUID |
 | quest id | 4 | Requested quest template id |
 
+Quest accept request payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| quest-giver GUID | 8 | Raw little-endian object GUID |
+| quest id | 4 | Quest template id to accept |
+| unknown | 4 | Sent as `0`, matching AzerothCore's handler shape |
+
+Quest-log proof fields:
+
+The accept proof reads the player's private quest-log fields from
+`SMSG_UPDATE_OBJECT` / `SMSG_COMPRESSED_UPDATE_OBJECT`.
+
+| Field | Notes |
+| --- | --- |
+| first quest field | `PLAYER_QUEST_LOG_1_1 = UNIT_END + 0x000A` |
+| slots | 25 |
+| stride | 5 update fields per slot |
+| slot fields | quest id, state, two packed objective-count fields, timer |
+| counters | Four 16-bit objective counters unpacked from the two count fields |
+
+Clean empty quest logs can be represented by omission: AzerothCore may send a
+player update without any all-zero quest-log fields. For the Stage 17 accept
+proof, a player update seen with no quest-log fields is treated as an observed
+empty quest log before the accept packet.
+
 Current detail response fields:
 
 | Field | Notes |
@@ -507,6 +533,13 @@ Observed Stage 17 result:
 - `ACORE_QUESTGIVER_DETAILS_SELF_TEST=1` passed through the same scene with
   quest id `783`, `SMSG_QUESTGIVER_QUEST_DETAILS` opcode `0x188`, and zero
   fixed/choice reward item rows for the local starter fixture.
+- The quest accept slice now sends `CMSG_QUESTGIVER_ACCEPT_QUEST` and checks
+  quest-log state before/after the packet. `accepted_confirmed` means the quest
+  was absent before and present after; `already_in_log` is reported separately.
+- `ACORE_QUESTGIVER_ACCEPT_SELF_TEST=1` passed through
+  `scenes/stage17_questgiver_view.tscn` with `accept_sent=true`,
+  `accepted_confirmed=true`, `already_in_log=false`, response opcode `0x1f6`,
+  and the accepted quest present in the after snapshot.
 - The Godot surface and helper fallback intentionally keep committed output to
   ids, flags, counts, and money/xp values. Quest title/body/objective text and
   icons remain a future local-only data/asset pipeline concern.
@@ -517,7 +550,7 @@ Observed Stage 17 result:
 
 Remaining quest packet work:
 
-- Add accept, complete, reward choice, quest log, abandon, and share packet
+- Add complete, reward choice, full quest-log UI, abandon, and share packet
   support.
 - Track objective progress from server state instead of treating detail packets
   as quest-log state.

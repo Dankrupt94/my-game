@@ -29,6 +29,7 @@ constexpr std::uint32_t CMSG_LOOT_RELEASE = 0x15F;
 constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
 constexpr std::uint32_t CMSG_QUESTGIVER_HELLO = 0x184;
 constexpr std::uint32_t CMSG_QUESTGIVER_QUERY_QUEST = 0x186;
+constexpr std::uint32_t CMSG_QUESTGIVER_ACCEPT_QUEST = 0x189;
 constexpr std::uint32_t CMSG_LIST_INVENTORY = 0x19E;
 constexpr std::uint32_t CMSG_SELL_ITEM = 0x1A0;
 constexpr std::uint32_t CMSG_BUY_ITEM = 0x1A2;
@@ -76,6 +77,12 @@ constexpr std::uint16_t SMSG_BUY_FAILED = 0x1A5;
 constexpr std::uint16_t SMSG_TRAINER_LIST = 0x1B1;
 constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_LIST = 0x185;
 constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_DETAILS = 0x188;
+constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_INVALID = 0x18F;
+constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_FAILED = 0x192;
+constexpr std::uint16_t SMSG_QUESTLOG_FULL = 0x195;
+constexpr std::uint16_t SMSG_QUESTUPDATE_FAILED = 0x196;
+constexpr std::uint16_t SMSG_QUESTUPDATE_FAILEDTIMER = 0x197;
+constexpr std::uint16_t SMSG_QUESTUPDATE_COMPLETE = 0x198;
 constexpr std::uint16_t SMSG_TRAINER_BUY_SUCCEEDED = 0x1B3;
 constexpr std::uint16_t SMSG_TRAINER_BUY_FAILED = 0x1B4;
 constexpr std::uint16_t SMSG_LOGIN_VERIFY_WORLD = 0x236;
@@ -173,6 +180,32 @@ struct InventoryItemObjectSummary
     bool max_durability_seen = false;
 };
 
+struct QuestLogSlotSummary
+{
+    std::uint8_t slot = 0;
+    std::uint32_t quest_id = 0;
+    std::uint32_t state = 0;
+    std::uint16_t counter_1 = 0;
+    std::uint16_t counter_2 = 0;
+    std::uint16_t counter_3 = 0;
+    std::uint16_t counter_4 = 0;
+    std::uint32_t time_left = 0;
+    bool field_seen = false;
+    bool quest_id_seen = false;
+    bool state_seen = false;
+    bool counts_seen = false;
+    bool time_seen = false;
+    bool populated = false;
+};
+
+struct PlayerQuestLogSummary
+{
+    bool seen = false;
+    std::uint64_t player_guid = 0;
+    std::size_t populated_count = 0;
+    std::vector<QuestLogSlotSummary> slots;
+};
+
 struct ItemTemplateSummary
 {
     bool parsed = false;
@@ -214,6 +247,7 @@ struct UpdateObjectSummary
     std::vector<VisibleObjectSummary> visible_objects;
     std::vector<InventoryItemObjectSummary> inventory_items;
     PlayerInventorySummary inventory;
+    PlayerQuestLogSummary quest_log;
 };
 
 struct MovementSample
@@ -562,6 +596,7 @@ QuestGiverListSummary parse_questgiver_quest_list_response(std::span<const std::
 GossipMessageSummary parse_gossip_message_response(std::span<const std::uint8_t> payload);
 QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const std::uint8_t> payload);
 std::vector<std::uint8_t> build_questgiver_query_quest_payload(std::uint64_t guid, std::uint32_t quest_id);
+std::vector<std::uint8_t> build_questgiver_accept_quest_payload(std::uint64_t guid, std::uint32_t quest_id);
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std::uint8_t> payload);
 VendorListSummary parse_vendor_list_response(std::span<const std::uint8_t> payload);
