@@ -16,6 +16,36 @@ Plan:
   snapshots to the HUD.
 - Update UI documentation and validate with headless Godot self-tests.
 
+Result:
+
+- `scripts/world_session_view.gd` now extracts normalized quest-log slot
+  dictionaries from safe session data alongside the existing inventory snapshot
+  extraction.
+- The resident `Quests` HUD panel now renders observed/active quest slot
+  counts, active quest ids, objective counters, timer/status fields when
+  present, and click feedback in the HUD/session status line.
+- The implementation stays UI-only and does not call or edit the protocol
+  bridge; live data can be fed in later by passing slot dictionaries through the
+  persistent session context.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `quests=true`.
+- `ACORE_WORLD_SESSION_LAYOUT_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed.
+- `ACORE_WORLD_SESSION_KEYBIND_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed.
+- `godot-4 --headless --path . --quit` passed.
+
+Remaining work:
+
+- Feed live quest-log snapshots from Claude's persistent session lane into this
+  panel.
+- Add local-only quest titles/objective text/icons, tracker pinning, accept and
+  completion actions, reward-choice UI, abandon/share controls, and objective
+  progress updates in the persistent HUD.
+
 ## 2026-07-01 - Stage 17 Vendor Transaction Inventory Feedback Started
 
 Goal: make the vendor buy/sell proof show visible inventory state evidence instead of only reporting a roundtrip flag.

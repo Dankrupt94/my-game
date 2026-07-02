@@ -22,6 +22,38 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Quest Panel (Codex UI lane)
+
+Context: the world-session HUD had a Quests shortcut and panel, but it only
+showed a placeholder. A playable client needs quest tracking to live in the
+active world view instead of only in separate Stage 17 proof scenes.
+
+Result:
+
+- Added safe quest-log slot extraction to `scripts/world_session_view.gd`.
+- The resident `Quests` HUD panel now renders observed slot count, active
+  quest count, active quest ids, objective counters, timers, and status flags
+  when those numeric fields are present in session dictionaries.
+- The panel stays UI-only and does not call the protocol bridge; it is ready for
+  Claude's persistent session lane to feed live snapshot dictionaries later.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `quests=true`.
+- `ACORE_WORLD_SESSION_LAYOUT_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed.
+- `ACORE_WORLD_SESSION_KEYBIND_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed.
+- `godot-4 --headless --path . --quit` passed.
+
+Remaining work:
+
+- Feed live quest-log snapshots from Claude's persistent session lane into this
+  panel.
+- Add local-only quest titles/objective text/icons, tracker pinning, completion
+  and reward-choice UI, abandon/share controls, and map objective hooks.
+
 ## 2026-07-01 - World Session Bags Panel (Codex UI lane)
 
 Context: the world-session HUD had a Bag shortcut, but it opened the Actions

@@ -17,12 +17,47 @@ const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
 const PANEL_NAMES := ["chat", "spells", "actions", "quests", "options", "inventory"]
+const QUEST_LOG_SLOT_COUNT := 25
 const INVENTORY_SLOT_NAMES := [
-	"Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands",
-	"Finger 1", "Finger 2", "Trinket 1", "Trinket 2", "Back", "Main Hand", "Off Hand", "Ranged", "Tabard",
-	"Bag 1", "Bag 2", "Bag 3", "Bag 4",
-	"Backpack 1", "Backpack 2", "Backpack 3", "Backpack 4", "Backpack 5", "Backpack 6", "Backpack 7", "Backpack 8",
-	"Backpack 9", "Backpack 10", "Backpack 11", "Backpack 12", "Backpack 13", "Backpack 14", "Backpack 15", "Backpack 16",
+	"Head",
+	"Neck",
+	"Shoulder",
+	"Shirt",
+	"Chest",
+	"Waist",
+	"Legs",
+	"Feet",
+	"Wrist",
+	"Hands",
+	"Finger 1",
+	"Finger 2",
+	"Trinket 1",
+	"Trinket 2",
+	"Back",
+	"Main Hand",
+	"Off Hand",
+	"Ranged",
+	"Tabard",
+	"Bag 1",
+	"Bag 2",
+	"Bag 3",
+	"Bag 4",
+	"Backpack 1",
+	"Backpack 2",
+	"Backpack 3",
+	"Backpack 4",
+	"Backpack 5",
+	"Backpack 6",
+	"Backpack 7",
+	"Backpack 8",
+	"Backpack 9",
+	"Backpack 10",
+	"Backpack 11",
+	"Backpack 12",
+	"Backpack 13",
+	"Backpack 14",
+	"Backpack 15",
+	"Backpack 16",
 ]
 
 var player_marker: CharacterBody3D
@@ -60,6 +95,7 @@ var panel_drag_offset := Vector2.ZERO
 var panel_resizing_name := ""
 var panel_resize_start_mouse := Vector2.ZERO
 var panel_resize_start_size := Vector2.ZERO
+var session_quest_slots: Array = []
 
 
 func _ready() -> void:
@@ -226,7 +262,9 @@ func _apply_session_context() -> void:
 	_apply_session_data(character, enter_result, "Session loaded from login flow.")
 
 
-func _apply_session_data(character: Dictionary, enter_result: Dictionary, source_text: String) -> void:
+func _apply_session_data(
+	character: Dictionary, enter_result: Dictionary, source_text: String
+) -> void:
 	var login: Dictionary = enter_result.get("login", {})
 	var update: Dictionary = enter_result.get("update", {})
 	var character_name := str(character.get("name", enter_result.get("character_name", "Unknown")))
@@ -244,21 +282,35 @@ func _apply_session_data(character: Dictionary, enter_result: Dictionary, source
 		name_label.text = "%s\nmap %s" % [character_name, str(map_id)]
 
 	status_label.text = "World Session"
-	detail_label.text = "%s Level %s %s on map %s at %.2f, %.2f, %.2f." % [
-		character_name,
-		str(character.get("level", "?")),
-		str(character.get("class", "")),
-		str(map_id),
-		wow_x,
-		wow_y,
-		wow_z,
-	]
+	detail_label.text = (
+		"%s Level %s %s on map %s at %.2f, %.2f, %.2f."
+		% [
+			character_name,
+			str(character.get("level", "?")),
+			str(character.get("class", "")),
+			str(map_id),
+			wow_x,
+			wow_y,
+			wow_z,
+		]
+	)
 	visible_object_count = int(update.get("visible_object_count", 0))
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
+	session_quest_slots = _extract_quest_slots(character, enter_result)
 	selected_target_index = -1
 	_refresh_target_label()
-	quest_label.text = "Quest tracker: waiting for live quest-log integration."
+	var active_quest_count := _quest_active_count()
+	if active_quest_count > 0:
+		quest_label.text = (
+			"Quest tracker: %s active quest slot%s."
+			% [
+				str(active_quest_count),
+				"" if active_quest_count == 1 else "s",
+			]
+		)
+	else:
+		quest_label.text = "Quest tracker: waiting for live quest-log integration."
 	session_label.text = source_text
 	_update_camera()
 
@@ -270,7 +322,11 @@ func _extract_inventory_slots(character: Dictionary, enter_result: Dictionary) -
 		enter_result.get("inventory_after", {}),
 		enter_result.get("inventory_snapshot", {}),
 		enter_result.get("after_inventory", {}),
-		enter_result.get("update", {}).get("inventory", {}) if enter_result.get("update", {}) is Dictionary else {},
+		(
+			enter_result.get("update", {}).get("inventory", {})
+			if enter_result.get("update", {}) is Dictionary
+			else {}
+		),
 		enter_result.get("slots", []),
 	]
 	for candidate in candidates:
@@ -302,6 +358,84 @@ func _extract_coinage(character: Dictionary, enter_result: Dictionary) -> int:
 	return -1
 
 
+func _extract_quest_slots(character: Dictionary, enter_result: Dictionary) -> Array:
+	var candidates: Array = [
+		character.get("quest_log", {}),
+		character.get("quest_log_snapshot", {}),
+		character.get("quests", {}),
+		enter_result.get("quest_log", {}),
+		enter_result.get("quest_log_snapshot", {}),
+		enter_result.get("quest_slots", []),
+	]
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("quest_log", {}))
+		candidates.append(update.get("quest_log_snapshot", {}))
+		candidates.append(update.get("quest_slots", []))
+
+	for candidate in candidates:
+		var raw_slots = []
+		if candidate is Dictionary:
+			raw_slots = candidate.get("slots", candidate.get("quest_slots", []))
+		elif candidate is Array:
+			raw_slots = candidate
+		if raw_slots is Array and not raw_slots.is_empty():
+			var normalized := _normalize_quest_slots(raw_slots)
+			if not normalized.is_empty():
+				return normalized
+	return []
+
+
+func _normalize_quest_slots(raw_slots: Array) -> Array:
+	var slots: Array = []
+	for raw_slot in raw_slots:
+		if not raw_slot is Dictionary:
+			continue
+		if not _looks_like_quest_slot(raw_slot):
+			continue
+		var slot: Dictionary = raw_slot.duplicate(true)
+		if not slot.has("slot"):
+			if slot.has("slot_index"):
+				slot["slot"] = int(slot.get("slot_index", -1))
+			elif slot.has("index"):
+				slot["slot"] = int(slot.get("index", -1))
+		if not slot.has("quest_id"):
+			for key in ["quest", "quest_entry", "entry", "id"]:
+				if slot.has(key):
+					slot["quest_id"] = int(slot.get(key, 0))
+					break
+		if not slot.has("quest_id"):
+			slot["quest_id"] = 0
+		if not slot.has("active"):
+			slot["active"] = int(slot.get("quest_id", 0)) > 0
+		slots.append(slot)
+	return slots
+
+
+func _looks_like_quest_slot(slot: Dictionary) -> bool:
+	for key in [
+		"quest_id",
+		"quest",
+		"quest_entry",
+		"state_flags",
+		"status_flags",
+		"timer",
+		"time_left",
+		"objective_1",
+		"objective_2",
+		"objective_3",
+		"objective_4",
+		"counter_1",
+		"counter_2",
+		"counter_3",
+		"counter_4",
+		"objectives",
+	]:
+		if slot.has(key):
+			return true
+	return false
+
+
 func _normalize_inventory_slots(raw_slots: Array) -> Array:
 	var slots: Array = []
 	for raw_slot in raw_slots:
@@ -329,7 +463,7 @@ func _update_camera_input(delta: float) -> void:
 		camera_yaw -= 1.8 * delta
 
 
-func _update_marker_movement(delta: float) -> void:
+func _update_marker_movement(_delta: float) -> void:
 	var input := Vector3.ZERO
 	if Input.is_action_pressed("move_forward"):
 		input.z -= 1.0
@@ -392,16 +526,24 @@ func _select_next_target() -> void:
 
 func _queue_primary_action() -> void:
 	if selected_target_index < 0:
-		status_label.text = "Primary action queued; select a visible target when live targeting is attached."
+		status_label.text = (
+			"Primary action queued; select a visible target when live targeting is attached."
+		)
 		return
-	status_label.text = "Primary action queued for target %s; combat execution waits for the persistent live session." % str(selected_target_index + 1)
+	status_label.text = (
+		"Primary action queued for target %s; combat execution waits for the persistent live session."
+		% str(selected_target_index + 1)
+	)
 
 
 func _queue_interact() -> void:
 	if selected_target_index < 0:
 		quest_label.text = "Interaction queued; live NPC/gameobject selection is not attached yet."
 		return
-	quest_label.text = "Interaction queued for target %s; NPC panels will attach here after the live click bridge lands." % str(selected_target_index + 1)
+	quest_label.text = (
+		"Interaction queued for target %s; NPC panels will attach here after the live click bridge lands."
+		% str(selected_target_index + 1)
+	)
 
 
 func _reset_marker_to_session() -> void:
@@ -414,7 +556,9 @@ func _reset_marker_to_session() -> void:
 
 
 func _queue_jump() -> void:
-	status_label.text = "Jump input received; server-synchronized vertical movement remains a live-session task."
+	status_label.text = (
+		"Jump input received; server-synchronized vertical movement remains a live-session task."
+	)
 
 
 func _refresh_target_label() -> void:
@@ -422,12 +566,18 @@ func _refresh_target_label() -> void:
 		target_label.text = "Visible objects: 0. Target cycling is waiting for the live object stream."
 		return
 	if selected_target_index < 0:
-		target_label.text = "Visible objects: %s. Press the saved target key to cycle the snapshot." % str(visible_object_count)
+		target_label.text = (
+			"Visible objects: %s. Press the saved target key to cycle the snapshot."
+			% str(visible_object_count)
+		)
 		return
-	target_label.text = "Target %s of %s selected from the latest visible-object snapshot." % [
-		str(selected_target_index + 1),
-		str(visible_object_count),
-	]
+	target_label.text = (
+		"Target %s of %s selected from the latest visible-object snapshot."
+		% [
+			str(selected_target_index + 1),
+			str(visible_object_count),
+		]
+	)
 
 
 func _sync_target_marker() -> void:
@@ -651,17 +801,23 @@ func _build_shortcut_slots(parent: Control) -> void:
 	_add_shortcut_slot(parent, "2", "Interact", Callable(self, "_queue_interact"))
 	_add_shortcut_slot(parent, "3", "Target", Callable(self, "_select_next_target"))
 	_add_shortcut_slot(parent, "4", "Spells", Callable(self, "_show_session_panel").bind("spells"))
-	_add_shortcut_slot(parent, "5", "Actions", Callable(self, "_show_session_panel").bind("actions"))
+	_add_shortcut_slot(
+		parent, "5", "Actions", Callable(self, "_show_session_panel").bind("actions")
+	)
 	_add_shortcut_slot(parent, "6", "Quests", Callable(self, "_show_session_panel").bind("quests"))
 	_add_shortcut_slot(parent, "7", "Chat", Callable(self, "_show_session_panel").bind("chat"))
-	_add_shortcut_slot(parent, "8", "Options", Callable(self, "_show_session_panel").bind("options"))
+	_add_shortcut_slot(
+		parent, "8", "Options", Callable(self, "_show_session_panel").bind("options")
+	)
 	_add_shortcut_slot(parent, "9", "Reset", Callable(self, "_reset_marker_to_session"))
 	_add_shortcut_slot(parent, "0", "Jump", Callable(self, "_queue_jump"))
 	_add_shortcut_slot(parent, "-", "Bag", Callable(self, "_show_session_panel").bind("inventory"))
 	_add_shortcut_slot(parent, "=", "Map", Callable(self, "_show_session_panel").bind("quests"))
 
 
-func _add_shortcut_slot(parent: Control, key_text: String, label_text: String, action: Callable) -> void:
+func _add_shortcut_slot(
+	parent: Control, key_text: String, label_text: String, action: Callable
+) -> void:
 	var button := Button.new()
 	button.text = "%s\n%s" % [key_text, label_text]
 	button.tooltip_text = label_text
@@ -767,7 +923,9 @@ func _on_panel_resize_gui_input(event: InputEvent, panel_name: String) -> void:
 		_set_panel_position(panel_name, shell.position)
 
 
-func _set_panel_position(panel_name: String, next_position: Vector2, snap_to_grid: bool = false) -> void:
+func _set_panel_position(
+	panel_name: String, next_position: Vector2, snap_to_grid: bool = false
+) -> void:
 	var shell := _panel_shell(panel_name)
 	if shell == null:
 		return
@@ -799,8 +957,12 @@ func _clamp_panel_size(panel_name: String, next_size: Vector2) -> Vector2:
 	var shell := _panel_shell(panel_name)
 	var position := shell.position if shell != null else Vector2.ZERO
 	var viewport_size := _layout_viewport_size()
-	var max_width: float = min(PANEL_MAX_SIZE.x, max(PANEL_MIN_SIZE.x, viewport_size.x - position.x - 12.0))
-	var max_height: float = min(PANEL_MAX_SIZE.y, max(PANEL_MIN_SIZE.y, viewport_size.y - position.y - 12.0))
+	var max_width: float = min(
+		PANEL_MAX_SIZE.x, max(PANEL_MIN_SIZE.x, viewport_size.x - position.x - 12.0)
+	)
+	var max_height: float = min(
+		PANEL_MAX_SIZE.y, max(PANEL_MIN_SIZE.y, viewport_size.y - position.y - 12.0)
+	)
 	return Vector2(
 		clamp(next_size.x, PANEL_MIN_SIZE.x, max_width),
 		clamp(next_size.y, PANEL_MIN_SIZE.y, max_height)
@@ -908,7 +1070,9 @@ func _build_chat_panel() -> void:
 func _build_spells_panel() -> void:
 	panel_title_label.text = "Spells"
 	panel_body.add_child(_panel_label("Known spells: no session rows yet.", 13))
-	panel_body.add_child(_panel_label("Active inputs: primary action, target next, interact, and jump.", 13))
+	panel_body.add_child(
+		_panel_label("Active inputs: primary action, target next, interact, and jump.", 13)
+	)
 
 
 func _build_actions_panel() -> void:
@@ -926,8 +1090,125 @@ func _build_actions_panel() -> void:
 
 func _build_quests_panel() -> void:
 	panel_title_label.text = "Quests"
-	panel_body.add_child(_panel_label(quest_label.text, 13))
-	panel_body.add_child(_panel_label("Tracked objective rows: none in this session yet.", 13))
+	var active_slots := _quest_active_slots()
+	if session_quest_slots.is_empty():
+		panel_body.add_child(_panel_label("Quest log: waiting for the live world session.", 13))
+		panel_body.add_child(
+			_panel_label(
+				(
+					"The Quests shortcut stays in the gameplay HUD while "
+					+ "Claude's session lane wires live snapshots."
+				),
+				13
+			)
+		)
+		return
+
+	(
+		panel_body
+		. add_child(
+			_panel_label(
+				(
+					"Slots observed: %s of %s  Active: %s"
+					% [
+						str(session_quest_slots.size()),
+						str(QUEST_LOG_SLOT_COUNT),
+						str(active_slots.size()),
+					]
+				),
+				13
+			)
+		)
+	)
+
+	if active_slots.is_empty():
+		panel_body.add_child(
+			_panel_label("No active quest ids were present in the latest session snapshot.", 13)
+		)
+		return
+
+	for slot in active_slots:
+		panel_body.add_child(_quest_slot_button(slot))
+
+
+func _quest_slot_button(slot: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = (
+		"Slot %s\n%s"
+		% [
+			str(slot.get("slot", "?")),
+			_quest_slot_state(slot),
+		]
+	)
+	button.tooltip_text = _quest_slot_detail(slot)
+	button.custom_minimum_size = Vector2(220.0, 54.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_quest_slot.bind(slot))
+	return button
+
+
+func _show_quest_slot(slot: Dictionary) -> void:
+	var detail := _quest_slot_detail(slot)
+	quest_label.text = detail
+	session_label.text = detail
+
+
+func _quest_active_slots() -> Array:
+	var slots: Array = []
+	for slot in session_quest_slots:
+		if slot is Dictionary and _quest_slot_is_active(slot):
+			slots.append(slot)
+	return slots
+
+
+func _quest_slot_is_active(slot: Dictionary) -> bool:
+	return bool(slot.get("active", false)) or int(slot.get("quest_id", 0)) > 0
+
+
+func _quest_active_count() -> int:
+	return _quest_active_slots().size()
+
+
+func _quest_slot_state(slot: Dictionary) -> String:
+	var quest_id := int(slot.get("quest_id", 0))
+	if quest_id <= 0:
+		return "Cleared"
+	var objective_text := _quest_objective_text(slot)
+	if objective_text.is_empty():
+		return "Quest ID " + str(quest_id)
+	return "Quest ID %s | %s" % [str(quest_id), objective_text]
+
+
+func _quest_slot_detail(slot: Dictionary) -> String:
+	var parts: Array[String] = [
+		"slot " + str(slot.get("slot", "?")),
+		"quest " + str(slot.get("quest_id", 0)),
+	]
+	for key in ["state_flags", "status_flags", "timer", "time_left"]:
+		if slot.has(key):
+			parts.append(key + " " + str(slot.get(key)))
+	var objective_text := _quest_objective_text(slot)
+	if not objective_text.is_empty():
+		parts.append(objective_text)
+	return " | ".join(parts)
+
+
+func _quest_objective_text(slot: Dictionary) -> String:
+	var values: Array[String] = []
+	var objectives = slot.get("objectives", [])
+	if objectives is Array and not objectives.is_empty():
+		for index in range(int(min(objectives.size(), 4))):
+			values.append("obj%s %s" % [str(index + 1), str(objectives[index])])
+	for index in range(1, 5):
+		for key in [
+			"objective_" + str(index),
+			"counter_" + str(index),
+			"objective_count_" + str(index),
+		]:
+			if slot.has(key):
+				values.append("obj%s %s" % [str(index), str(slot.get(key))])
+				break
+	return ", ".join(values)
 
 
 func _build_inventory_panel() -> void:
@@ -938,14 +1219,31 @@ func _build_inventory_panel() -> void:
 		panel_body.add_child(_panel_label("Money: waiting for session inventory state.", 13))
 
 	if session_inventory_slots.is_empty():
-		panel_body.add_child(_panel_label("Inventory snapshot: waiting for the live world session.", 13))
-		panel_body.add_child(_panel_label("The Bag shortcut now opens this in-session window instead of leaving the HUD.", 13))
+		panel_body.add_child(
+			_panel_label("Inventory snapshot: waiting for the live world session.", 13)
+		)
+		panel_body.add_child(
+			_panel_label(
+				"The Bag shortcut now opens this in-session window instead of leaving the HUD.", 13
+			)
+		)
 		return
 
-	panel_body.add_child(_panel_label("Slots: %s  Filled: %s" % [
-		str(INVENTORY_SLOT_NAMES.size()),
-		str(_inventory_populated_count(session_inventory_slots)),
-	], 13))
+	(
+		panel_body
+		. add_child(
+			_panel_label(
+				(
+					"Slots: %s  Filled: %s"
+					% [
+						str(INVENTORY_SLOT_NAMES.size()),
+						str(_inventory_populated_count(session_inventory_slots)),
+					]
+				),
+				13
+			)
+		)
+	)
 
 	var grid := GridContainer.new()
 	grid.columns = 4
@@ -1013,18 +1311,24 @@ func _inventory_slot_state(slot: Dictionary) -> String:
 func _inventory_slot_detail(slot: Dictionary, index: int) -> String:
 	var durability := ""
 	if int(slot.get("max_durability", 0)) > 0:
-		durability = " | durability %s/%s" % [
-			str(slot.get("durability", 0)),
-			str(slot.get("max_durability", 0)),
+		durability = (
+			" | durability %s/%s"
+			% [
+				str(slot.get("durability", 0)),
+				str(slot.get("max_durability", 0)),
+			]
+		)
+	return (
+		"%s | slot %s | entry %s | stack %s | guid %s%s"
+		% [
+			_inventory_slot_name(index),
+			str(slot.get("slot", index)),
+			str(slot.get("item_entry", 0)),
+			str(slot.get("stack_count", 0)),
+			str(slot.get("item_guid", "0x0")),
+			durability,
 		]
-	return "%s | slot %s | entry %s | stack %s | guid %s%s" % [
-		_inventory_slot_name(index),
-		str(slot.get("slot", index)),
-		str(slot.get("item_entry", 0)),
-		str(slot.get("stack_count", 0)),
-		str(slot.get("item_guid", "0x0")),
-		durability,
-	]
+	)
 
 
 func _inventory_populated_count(slots: Array) -> int:
@@ -1044,15 +1348,21 @@ func _build_options_panel() -> void:
 		"Move backward: " + _key_name(int(keybindings.get("move_backward", KEY_S))),
 		"Move left: " + _key_name(int(keybindings.get("move_left", KEY_A))),
 		"Move right: " + _key_name(int(keybindings.get("move_right", KEY_D))),
-		"Camera left/right: %s / %s" % [
-			_key_name(int(keybindings.get("camera_left", KEY_Q))),
-			_key_name(int(keybindings.get("camera_right", KEY_E))),
-		],
-		"Target/action/interact: %s / %s / %s" % [
-			_key_name(int(keybindings.get("target_next", KEY_TAB))),
-			_key_name(int(keybindings.get("attack_primary", KEY_1))),
-			_key_name(int(keybindings.get("interact", KEY_F))),
-		],
+		(
+			"Camera left/right: %s / %s"
+			% [
+				_key_name(int(keybindings.get("camera_left", KEY_Q))),
+				_key_name(int(keybindings.get("camera_right", KEY_E))),
+			]
+		),
+		(
+			"Target/action/interact: %s / %s / %s"
+			% [
+				_key_name(int(keybindings.get("target_next", KEY_TAB))),
+				_key_name(int(keybindings.get("attack_primary", KEY_1))),
+				_key_name(int(keybindings.get("interact", KEY_F))),
+			]
+		),
 	]
 	for line in key_lines:
 		panel_body.add_child(_panel_label(line, 13))
@@ -1108,7 +1418,9 @@ func _open_scene(scene_path: String) -> void:
 
 
 func _godot_position(wow_x: float, wow_y: float, wow_z: float) -> Vector3:
-	return Vector3(wow_x * WORLD_TO_GODOT_SCALE, wow_z * WORLD_TO_GODOT_SCALE, -wow_y * WORLD_TO_GODOT_SCALE)
+	return Vector3(
+		wow_x * WORLD_TO_GODOT_SCALE, wow_z * WORLD_TO_GODOT_SCALE, -wow_y * WORLD_TO_GODOT_SCALE
+	)
 
 
 func _material(color: Color) -> StandardMaterial3D:
@@ -1143,9 +1455,13 @@ func _run_keybind_settings_self_test() -> void:
 	test_settings["keybindings"]["interact"] = KEY_G
 	test_settings["keybindings"]["reset_sandbox"] = KEY_BACKSPACE
 	test_settings["keybindings"]["jump"] = KEY_SPACE
-	var save_error := SettingsRuntime.save_settings(test_settings, SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH)
+	var save_error := SettingsRuntime.save_settings(
+		test_settings, SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH
+	)
 	if save_error != OK:
-		push_error("WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_FAILED: could not save temporary settings")
+		push_error(
+			"WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_FAILED: could not save temporary settings"
+		)
 		get_tree().quit(1)
 		return
 
@@ -1161,11 +1477,18 @@ func _run_keybind_settings_self_test() -> void:
 	)
 	SettingsRuntime.delete_settings_file(SettingsRuntime.SETTINGS_SELF_TEST_FILE_PATH)
 	if not bindings_ok:
-		push_error("WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_FAILED: saved bindings were not applied")
+		push_error(
+			"WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_FAILED: saved bindings were not applied"
+		)
 		get_tree().quit(1)
 		return
 
-	print("WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_OK move_forward=KEY_UP camera_left=KEY_LEFT target_next=KEY_T")
+	print(
+		(
+			"WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_OK "
+			+ "move_forward=KEY_UP camera_left=KEY_LEFT target_next=KEY_T"
+		)
+	)
 	get_tree().quit(0)
 
 
@@ -1206,8 +1529,12 @@ func _run_layout_self_test() -> void:
 	)
 
 	_reset_panel_layout()
-	var options_reset_position := _clamp_panel_position("options", _default_panel_position("options"))
-	var actions_reset_position := _clamp_panel_position("actions", _default_panel_position("actions"))
+	var options_reset_position := _clamp_panel_position(
+		"options", _default_panel_position("options")
+	)
+	var actions_reset_position := _clamp_panel_position(
+		"actions", _default_panel_position("actions")
+	)
 	var reset_ok := (
 		options_shell.position.distance_to(options_reset_position) < 0.01
 		and actions_shell.position.distance_to(actions_reset_position) < 0.01
@@ -1217,31 +1544,47 @@ func _run_layout_self_test() -> void:
 	var cleanup_ok := not FileAccess.file_exists(ProjectSettings.globalize_path(layout_file_path))
 
 	if snap_ok and save_ok and load_ok and reset_ok and cleanup_ok:
-		print("WORLD_SESSION_LAYOUT_SELF_TEST_OK options=(%.1f,%.1f %.1fx%.1f) actions=(%.1f,%.1f %.1fx%.1f) reset=true" % [
-			options_position.x,
-			options_position.y,
-			options_size.x,
-			options_size.y,
-			actions_position.x,
-			actions_position.y,
-			actions_size.x,
-			actions_size.y,
-		])
+		var layout_message := (
+			(
+				"WORLD_SESSION_LAYOUT_SELF_TEST_OK "
+				+ "options=(%.1f,%.1f %.1fx%.1f) "
+				+ "actions=(%.1f,%.1f %.1fx%.1f) reset=true"
+			)
+			% [
+				options_position.x,
+				options_position.y,
+				options_size.x,
+				options_size.y,
+				actions_position.x,
+				actions_position.y,
+				actions_size.x,
+				actions_size.y,
+			]
+		)
+		print(layout_message)
 		get_tree().quit(0)
 		return
 
 	_delete_layout_file(layout_file_path)
-	push_error("WORLD_SESSION_LAYOUT_SELF_TEST_FAILED snap_ok=%s save_ok=%s load_ok=%s reset_ok=%s cleanup_ok=%s options_pos=%s options_size=%s actions_pos=%s actions_size=%s" % [
-		str(snap_ok),
-		str(save_ok),
-		str(load_ok),
-		str(reset_ok),
-		str(cleanup_ok),
-		str(options_shell.position),
-		str(options_shell.size),
-		str(actions_shell.position),
-		str(actions_shell.size),
-	])
+	var layout_error := (
+		(
+			"WORLD_SESSION_LAYOUT_SELF_TEST_FAILED snap_ok=%s save_ok=%s "
+			+ "load_ok=%s reset_ok=%s cleanup_ok=%s options_pos=%s "
+			+ "options_size=%s actions_pos=%s actions_size=%s"
+		)
+		% [
+			str(snap_ok),
+			str(save_ok),
+			str(load_ok),
+			str(reset_ok),
+			str(cleanup_ok),
+			str(options_shell.position),
+			str(options_shell.size),
+			str(actions_shell.position),
+			str(actions_shell.size),
+		]
+	)
+	push_error(layout_error)
 	get_tree().quit(1)
 
 
@@ -1258,19 +1601,23 @@ func _run_self_test() -> void:
 	var synthetic_result := {
 		"ok": true,
 		"character_name": "Codexstage",
-		"login": {
+		"login":
+		{
 			"map": 0,
 			"x": -8949.95,
 			"y": -132.49,
 			"z": 83.53,
 			"orientation": 0.0,
 		},
-		"update": {
+		"update":
+		{
 			"visible_object_count": 3,
 		},
-		"inventory": {
+		"inventory":
+		{
 			"coinage": 123456,
-			"slots": [
+			"slots":
+			[
 				{
 					"slot": 15,
 					"populated": true,
@@ -1297,13 +1644,35 @@ func _run_self_test() -> void:
 				},
 			],
 		},
+		"quest_log":
+		{
+			"slots":
+			[
+				{
+					"slot": 0,
+					"quest_id": 783,
+					"state_flags": 8,
+					"objective_1": 1,
+					"objective_2": 0,
+					"timer": 0,
+				},
+				{
+					"slot": 1,
+					"quest_id": 0,
+				},
+			],
+		},
 	}
 
 	var no_target_result := synthetic_result.duplicate(true)
 	no_target_result["update"]["visible_object_count"] = 0
-	_apply_session_data(synthetic_character, no_target_result, "Synthetic no-target world-session self-test.")
+	_apply_session_data(
+		synthetic_character, no_target_result, "Synthetic no-target world-session self-test."
+	)
 	_select_next_target()
-	var no_target_key_ok := selected_target_index == -1 and target_label.text.find("Visible objects: 0") != -1
+	var no_target_key_ok := (
+		selected_target_index == -1 and target_label.text.find("Visible objects: 0") != -1
+	)
 	_queue_primary_action()
 	var no_target_action_ok := status_label.text.find("select a visible target") != -1
 	_queue_interact()
@@ -1322,23 +1691,58 @@ func _run_self_test() -> void:
 	_show_session_panel("chat")
 	var chat_shell := _panel_shell("chat")
 	var chat_title: Label = session_panels.get("chat", {}).get("title", null)
-	var chat_panel_ok := chat_shell != null and chat_shell.visible and chat_title != null and chat_title.text == "Chat"
+	var chat_panel_ok := (
+		chat_shell != null
+		and chat_shell.visible
+		and chat_title != null
+		and chat_title.text == "Chat"
+	)
 	_show_session_panel("actions")
 	var actions_shell := _panel_shell("actions")
 	var actions_title: Label = session_panels.get("actions", {}).get("title", null)
-	var actions_panel_ok := actions_shell != null and actions_shell.visible and actions_title != null and actions_title.text == "Actions"
+	var actions_panel_ok := (
+		actions_shell != null
+		and actions_shell.visible
+		and actions_title != null
+		and actions_title.text == "Actions"
+	)
 	_show_session_panel("spells")
 	var spells_shell := _panel_shell("spells")
 	var spells_title: Label = session_panels.get("spells", {}).get("title", null)
-	var spells_panel_ok := spells_shell != null and spells_shell.visible and spells_title != null and spells_title.text == "Spells"
+	var spells_panel_ok := (
+		spells_shell != null
+		and spells_shell.visible
+		and spells_title != null
+		and spells_title.text == "Spells"
+	)
 	_show_session_panel("quests")
 	var quests_shell := _panel_shell("quests")
 	var quests_title: Label = session_panels.get("quests", {}).get("title", null)
-	var quests_panel_ok := quests_shell != null and quests_shell.visible and quests_title != null and quests_title.text == "Quests"
+	var quests_body: VBoxContainer = session_panels.get("quests", {}).get("body", null)
+	var quest_button_ok := false
+	if quests_body != null:
+		for child in quests_body.get_children():
+			if child is Button and child.text.find("Quest ID 783") != -1:
+				quest_button_ok = true
+				break
+	var quests_panel_ok := (
+		quests_shell != null
+		and quests_shell.visible
+		and quests_title != null
+		and quests_title.text == "Quests"
+		and session_quest_slots.size() == 2
+		and _quest_active_count() == 1
+		and quest_button_ok
+	)
 	_show_session_panel("options")
 	var options_shell := _panel_shell("options")
 	var options_title: Label = session_panels.get("options", {}).get("title", null)
-	var options_panel_ok := options_shell != null and options_shell.visible and options_title != null and options_title.text == "Options"
+	var options_panel_ok := (
+		options_shell != null
+		and options_shell.visible
+		and options_title != null
+		and options_title.text == "Options"
+	)
 	_show_session_panel("inventory")
 	var inventory_shell := _panel_shell("inventory")
 	var inventory_title: Label = session_panels.get("inventory", {}).get("title", null)
@@ -1372,30 +1776,64 @@ func _run_self_test() -> void:
 	for panel_name in PANEL_NAMES:
 		_hide_session_panel(panel_name)
 
-	var marker_ok := player_marker != null and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
+	var marker_ok := (
+		player_marker != null
+		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
+	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
 	var actions_ok := action_buttons.size() == 8
 	var shortcut_ok := shortcut_slots.size() == 12
-	var input_ok := no_target_key_ok and no_target_action_ok and no_target_interact_ok and target_key_ok and action_key_ok and interact_key_ok
-	var panel_ok := chat_panel_ok and actions_panel_ok and spells_panel_ok and quests_panel_ok and options_panel_ok and inventory_panel_ok and multi_panel_ok
+	var input_ok := (
+		no_target_key_ok
+		and no_target_action_ok
+		and no_target_interact_ok
+		and target_key_ok
+		and action_key_ok
+		and interact_key_ok
+	)
+	var panel_ok := (
+		chat_panel_ok
+		and actions_panel_ok
+		and spells_panel_ok
+		and quests_panel_ok
+		and options_panel_ok
+		and inventory_panel_ok
+		and multi_panel_ok
+	)
 	if marker_ok and hud_ok and actions_ok and shortcut_ok and input_ok and panel_ok:
-		print("WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 actions=%s shortcuts=%s input=true panels=true inventory=true marker=(%.2f,%.2f,%.2f)" % [
-			str(action_buttons.size()),
-			str(shortcut_slots.size()),
-			player_marker.position.x,
-			player_marker.position.y,
-			player_marker.position.z,
-		])
+		var self_test_message := (
+			(
+				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
+				+ "actions=%s shortcuts=%s input=true panels=true "
+				+ "inventory=true quests=true marker=(%.2f,%.2f,%.2f)"
+			)
+			% [
+				str(action_buttons.size()),
+				str(shortcut_slots.size()),
+				player_marker.position.x,
+				player_marker.position.y,
+				player_marker.position.z,
+			]
+		)
+		print(self_test_message)
 		get_tree().quit(0)
 		return
 
-	push_error("WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s inventory_panel_ok=%s" % [
-		str(marker_ok),
-		str(hud_ok),
-		str(actions_ok),
-		str(shortcut_ok),
-		str(input_ok),
-		str(panel_ok),
-		str(inventory_panel_ok),
-	])
+	var self_test_error := (
+		(
+			"WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s "
+			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
+			+ "inventory_panel_ok=%s"
+		)
+		% [
+			str(marker_ok),
+			str(hud_ok),
+			str(actions_ok),
+			str(shortcut_ok),
+			str(input_ok),
+			str(panel_ok),
+			str(inventory_panel_ok),
+		]
+	)
+	push_error(self_test_error)
 	get_tree().quit(1)
