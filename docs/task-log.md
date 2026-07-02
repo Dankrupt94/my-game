@@ -15,6 +15,27 @@ Plan:
   Godot marker position, target snapshot count, and selected target index.
 - Validate with headless Godot self-tests.
 
+Result:
+
+- Added a resident `Map` panel to `scripts/world_session_view.gd`.
+- The bottom `Map` shortcut now opens the Map panel instead of incorrectly
+  routing to Quests.
+- Added a nav-bar `Map` button alongside Chat, Spells, Actions, Quests, Bags,
+  Options, Roster, and Dashboard.
+- The panel renders safe numeric session values only: map id, server position,
+  Godot marker position, orientation, visible-object count, and selected target.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `map_panel=true`.
+
+Remaining work:
+
+- Feed richer live map/minimap state from the persistent session lane.
+- Add local-only zone names, minimap markers, world-map art/tiles, quest
+  objective hooks, and click-to-track/objective navigation.
+
 ## 2026-07-02 - World Session Quest Tracker Started
 
 Goal: extend the UI-lane quest work from a resident popup panel into a small

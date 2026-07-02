@@ -22,6 +22,31 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Map Panel (Codex UI lane)
+
+Context: the world-session HUD had a `Map` shortcut, but it still opened the
+Quests panel. A playable client needs map access to be its own resident HUD
+surface.
+
+Result:
+
+- Added a resident `Map` panel to `scripts/world_session_view.gd`.
+- The `Map` shortcut and a new nav-bar `Map` button now open the map panel.
+- The panel renders safe numeric map/session state: map id, server position,
+  Godot marker position, orientation, visible-object count, and selected target.
+- This remains UI-lane work only and does not call or edit the protocol bridge.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `map_panel=true`.
+
+Remaining work:
+
+- Feed richer live map/minimap state from Claude's persistent session lane.
+- Add local-only zone names, minimap markers, world-map art/tiles, quest
+  objective hooks, and click-to-track/objective navigation.
+
 ## 2026-07-02 - World Session Quest Tracker (Codex UI lane)
 
 Context: the resident Quests panel made quest-log data available in a HUD
