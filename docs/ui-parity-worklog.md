@@ -22,21 +22,39 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Aura And Unit Status Panel Started (Codex UI lane)
+## 2026-07-02 - World Session Aura And Unit Status Panel (Codex UI lane)
 
-Goal: add a resident aura/status surface to the active world-session HUD so
-safe player and target unit-state snapshots can display in the normal gameplay
-view.
+Context: a separate aura simulation existed, but the active world-session HUD
+did not yet have a resident surface for health, power, buffs, debuffs, target
+status, or cooldown-like rows.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Render session-provided health, power, level, faction/reaction, aura,
-  buff/debuff, and cooldown-like summaries without calling or editing the
-  protocol bridge.
+- Added a resident `Auras` panel to `scripts/world_session_view.gd`.
+- The panel renders safe session player and selected-target status dictionaries
+  without calling the protocol bridge: health, power, level, class,
+  faction/reaction, buffs, debuffs, generic aura rows, and cooldown-like rows
+  when present.
+- The compact selected-target HUD frame now also displays safe target
+  health/power and aura counts when those fields are present in the visible
+  object snapshot.
 - Keep live update-field parsing, combat health deltas, aura application,
   expiration, dispels, and server-synchronized unit-frame updates in Claude's
   live-session lane.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `auras_panel=true`.
+
+Remaining work:
+
+- Feed live player/target health, power, aura, cooldown, and update-field
+  snapshots from Claude's persistent session lane into the world-session
+  context.
+- Add normal unit frames, buff/debuff icons, timers, dispel/cancel affordances,
+  combat health deltas, death/ghost state, target-of-target, party/raid unit
+  frames, and local-only spell metadata/icons/tooltips.
 
 ## 2026-07-02 - World Session Mail Panel (Codex UI lane)
 

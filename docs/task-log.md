@@ -1,5 +1,35 @@
 # Task Log
 
+## 2026-07-02 - World Session Aura And Unit Status Panel
+
+Goal: add a first resident aura/status surface to the active world-session HUD
+without touching Claude's native/protocol/bridge/live-session files.
+
+Result:
+
+- Added an `Auras` panel to the world-session movable/resizable HUD system.
+- The panel renders safe player and selected-target unit status data: health,
+  power, level, class, faction/reaction, buffs, debuffs, generic aura rows, and
+  cooldown-like rows when present.
+- The selected-target HUD frame now also shows safe health/power and aura counts
+  when the visible-object snapshot includes those fields.
+- The panel stays display-only; live update-field parsing, aura expiration,
+  dispels, combat deltas, and server-synchronized unit-frame updates remain
+  live-session lane work.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `auras_panel=true`.
+
+Remaining work:
+
+- Feed live player/target health, power, aura, cooldown, and update-field
+  snapshots from the persistent session lane.
+- Add normal unit frames, buff/debuff icons, timers, dispel/cancel affordances,
+  combat health deltas, death/ghost state, target-of-target, party/raid unit
+  frames, and local-only spell metadata/icons/tooltips.
+
 ## 2026-07-02 - World Session Mail Panel
 
 Goal: add a first resident mailbox surface to the active world-session HUD

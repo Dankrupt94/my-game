@@ -22,6 +22,7 @@ const PANEL_NAMES := [
 	"spells",
 	"actions",
 	"targets",
+	"auras",
 	"quests",
 	"loot",
 	"vendor",
@@ -34,6 +35,7 @@ const PANEL_NAMES := [
 ]
 const PANEL_TITLES := {
 	"actions": "Actions",
+	"auras": "Auras",
 	"character": "Character",
 	"chat": "Chat",
 	"inventory": "Bags",
@@ -126,6 +128,7 @@ var visible_objects: Array = []
 var session_chat_rows: Array = []
 var session_spell_rows: Array = []
 var session_action_slots: Array = []
+var session_unit_status_snapshot: Dictionary = {}
 var session_loot_snapshot: Dictionary = {}
 var session_vendor_snapshot: Dictionary = {}
 var session_trainer_snapshot: Dictionary = {}
@@ -299,6 +302,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Spells", "spells")
 	_add_panel_button(nav_bar, "Actions", "actions")
 	_add_panel_button(nav_bar, "Targets", "targets")
+	_add_panel_button(nav_bar, "Auras", "auras")
 	_add_panel_button(nav_bar, "Quests", "quests")
 	_add_panel_button(nav_bar, "Loot", "loot")
 	_add_panel_button(nav_bar, "Vendor", "vendor")
@@ -396,6 +400,7 @@ func _refresh_target_frame() -> void:
 		return
 
 	var target := _visible_object_at(selected_target_index)
+	var target_status := _normalize_unit_status(target, "Target")
 	target_frame_body.add_child(
 		_panel_label(
 			(
@@ -409,6 +414,11 @@ func _refresh_target_frame() -> void:
 			12
 		)
 	)
+	if not target_status.is_empty():
+		target_frame_body.add_child(_panel_label(_unit_status_short_line(target_status), 12))
+		var aura_count := _unit_aura_count(target_status)
+		if aura_count > 0:
+			target_frame_body.add_child(_panel_label("Auras: " + str(aura_count), 12))
 
 
 func _refresh_quest_tracker() -> void:
@@ -526,6 +536,7 @@ func _apply_session_data(
 	session_chat_rows = _extract_chat_rows(character, enter_result)
 	session_spell_rows = _extract_spell_rows(character, enter_result)
 	session_action_slots = _extract_action_slots(character, enter_result)
+	session_unit_status_snapshot = _extract_unit_status_snapshot(character, enter_result)
 	session_loot_snapshot = _extract_loot_snapshot(character, enter_result)
 	session_vendor_snapshot = _extract_vendor_snapshot(character, enter_result)
 	session_trainer_snapshot = _extract_trainer_snapshot(character, enter_result)
@@ -618,6 +629,212 @@ func _normalize_visible_objects(raw_objects: Array) -> Array:
 					break
 		rows.append(row)
 	return rows
+
+
+func _extract_unit_status_snapshot(character: Dictionary, enter_result: Dictionary) -> Dictionary:
+	var update = enter_result.get("update", {})
+	var player_sources: Array = [
+		character,
+		character.get("unit_status", {}),
+		character.get("player_status", {}),
+		character.get("auras", {}),
+		enter_result.get("player", {}),
+		enter_result.get("player_status", {}),
+		enter_result.get("unit_status", {}).get("player", {})
+		if enter_result.get("unit_status", {}) is Dictionary
+		else {},
+	]
+	var target_sources: Array = [
+		enter_result.get("target", {}),
+		enter_result.get("target_status", {}),
+		enter_result.get("unit_status", {}).get("target", {})
+		if enter_result.get("unit_status", {}) is Dictionary
+		else {},
+	]
+	if update is Dictionary:
+		player_sources.append(update.get("player", {}))
+		player_sources.append(update.get("player_status", {}))
+		target_sources.append(update.get("target", {}))
+		target_sources.append(update.get("target_status", {}))
+		if update.get("unit_status", {}) is Dictionary:
+			player_sources.append(update.get("unit_status", {}).get("player", {}))
+			target_sources.append(update.get("unit_status", {}).get("target", {}))
+
+	var player_status := _first_unit_status(player_sources, "Player")
+	var target_status := _first_unit_status(target_sources, "Target")
+	return {
+		"player": player_status,
+		"target": target_status,
+		"has_unit_status": not player_status.is_empty() or not target_status.is_empty(),
+	}
+
+
+func _first_unit_status(sources: Array, fallback_name: String) -> Dictionary:
+	for source in sources:
+		if not source is Dictionary or source.is_empty():
+			continue
+		var status := _normalize_unit_status(source, fallback_name)
+		if bool(status.get("has_unit_data", false)):
+			return status
+	return {}
+
+
+func _normalize_unit_status(raw_status: Dictionary, fallback_name: String) -> Dictionary:
+	var auras := _collect_unit_auras(raw_status)
+	var cooldowns := _normalize_cooldown_rows(
+		_unit_raw_rows(raw_status, ["cooldowns", "spell_cooldowns"])
+	)
+	var health := _unit_int_value(raw_status, ["health", "hp", "current_health"], -1)
+	var max_health := _unit_int_value(raw_status, ["max_health", "health_max", "max_hp"], -1)
+	var power := _unit_int_value(raw_status, ["power", "mana", "rage", "energy"], -1)
+	var max_power := _unit_int_value(raw_status, ["max_power", "power_max", "max_mana"], -1)
+	var has_unit_data := (
+		_looks_like_unit_status(raw_status)
+		or not auras.is_empty()
+		or not cooldowns.is_empty()
+	)
+	if not has_unit_data:
+		return {}
+	return {
+		"has_unit_data": has_unit_data,
+		"name": _unit_name(raw_status, fallback_name),
+		"guid": raw_status.get("guid", raw_status.get("unit_guid", "")),
+		"level": raw_status.get("level", raw_status.get("unit_level", "")),
+		"class": raw_status.get("class", raw_status.get("unit_class", "")),
+		"reaction": raw_status.get("reaction", raw_status.get("faction_reaction", "")),
+		"faction": raw_status.get("faction", raw_status.get("faction_template", "")),
+		"health": health,
+		"max_health": max_health,
+		"power": power,
+		"max_power": max_power,
+		"power_type": raw_status.get("power_type", raw_status.get("power_kind", "")),
+		"auras": auras,
+		"cooldowns": cooldowns,
+	}
+
+
+func _looks_like_unit_status(raw_status: Dictionary) -> bool:
+	for key in [
+		"health",
+		"hp",
+		"current_health",
+		"max_health",
+		"max_hp",
+		"power",
+		"max_power",
+		"mana",
+		"max_mana",
+		"rage",
+		"energy",
+		"auras",
+		"buffs",
+		"debuffs",
+		"cooldowns",
+		"spell_cooldowns",
+		"reaction",
+		"faction",
+	]:
+		if raw_status.has(key):
+			return true
+	return false
+
+
+func _collect_unit_auras(raw_status: Dictionary) -> Array:
+	var auras: Array = []
+	for aura in _normalize_aura_rows(_unit_raw_rows(raw_status, ["auras"]), "aura"):
+		auras.append(aura)
+	for aura in _normalize_aura_rows(_unit_raw_rows(raw_status, ["buffs"]), "buff"):
+		auras.append(aura)
+	for aura in _normalize_aura_rows(_unit_raw_rows(raw_status, ["debuffs"]), "debuff"):
+		auras.append(aura)
+	return auras
+
+
+func _unit_raw_rows(snapshot: Dictionary, keys: Array) -> Array:
+	for key in keys:
+		var value: Variant = snapshot.get(key, [])
+		if value is Array:
+			return value
+		if value is Dictionary:
+			for row_key in ["rows", "entries", "auras", "buffs", "debuffs", "cooldowns"]:
+				if value.has(row_key) and value.get(row_key) is Array:
+					return value.get(row_key)
+	return []
+
+
+func _normalize_aura_rows(raw_rows: Array, default_kind: String) -> Array:
+	var rows: Array = []
+	for index in range(raw_rows.size()):
+		var raw_row = raw_rows[index]
+		var row: Dictionary = {}
+		if raw_row is Dictionary:
+			row = raw_row.duplicate(true)
+		elif raw_row is String:
+			row = {"name": raw_row}
+		else:
+			continue
+		if not row.has("spell_id"):
+			row["spell_id"] = _unit_int_value(row, ["id", "spell", "spell_entry"], 0)
+		if not row.has("name"):
+			var spell_id := int(row.get("spell_id", 0))
+			row["name"] = "spell " + str(spell_id) if spell_id > 0 else "aura"
+		if not row.has("kind"):
+			row["kind"] = _aura_kind(row, default_kind)
+		if not row.has("stacks"):
+			row["stacks"] = _unit_int_value(row, ["stack_count", "charges", "count"], 0)
+		if not row.has("duration_ms"):
+			row["duration_ms"] = _unit_int_value(row, ["duration", "duration_left_ms"], 0)
+		if not row.has("remaining_ms"):
+			row["remaining_ms"] = _unit_int_value(row, ["remaining", "time_left_ms"], 0)
+		if not row.has("index"):
+			row["index"] = index
+		rows.append(row)
+	return rows
+
+
+func _normalize_cooldown_rows(raw_rows: Array) -> Array:
+	var rows: Array = []
+	for index in range(raw_rows.size()):
+		var raw_row = raw_rows[index]
+		if not raw_row is Dictionary:
+			continue
+		var row: Dictionary = raw_row.duplicate(true)
+		if not row.has("spell_id"):
+			row["spell_id"] = _unit_int_value(row, ["id", "spell", "spell_entry"], 0)
+		if not row.has("remaining_ms"):
+			row["remaining_ms"] = _unit_int_value(row, ["remaining", "time_left_ms"], 0)
+		if not row.has("duration_ms"):
+			row["duration_ms"] = _unit_int_value(row, ["duration", "duration_left_ms"], 0)
+		if not row.has("index"):
+			row["index"] = index
+		rows.append(row)
+	return rows
+
+
+func _unit_name(raw_status: Dictionary, fallback_name: String) -> String:
+	for key in ["name", "unit_name", "character_name", "target_name"]:
+		var value := str(raw_status.get(key, "")).strip_edges()
+		if not value.is_empty():
+			return value
+	return fallback_name
+
+
+func _unit_int_value(row: Dictionary, keys: Array, fallback: int = 0) -> int:
+	for key in keys:
+		if row.has(key):
+			return int(row.get(key, fallback))
+	return fallback
+
+
+func _aura_kind(row: Dictionary, default_kind: String) -> String:
+	var kind := str(row.get("type", row.get("kind", ""))).strip_edges().to_lower()
+	if not kind.is_empty():
+		return kind
+	if bool(row.get("is_buff", row.get("helpful", false))):
+		return "buff"
+	if bool(row.get("is_debuff", row.get("harmful", false))):
+		return "debuff"
+	return default_kind if not default_kind.is_empty() else "aura"
 
 
 func _extract_chat_rows(character: Dictionary, enter_result: Dictionary) -> Array:
@@ -2084,6 +2301,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_actions_panel()
 		"targets":
 			_build_targets_panel()
+		"auras":
+			_build_auras_panel()
 		"quests":
 			_build_quests_panel()
 		"loot":
@@ -2632,6 +2851,208 @@ func _target_position_text(target: Dictionary) -> String:
 			]
 		)
 	return ""
+
+
+func _build_auras_panel() -> void:
+	panel_title_label.text = "Auras"
+	var player_status: Dictionary = session_unit_status_snapshot.get("player", {})
+	var target_status := _selected_target_unit_status()
+	if player_status.is_empty() and target_status.is_empty():
+		panel_body.add_child(_panel_label("Auras window: waiting for unit status data.", 13))
+		panel_body.add_child(
+			_panel_label(
+				"Live aura, health, power, and cooldown updates remain in the live-session lane.",
+				13
+			)
+		)
+		return
+
+	if not player_status.is_empty():
+		_add_unit_status_section("Player Status", player_status)
+	if not target_status.is_empty():
+		_add_unit_status_section("Target Status", target_status)
+	panel_body.add_child(_panel_label("Aura actions: waiting for live session controls.", 13))
+
+
+func _selected_target_unit_status() -> Dictionary:
+	var target_snapshot: Dictionary = session_unit_status_snapshot.get("target", {})
+	if selected_target_index < 0:
+		return target_snapshot
+	var target := _visible_object_at(selected_target_index).duplicate(true)
+	if target_snapshot is Dictionary:
+		for key in target_snapshot.keys():
+			if not target.has(key) or str(target.get(key, "")).strip_edges().is_empty():
+				target[key] = target_snapshot.get(key)
+	return _normalize_unit_status(target, "Target")
+
+
+func _add_unit_status_section(title: String, status: Dictionary) -> void:
+	panel_body.add_child(_panel_label(title, 14))
+	panel_body.add_child(_panel_label(_unit_status_summary(status), 13))
+	var auras: Array = status.get("auras", [])
+	panel_body.add_child(
+		_panel_label(
+			(
+				"Auras: %s | buffs %s | debuffs %s"
+				% [
+					str(auras.size()),
+					str(_unit_aura_kind_count(auras, "buff")),
+					str(_unit_aura_kind_count(auras, "debuff")),
+				]
+			),
+			13
+		)
+	)
+	for index in range(min(auras.size(), 24)):
+		var aura = auras[index]
+		if aura is Dictionary:
+			panel_body.add_child(_aura_row_button(aura))
+	if auras.size() > 24:
+		panel_body.add_child(_panel_label("+%s more aura rows" % str(auras.size() - 24), 13))
+	var cooldowns: Array = status.get("cooldowns", [])
+	if not cooldowns.is_empty():
+		panel_body.add_child(_panel_label("Cooldowns: " + str(cooldowns.size()), 14))
+		for index in range(min(cooldowns.size(), 12)):
+			var cooldown = cooldowns[index]
+			if cooldown is Dictionary:
+				panel_body.add_child(_panel_label(_cooldown_row_text(cooldown), 13))
+
+
+func _unit_status_summary(status: Dictionary) -> String:
+	var parts: Array[String] = [str(status.get("name", "Unit"))]
+	var level_text := str(status.get("level", "")).strip_edges()
+	if not level_text.is_empty():
+		parts.append("level " + level_text)
+	var class_text := str(status.get("class", "")).strip_edges()
+	if not class_text.is_empty():
+		parts.append(class_text)
+	parts.append(_unit_health_text(status))
+	var power_text := _unit_power_text(status)
+	if not power_text.is_empty():
+		parts.append(power_text)
+	var reaction := str(status.get("reaction", "")).strip_edges()
+	if not reaction.is_empty():
+		parts.append("reaction " + reaction)
+	return " | ".join(parts)
+
+
+func _unit_status_short_line(status: Dictionary) -> String:
+	var parts: Array[String] = [_unit_health_text(status)]
+	var power_text := _unit_power_text(status)
+	if not power_text.is_empty():
+		parts.append(power_text)
+	return " | ".join(parts)
+
+
+func _unit_health_text(status: Dictionary) -> String:
+	var health := int(status.get("health", -1))
+	var max_health := int(status.get("max_health", -1))
+	if health >= 0 and max_health > 0:
+		return "Health %s/%s (%s%%)" % [
+			str(health),
+			str(max_health),
+			str(_safe_percent(health, max_health)),
+		]
+	if health >= 0:
+		return "Health " + str(health)
+	return "Health unknown"
+
+
+func _unit_power_text(status: Dictionary) -> String:
+	var power := int(status.get("power", -1))
+	var max_power := int(status.get("max_power", -1))
+	if power < 0 and max_power < 0:
+		return ""
+	var power_type := str(status.get("power_type", "")).strip_edges()
+	var label := "Power" if power_type.is_empty() else "Power " + power_type
+	if power >= 0 and max_power > 0:
+		return "%s %s/%s (%s%%)" % [
+			label,
+			str(power),
+			str(max_power),
+			str(_safe_percent(power, max_power)),
+		]
+	if power >= 0:
+		return label + " " + str(power)
+	return label
+
+
+func _safe_percent(current: int, maximum: int) -> int:
+	if maximum <= 0:
+		return 0
+	return int(round((float(current) / float(maximum)) * 100.0))
+
+
+func _unit_aura_count(status: Dictionary) -> int:
+	var auras: Array = status.get("auras", [])
+	return auras.size()
+
+
+func _unit_aura_kind_count(auras: Array, kind: String) -> int:
+	var count := 0
+	for aura in auras:
+		if aura is Dictionary and str(aura.get("kind", "")).to_lower() == kind:
+			count += 1
+	return count
+
+
+func _aura_row_button(aura: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = _aura_row_text(aura)
+	button.tooltip_text = _aura_row_detail(aura)
+	button.custom_minimum_size = Vector2(260.0, 48.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_aura_row.bind(aura))
+	return button
+
+
+func _show_aura_row(aura: Dictionary) -> void:
+	session_label.text = _aura_row_detail(aura)
+	status_label.text = "Aura row selected: " + _aura_row_text(aura).replace("\n", " | ")
+
+
+func _aura_row_text(aura: Dictionary) -> String:
+	var name := str(aura.get("name", "aura")).strip_edges()
+	var kind := str(aura.get("kind", "aura")).strip_edges()
+	var detail: Array[String] = [kind]
+	var stacks := int(aura.get("stacks", 0))
+	if stacks > 0:
+		detail.append("stacks " + str(stacks))
+	var remaining := int(aura.get("remaining_ms", 0))
+	if remaining > 0:
+		detail.append("remaining " + _duration_text(remaining))
+	return "%s\n%s" % [name, " | ".join(detail)]
+
+
+func _aura_row_detail(aura: Dictionary) -> String:
+	var parts: Array[String] = [
+		"spell " + str(aura.get("spell_id", 0)),
+		"name " + str(aura.get("name", "aura")),
+		"kind " + str(aura.get("kind", "aura")),
+		"stacks " + str(aura.get("stacks", 0)),
+		"duration " + _duration_text(int(aura.get("duration_ms", 0))),
+		"remaining " + _duration_text(int(aura.get("remaining_ms", 0))),
+	]
+	var caster := str(aura.get("caster", aura.get("caster_guid", ""))).strip_edges()
+	if not caster.is_empty():
+		parts.append("caster " + caster)
+	return " | ".join(parts)
+
+
+func _cooldown_row_text(cooldown: Dictionary) -> String:
+	return "Spell %s cooldown %s/%s" % [
+		str(cooldown.get("spell_id", 0)),
+		_duration_text(int(cooldown.get("remaining_ms", 0))),
+		_duration_text(int(cooldown.get("duration_ms", 0))),
+	]
+
+
+func _duration_text(milliseconds: int) -> String:
+	if milliseconds <= 0:
+		return "ready"
+	if milliseconds >= 1000:
+		return "%.1fs" % (float(milliseconds) / 1000.0)
+	return str(milliseconds) + "ms"
 
 
 func _build_quests_panel() -> void:
@@ -3830,6 +4251,36 @@ func _run_self_test() -> void:
 		"x": -8949.95,
 		"y": -132.49,
 		"z": 83.53,
+		"health": 7890,
+		"max_health": 10000,
+		"power": 55,
+		"max_power": 100,
+		"power_type": "rage",
+		"auras":
+		[
+			{
+				"spell_id": 1001,
+				"name": "Local Fortitude",
+				"kind": "buff",
+				"stacks": 1,
+				"duration_ms": 300000,
+				"remaining_ms": 240000,
+			},
+			{
+				"spell_id": 1002,
+				"name": "Practice Fatigue",
+				"kind": "debuff",
+				"remaining_ms": 45000,
+			},
+		],
+		"cooldowns":
+		[
+			{
+				"spell_id": 78,
+				"duration_ms": 6000,
+				"remaining_ms": 2500,
+			},
+		],
 	}
 	var synthetic_result := {
 		"ok": true,
@@ -3855,6 +4306,19 @@ func _run_self_test() -> void:
 					"x": -8942.0,
 					"y": -128.0,
 					"z": 83.5,
+					"health": 320,
+					"max_health": 500,
+					"level": 5,
+					"reaction": "hostile",
+					"debuffs":
+					[
+						{
+							"spell_id": 2001,
+							"name": "Training Mark",
+							"kind": "debuff",
+							"remaining_ms": 15000,
+						},
+					],
 				},
 				{
 					"type": "creature",
@@ -4280,7 +4744,38 @@ func _run_self_test() -> void:
 	var target_frame_ok := (
 		target_frame_body != null
 		and _control_tree_text_contains(target_frame_body, "creature entry 69")
+		and _control_tree_text_contains(target_frame_body, "Health 320/500 (64%)")
+		and _control_tree_text_contains(target_frame_body, "Auras: 1")
 		and _control_tree_text_contains(target_frame_body, "Open")
+	)
+	_show_session_panel("auras")
+	var auras_shell := _panel_shell("auras")
+	var auras_title: Label = session_panels.get("auras", {}).get("title", null)
+	var auras_body: VBoxContainer = session_panels.get("auras", {}).get("body", null)
+	var player_status: Dictionary = session_unit_status_snapshot.get("player", {})
+	var player_auras: Array = player_status.get("auras", [])
+	var player_cooldowns: Array = player_status.get("cooldowns", [])
+	var selected_target_status := _selected_target_unit_status()
+	var target_auras: Array = selected_target_status.get("auras", [])
+	var auras_panel_ok := (
+		auras_shell != null
+		and auras_shell.visible
+		and auras_title != null
+		and auras_title.text == "Auras"
+		and auras_body != null
+		and player_auras.size() == 2
+		and target_auras.size() == 1
+		and player_cooldowns.size() == 1
+		and _control_tree_text_contains(auras_body, "Player Status")
+		and _control_tree_text_contains(auras_body, "Health 7890/10000 (79%)")
+		and _control_tree_text_contains(auras_body, "Power rage 55/100 (55%)")
+		and _control_tree_text_contains(auras_body, "Local Fortitude")
+		and _control_tree_text_contains(auras_body, "Practice Fatigue")
+		and _control_tree_text_contains(auras_body, "Target Status")
+		and _control_tree_text_contains(auras_body, "Health 320/500 (64%)")
+		and _control_tree_text_contains(auras_body, "Training Mark")
+		and _control_tree_text_contains(auras_body, "Cooldowns: 1")
+		and _control_tree_text_contains(auras_body, "Spell 78 cooldown 2.5s/6.0s")
 	)
 	_show_session_panel("spells")
 	var spells_shell := _panel_shell("spells")
@@ -4479,7 +4974,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 16
+	var actions_ok := action_buttons.size() == 17
 	var shortcut_ok := (
 		shortcut_slots.size() == 12
 		and shortcut_slots[0].text.find("spell 78") != -1
@@ -4499,6 +4994,7 @@ func _run_self_test() -> void:
 		and actions_panel_ok
 		and targets_panel_ok
 		and target_frame_ok
+		and auras_panel_ok
 		and spells_panel_ok
 		and quests_panel_ok
 		and loot_panel_ok
@@ -4518,6 +5014,7 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
+				+ "auras_panel=true "
 				+ "loot_panel=true vendor_panel=true trainer_panel=true social_panel=true mail_panel=true "
 				+ "map_panel=true "
 				+ "targets=true action_slots=true spellbook=true "
@@ -4541,6 +5038,7 @@ func _run_self_test() -> void:
 			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
 			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
 			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s "
+			+ "auras_panel_ok=%s "
 			+ "loot_panel_ok=%s vendor_panel_ok=%s trainer_panel_ok=%s social_panel_ok=%s "
 			+ "mail_panel_ok=%s social_counts=%s/%s/%s/%s mail_count=%s"
 		)
@@ -4557,6 +5055,7 @@ func _run_self_test() -> void:
 			str(targets_panel_ok),
 			str(target_frame_ok),
 			str(character_panel_ok),
+			str(auras_panel_ok),
 			str(loot_panel_ok),
 			str(vendor_panel_ok),
 			str(trainer_panel_ok),
