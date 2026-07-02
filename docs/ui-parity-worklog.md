@@ -22,6 +22,18 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Trainer Panel Started (Codex UI lane)
+
+Goal: add a resident trainer-window surface to the active world-session HUD so
+safe trainer snapshots can display in the normal gameplay view.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render session-provided trainer target, spell rows, cost/requirement state,
+  and learn feedback without calling or editing the protocol bridge.
+- Keep learn-spell actions in Claude's live-session lane.
+
 ## 2026-07-02 - World Session Vendor Panel (Codex UI lane)
 
 Context: Stage 17 has live vendor proof scenes, but the active world-session
