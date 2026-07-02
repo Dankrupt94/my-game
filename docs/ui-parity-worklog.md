@@ -22,6 +22,20 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Spellbook Data Started (Codex UI lane)
+
+Goal: continue moving normal-client HUD surfaces into the active
+world-session view by teaching the resident `Spells` panel to render safe
+spellbook-style session rows.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI worklog.
+- Consume dictionary/array data that the session context may already provide;
+  do not call or edit the protocol bridge.
+- Add headless self-test coverage that proves the Spells panel renders session
+  spell rows.
+
 ## 2026-07-02 - World Session Action Bar Data (Codex UI lane)
 
 Context: the world-session HUD had twelve shortcut buttons, but they stayed
