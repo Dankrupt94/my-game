@@ -1898,9 +1898,19 @@ Validation:
   `accept_response_opcode=0x0` — full reversible round trip, character quest log
   restored to its prior state.
 
+Godot exposure (same day):
+
+- Extension binding `questgiver_accept_probe(_selector)`, bridge methods
+  `questgiver_accept_probe(_selector)` (native + helper-process fallback with a
+  `--questgiver-accept` text parser), and `scenes/stage17_questgiver_accept_view.tscn`
+  with target/quest-id inputs and an accept-then-abandon action.
+- `./tools/build_godot_protocol_extension_compat.sh` rebuilt the extension.
+- `ACORE_QUESTGIVER_ACCEPT_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_questgiver_accept_view.tscn`
+  passed through the native extension: `QUESTGIVER_ACCEPT_SELF_TEST_OK
+  accepted_slot=0 abandoned=true`.
+
 Remaining work:
 
-- Godot extension binding + bridge method + `stage17_*` accept scene (this lane).
 - Quest complete/turn-in (`CMSG_QUESTGIVER_COMPLETE_QUEST` /
   `SMSG_QUESTGIVER_OFFER_REWARD`, `CMSG_QUESTGIVER_CHOOSE_REWARD`), objective
   progress (`SMSG_QUESTUPDATE_ADD_KILL`/`ADD_ITEM`), quest-log UI, in-world click

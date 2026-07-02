@@ -298,6 +298,64 @@ func questgiver_list_probe_selector(
 	return parsed
 
 
+func questgiver_accept_probe(
+	character_name: String = "Codexstage",
+	target_entry: int = 823,
+	quest_id: int = 783,
+	target_name: String = "Nearby Quest Giver",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	return questgiver_accept_probe_selector(character_name, str(target_entry), quest_id, target_name, host, port)
+
+
+func questgiver_accept_probe_selector(
+	character_name: String = "Codexstage",
+	target_selector: String = "823",
+	quest_id: int = 783,
+	target_name: String = "Nearby Quest Giver",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_questgiver_accept_probe_selector(character_name, target_selector, quest_id, target_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--questgiver-accept",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			target_selector,
+			str(quest_id),
+			target_name,
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_questgiver_accept_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 \
+		and bool(parsed.get("quest_in_log_after_accept", false)) \
+		and bool(parsed.get("quest_removed_after_remove", false))
+	return parsed
+
+
 func trainer_buy_spell_probe(
 	character_name: String = "Codexstage",
 	target_entry: int = 911,
@@ -1363,6 +1421,41 @@ func _run_native_questgiver_list_probe_selector(
 	return parsed
 
 
+func _run_native_questgiver_accept_probe_selector(
+	character_name: String,
+	target_selector: String,
+	quest_id: int,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("questgiver_accept_probe_selector"):
+		return {}
+
+	var result = client.call(
+		"questgiver_accept_probe_selector",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		target_selector,
+		quest_id,
+		target_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected questgiver accept result")
+
+	var accept_parsed: Dictionary = result
+	accept_parsed["source"] = "Godot native extension"
+	accept_parsed["exit_code"] = 0 if bool(accept_parsed.get("ok", false)) else 1
+	accept_parsed["output"] = JSON.stringify(_redacted_result(accept_parsed))
+	return accept_parsed
+
+
 func _run_native_trainer_list_probe_selector(
 	character_name: String,
 	target_selector: String,
@@ -2349,6 +2442,45 @@ func _parse_questgiver_list_output(output: String) -> Dictionary:
 				"quest_flags": _extract_int_field(line, "flags="),
 				"repeatable": _extract_int_field(line, "repeatable="),
 			})
+	return result
+
+
+func _parse_questgiver_accept_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"live_target_found": false,
+		"selection_sent": false,
+		"questgiver_hello_sent": false,
+		"accept_sent": false,
+		"quest_in_log_after_accept": false,
+		"accepted_slot": -1,
+		"remove_sent": false,
+		"quest_removed_after_remove": false,
+		"target_guid": "0x0",
+		"target_entry": 0,
+		"target_name": "",
+		"quest_id": 0,
+		"accept_response_opcode": 0,
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("QUESTGIVER_ACCEPT_PROBE"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["target_guid"] = _extract_token_after(line, "target_guid=")
+			result["target_entry"] = _extract_int_field(line, "target_entry=")
+			result["quest_id"] = _extract_int_field(line, "quest_id=")
+			result["live_target_found"] = _extract_int_field(line, "live_target_found=") == 1
+			result["selection_sent"] = _extract_int_field(line, "selection_sent=") == 1
+			result["questgiver_hello_sent"] = _extract_int_field(line, "questgiver_hello_sent=") == 1
+			result["accept_sent"] = _extract_int_field(line, "accept_sent=") == 1
+			result["quest_in_log_after_accept"] = _extract_int_field(line, "quest_in_log_after_accept=") == 1
+			result["accepted_slot"] = _extract_int_field(line, "accepted_slot=")
+			result["remove_sent"] = _extract_int_field(line, "remove_sent=") == 1
+			result["quest_removed_after_remove"] = _extract_int_field(line, "quest_removed_after_remove=") == 1
+			result["accept_response_opcode"] = _extract_hex_field(line, "accept_response_opcode=0x")
 	return result
 
 
