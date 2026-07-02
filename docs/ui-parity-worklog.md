@@ -22,6 +22,40 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-01 - Multi-Panel World Session HUD (Codex UI lane)
+
+Context: the world-session HUD panel could move and persist its placement, but
+it still swapped one panel body between Chat, Spells, Actions, Quests, and
+Options. A playable client needs multiple windows open at the same time.
+
+Result:
+
+- Refactored `scripts/world_session_view.gd` so Chat, Spells, Actions, Quests,
+  and Options are separate floating panels.
+- Each panel has its own header, close button, position, size, drag state, and
+  saved layout section in `user://world-session-layout.cfg`.
+- The same bottom action strip and navigation buttons can now open multiple
+  resident panels without closing the others.
+- `Reset HUD` now restores every world-session panel to its default position and
+  clears the saved layout file.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` now confirms Chat and Actions are
+  separate visible panels at the same time, then checks the remaining panel
+  builders.
+- `ACORE_WORLD_SESSION_LAYOUT_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` now saves and reloads separate Options
+  and Actions panel positions before reset/cleanup.
+
+Remaining work:
+
+- Feed live data into the individual panels as Claude's persistent session lane
+  exposes stable world-session APIs.
+- Add panel resizing in the world HUD, per-character/profile scope decisions,
+  full action-bar paging, and drag/drop action placement.
+
 ## 2026-07-01 - Movable World Session HUD Layout (Codex UI lane)
 
 Context: the world-session HUD panels existed inside the active game view, but
@@ -50,10 +84,8 @@ Validation:
 
 Remaining work:
 
-- Add multiple independently movable panels once live chat, inventory,
-  spellbook, quest, map, vendor, trainer, and combat surfaces are docked into
-  the world-session HUD.
-- Add full action-bar paging and drag/drop action placement.
+- Add panel resizing in the world HUD, per-character/profile scope decisions,
+  full action-bar paging, and drag/drop action placement.
 
 ## 2026-07-01 - World Session HUD Panels (Codex UI lane)
 
