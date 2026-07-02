@@ -22,6 +22,34 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Target Panel (Codex UI lane)
+
+Context: the world-session HUD could cycle a target count, but it did not have
+a real target frame or target-list surface for live visible-object rows.
+
+Result:
+
+- Added an always-visible `Target` HUD frame to `scripts/world_session_view.gd`.
+- Added a resident `Targets` panel to the movable/resizable world-session panel
+  system.
+- The target UI renders safe numeric visible-object data from session
+  dictionaries: target index, type, entry/id, GUID, distance, and position when
+  present.
+- This remains UI-lane work only and does not call or edit the protocol bridge.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `targets=true`.
+
+Remaining work:
+
+- Feed live visible-object rows from Claude's persistent session lane into the
+  frame and panel.
+- Add true in-world click picking, target health/power/aura fields, target
+  portrait/model preview, reaction/combat status, party target frames, and
+  target-of-target.
+
 ## 2026-07-02 - World Session Map Panel (Codex UI lane)
 
 Context: the world-session HUD had a `Map` shortcut, but it still opened the

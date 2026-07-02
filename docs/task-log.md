@@ -17,6 +17,30 @@ Plan:
   distance/position when present, and visible-object count.
 - Validate with headless Godot world-session checks.
 
+Result:
+
+- Added an always-visible `Target` HUD frame to `scripts/world_session_view.gd`.
+- Added a resident `Targets` panel to the movable/resizable world-session panel
+  system.
+- Added safe visible-object normalization from session dictionaries, including
+  entry/id, GUID, type, distance, and position fields when present.
+- Target cycling now updates the target frame with the selected safe row, while
+  the existing count-only fallback still reports waiting state when detailed
+  rows are absent.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `targets=true`.
+
+Remaining work:
+
+- Feed live visible-object rows from Claude's persistent session lane into the
+  frame and panel.
+- Add true in-world click picking, target health/power/aura fields, target
+  portrait/model preview, reaction/combat status, party target frames, and
+  target-of-target.
+
 ## 2026-07-02 - World Session Map Panel Started
 
 Goal: add a UI-lane resident map panel to the persistent world-session HUD so

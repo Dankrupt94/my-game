@@ -16,7 +16,9 @@ const PANEL_DEFAULT_SIZE := Vector2(560.0, 380.0)
 const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
-const PANEL_NAMES := ["chat", "spells", "actions", "quests", "map", "options", "inventory"]
+const PANEL_NAMES := [
+	"chat", "spells", "actions", "targets", "quests", "map", "options", "inventory"
+]
 const QUEST_LOG_SLOT_COUNT := 25
 const INVENTORY_SLOT_NAMES := [
 	"Head",
@@ -66,6 +68,7 @@ var camera: Camera3D
 var status_label: Label
 var detail_label: Label
 var target_label: Label
+var target_frame_body: VBoxContainer
 var quest_label: Label
 var session_label: Label
 var quest_tracker_body: VBoxContainer
@@ -85,6 +88,7 @@ var session_map_id := 0
 var session_wow_position := Vector3.ZERO
 var session_orientation := 0.0
 var visible_object_count := 0
+var visible_objects: Array = []
 var session_inventory_slots: Array = []
 var session_coinage := -1
 var selected_target_index := -1
@@ -224,6 +228,7 @@ func _build_hud() -> void:
 	layout.add_child(detail_label)
 	target_label = _hud_label()
 	layout.add_child(target_label)
+	_build_target_frame(layout)
 	quest_label = _hud_label()
 	layout.add_child(quest_label)
 	_build_quest_tracker(layout)
@@ -250,6 +255,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Chat", "chat")
 	_add_panel_button(nav_bar, "Spells", "spells")
 	_add_panel_button(nav_bar, "Actions", "actions")
+	_add_panel_button(nav_bar, "Targets", "targets")
 	_add_panel_button(nav_bar, "Quests", "quests")
 	_add_panel_button(nav_bar, "Map", "map")
 	_add_panel_button(nav_bar, "Bags", "inventory")
@@ -283,6 +289,75 @@ func _build_quest_tracker(parent: Control) -> void:
 	quest_tracker_body = VBoxContainer.new()
 	quest_tracker_body.add_theme_constant_override("separation", 4)
 	margin.add_child(quest_tracker_body)
+
+
+func _build_target_frame(parent: Control) -> void:
+	var frame := PanelContainer.new()
+	frame.name = "TargetFrameHud"
+	frame.custom_minimum_size = Vector2(340.0, 70.0)
+	var frame_style := StyleBoxFlat.new()
+	frame_style.bg_color = Color(0.040, 0.044, 0.052, 0.76)
+	frame_style.border_color = Color(0.30, 0.34, 0.40, 0.82)
+	frame_style.set_border_width_all(1)
+	frame_style.corner_radius_top_left = 5
+	frame_style.corner_radius_top_right = 5
+	frame_style.corner_radius_bottom_left = 5
+	frame_style.corner_radius_bottom_right = 5
+	frame.add_theme_stylebox_override("panel", frame_style)
+	parent.add_child(frame)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	frame.add_child(margin)
+
+	target_frame_body = VBoxContainer.new()
+	target_frame_body.add_theme_constant_override("separation", 4)
+	margin.add_child(target_frame_body)
+
+
+func _refresh_target_frame() -> void:
+	if target_frame_body == null:
+		return
+	_clear_children(target_frame_body)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	target_frame_body.add_child(header)
+
+	var title := _panel_label("Target", 14)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+
+	var open_button := Button.new()
+	open_button.text = "Open"
+	open_button.tooltip_text = "Open Targets"
+	open_button.custom_minimum_size = Vector2(72.0, 28.0)
+	open_button.pressed.connect(_show_session_panel.bind("targets"))
+	header.add_child(open_button)
+
+	if visible_object_count <= 0:
+		target_frame_body.add_child(_panel_label("No visible-object snapshot yet.", 12))
+		return
+	if selected_target_index < 0:
+		target_frame_body.add_child(
+			_panel_label("Visible: %s | selected: none" % str(visible_object_count), 12)
+		)
+		return
+
+	var target := _visible_object_at(selected_target_index)
+	target_frame_body.add_child(
+		_panel_label(
+			"Selected %s of %s | %s" % [
+				str(selected_target_index + 1),
+				str(visible_object_count),
+				_target_summary(target, selected_target_index),
+			],
+			12
+		)
+	)
 
 
 func _refresh_quest_tracker() -> void:
@@ -382,6 +457,9 @@ func _apply_session_data(
 		]
 	)
 	visible_object_count = int(update.get("visible_object_count", 0))
+	visible_objects = _extract_visible_objects(character, enter_result)
+	if not visible_objects.is_empty():
+		visible_object_count = max(visible_object_count, visible_objects.size())
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
 	session_quest_slots = _extract_quest_slots(character, enter_result)
@@ -401,6 +479,48 @@ func _apply_session_data(
 	_refresh_quest_tracker()
 	session_label.text = source_text
 	_update_camera()
+
+
+func _extract_visible_objects(character: Dictionary, enter_result: Dictionary) -> Array:
+	var candidates: Array = [
+		character.get("visible_objects", []),
+		character.get("objects", []),
+		enter_result.get("visible_objects", []),
+		enter_result.get("objects", []),
+	]
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("visible_objects", []))
+		candidates.append(update.get("objects", []))
+
+	for candidate in candidates:
+		if candidate is Array and not candidate.is_empty():
+			return _normalize_visible_objects(candidate)
+		if candidate is Dictionary:
+			var rows = candidate.get("rows", candidate.get("objects", []))
+			if rows is Array and not rows.is_empty():
+				return _normalize_visible_objects(rows)
+	return []
+
+
+func _normalize_visible_objects(raw_objects: Array) -> Array:
+	var rows: Array = []
+	for index in range(raw_objects.size()):
+		var raw_object = raw_objects[index]
+		if not raw_object is Dictionary:
+			continue
+		var row: Dictionary = raw_object.duplicate(true)
+		if not row.has("index"):
+			row["index"] = index
+		if not row.has("guid") and row.has("object_guid"):
+			row["guid"] = row.get("object_guid")
+		if not row.has("entry"):
+			for key in ["entry_id", "object_entry", "id"]:
+				if row.has(key):
+					row["entry"] = int(row.get(key, 0))
+					break
+		rows.append(row)
+	return rows
 
 
 func _extract_inventory_slots(character: Dictionary, enter_result: Dictionary) -> Array:
@@ -612,6 +732,16 @@ func _select_next_target() -> void:
 	_refresh_target_label()
 
 
+func _select_target_index(index: int) -> void:
+	if index < 0 or index >= visible_object_count:
+		selected_target_index = -1
+		status_label.text = "Target selection cleared."
+	else:
+		selected_target_index = index
+		status_label.text = "Target selected from the visible-object snapshot."
+	_refresh_target_label()
+
+
 func _queue_primary_action() -> void:
 	if selected_target_index < 0:
 		status_label.text = (
@@ -652,20 +782,22 @@ func _queue_jump() -> void:
 func _refresh_target_label() -> void:
 	if visible_object_count <= 0:
 		target_label.text = "Visible objects: 0. Target cycling is waiting for the live object stream."
+		_refresh_target_frame()
 		return
 	if selected_target_index < 0:
 		target_label.text = (
 			"Visible objects: %s. Press the saved target key to cycle the snapshot."
 			% str(visible_object_count)
 		)
+		_refresh_target_frame()
 		return
-	target_label.text = (
-		"Target %s of %s selected from the latest visible-object snapshot."
-		% [
-			str(selected_target_index + 1),
-			str(visible_object_count),
-		]
-	)
+	var target := _visible_object_at(selected_target_index)
+	target_label.text = "Target %s of %s selected: %s." % [
+		str(selected_target_index + 1),
+		str(visible_object_count),
+		_target_summary(target, selected_target_index),
+	]
+	_refresh_target_frame()
 
 
 func _sync_target_marker() -> void:
@@ -862,6 +994,8 @@ func _panel_title(panel_name: String) -> String:
 			return "Spells"
 		"actions":
 			return "Actions"
+		"targets":
+			return "Targets"
 		"quests":
 			return "Quests"
 		"map":
@@ -948,6 +1082,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_spells_panel()
 		"actions":
 			_build_actions_panel()
+		"targets":
+			_build_targets_panel()
 		"quests":
 			_build_quests_panel()
 		"map":
@@ -1182,6 +1318,107 @@ func _build_actions_panel() -> void:
 	]
 	for row in rows:
 		panel_body.add_child(_panel_label(row, 13))
+
+
+func _build_targets_panel() -> void:
+	panel_title_label.text = "Targets"
+	panel_body.add_child(_panel_label("Visible objects: " + str(visible_object_count), 13))
+	if selected_target_index >= 0:
+		panel_body.add_child(
+			_panel_label(
+				(
+					"Selected: "
+					+ _target_summary(_visible_object_at(selected_target_index), selected_target_index)
+				),
+				13
+			)
+		)
+	else:
+		panel_body.add_child(_panel_label("Selected: none", 13))
+
+	if visible_objects.is_empty():
+		panel_body.add_child(
+			_panel_label(
+				"Detailed target rows are waiting for the persistent session snapshot.",
+				13
+			)
+		)
+		return
+
+	for index in range(min(visible_objects.size(), 16)):
+		panel_body.add_child(_target_row_button(visible_objects[index], index))
+	if visible_objects.size() > 16:
+		panel_body.add_child(
+			_panel_label("+%s more visible object rows" % str(visible_objects.size() - 16), 13)
+		)
+
+
+func _target_row_button(target: Dictionary, index: int) -> Button:
+	var button := Button.new()
+	button.text = "%s. %s" % [str(index + 1), _target_summary(target, index)]
+	button.tooltip_text = _target_detail(target, index)
+	button.custom_minimum_size = Vector2(260.0, 42.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_select_target_index.bind(index))
+	if index == selected_target_index:
+		button.add_theme_color_override("font_color", Color(0.95, 0.82, 0.42))
+	return button
+
+
+func _visible_object_at(index: int) -> Dictionary:
+	if index >= 0 and index < visible_objects.size() and visible_objects[index] is Dictionary:
+		return visible_objects[index]
+	return {"index": index}
+
+
+func _target_summary(target: Dictionary, index: int) -> String:
+	var object_type := str(target.get("type", target.get("object_type", "object"))).strip_edges()
+	if object_type.is_empty():
+		object_type = "object"
+	var entry := int(target.get("entry", 0))
+	var guid := str(target.get("guid", ""))
+	var label := object_type
+	if entry > 0:
+		label += " entry " + str(entry)
+	elif not guid.is_empty():
+		label += " " + _short_guid(guid)
+	else:
+		label += " " + str(index + 1)
+	if target.has("distance"):
+		label += " | %.1fm" % float(target.get("distance", 0.0))
+	return label
+
+
+func _target_detail(target: Dictionary, index: int) -> String:
+	var parts: Array[String] = [
+		"index " + str(index + 1),
+		"type " + str(target.get("type", target.get("object_type", "object"))),
+		"entry " + str(target.get("entry", 0)),
+		"guid " + str(target.get("guid", "")),
+	]
+	if target.has("distance"):
+		parts.append("distance %.2f" % float(target.get("distance", 0.0)))
+	var position_text := _target_position_text(target)
+	if not position_text.is_empty():
+		parts.append(position_text)
+	return " | ".join(parts)
+
+
+func _target_position_text(target: Dictionary) -> String:
+	if target.has("x") and target.has("y") and target.has("z"):
+		return "pos %.2f, %.2f, %.2f" % [
+			float(target.get("x", 0.0)),
+			float(target.get("y", 0.0)),
+			float(target.get("z", 0.0)),
+		]
+	var position = target.get("position", {})
+	if position is Dictionary and position.has("x") and position.has("y") and position.has("z"):
+		return "pos %.2f, %.2f, %.2f" % [
+			float(position.get("x", 0.0)),
+			float(position.get("y", 0.0)),
+			float(position.get("z", 0.0)),
+		]
+	return ""
 
 
 func _build_quests_panel() -> void:
@@ -1740,6 +1977,30 @@ func _run_self_test() -> void:
 		"update":
 		{
 			"visible_object_count": 3,
+			"visible_objects":
+			[
+				{
+					"type": "creature",
+					"entry": 69,
+					"guid": "0xf130000045000daa",
+					"distance": 12.5,
+					"x": -8942.0,
+					"y": -128.0,
+					"z": 83.5,
+				},
+				{
+					"type": "creature",
+					"entry": 299,
+					"guid": "0xf13000012b000dab",
+					"distance": 18.0,
+				},
+				{
+					"type": "gameobject",
+					"entry": 55,
+					"guid": "0xf110000037000001",
+					"distance": 25.0,
+				},
+			],
 		},
 		"inventory":
 		{
@@ -1794,6 +2055,7 @@ func _run_self_test() -> void:
 
 	var no_target_result := synthetic_result.duplicate(true)
 	no_target_result["update"]["visible_object_count"] = 0
+	no_target_result["update"]["visible_objects"] = []
 	_apply_session_data(
 		synthetic_character, no_target_result, "Synthetic no-target world-session self-test."
 	)
@@ -1833,6 +2095,25 @@ func _run_self_test() -> void:
 		and actions_shell.visible
 		and actions_title != null
 		and actions_title.text == "Actions"
+	)
+	_show_session_panel("targets")
+	var targets_shell := _panel_shell("targets")
+	var targets_title: Label = session_panels.get("targets", {}).get("title", null)
+	var targets_body: VBoxContainer = session_panels.get("targets", {}).get("body", null)
+	var targets_panel_ok := (
+		targets_shell != null
+		and targets_shell.visible
+		and targets_title != null
+		and targets_title.text == "Targets"
+		and targets_body != null
+		and visible_objects.size() == 3
+		and _control_tree_text_contains(targets_body, "creature entry 69")
+		and _control_tree_text_contains(targets_body, "Visible objects: 3")
+	)
+	var target_frame_ok := (
+		target_frame_body != null
+		and _control_tree_text_contains(target_frame_body, "creature entry 69")
+		and _control_tree_text_contains(target_frame_body, "Open")
 	)
 	_show_session_panel("spells")
 	var spells_shell := _panel_shell("spells")
@@ -1928,7 +2209,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 9
+	var actions_ok := action_buttons.size() == 10
 	var shortcut_ok := shortcut_slots.size() == 12
 	var input_ok := (
 		no_target_key_ok
@@ -1941,6 +2222,8 @@ func _run_self_test() -> void:
 	var panel_ok := (
 		chat_panel_ok
 		and actions_panel_ok
+		and targets_panel_ok
+		and target_frame_ok
 		and spells_panel_ok
 		and quests_panel_ok
 		and map_panel_ok
@@ -1955,6 +2238,7 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "inventory=true quests=true tracker=true map_panel=true "
+				+ "targets=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
 			)
 			% [
@@ -1973,7 +2257,8 @@ func _run_self_test() -> void:
 		(
 			"WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s "
 			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
-			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s"
+			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
+			+ "targets_panel_ok=%s target_frame_ok=%s"
 		)
 		% [
 			str(marker_ok),
@@ -1985,6 +2270,8 @@ func _run_self_test() -> void:
 			str(inventory_panel_ok),
 			str(quest_tracker_ok),
 			str(map_panel_ok),
+			str(targets_panel_ok),
+			str(target_frame_ok),
 		]
 	)
 	push_error(self_test_error)
