@@ -22,6 +22,21 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Minimap And Map Snapshot Started (Codex UI lane)
+
+Goal: add an always-visible minimap-style status surface and richer map snapshot
+rendering to the active world-session HUD.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render session-provided map, zone, area, subzone, discovered-area count,
+  POI/marker rows, player position, selected target, and visible-object counts
+  without calling or editing the protocol bridge.
+- Keep live map discovery packets, minimap texture/world art, zone transitions,
+  tracking filters, pins, and local-only map asset integration in Claude's
+  live-session/data lane.
+
 ## 2026-07-02 - World Session Death And Respawn Panel (Codex UI lane)
 
 Context: a separate death/respawn simulation existed, but the active
