@@ -159,6 +159,27 @@ struct QuestGiverListProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct QuestGiverStatusProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    bool live_target_found = false;
+    bool target_has_position = false;
+    float target_x = 0;
+    float target_y = 0;
+    float target_z = 0;
+    bool logged_in_world = false;
+    bool status_query_sent = false;
+    bool status_response_seen = false;
+    std::uint16_t response_opcode = 0;
+    QuestGiverStatusSummary status;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct QuestGiverDetailsProbeResult
 {
     RealmInfo realm;
@@ -740,6 +761,16 @@ TrainerListProbeResult trainer_list_probe(
     FlowOptions options = {});
 
 QuestGiverListProbeResult questgiver_list_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::string const& target_name,
+    FlowOptions options = {});
+
+QuestGiverStatusProbeResult questgiver_status_probe(
     std::string const& host,
     std::string const& port,
     std::string const& account,

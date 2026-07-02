@@ -1581,6 +1581,26 @@ GossipMessageSummary parse_gossip_message_response(std::span<const std::uint8_t>
     return summary;
 }
 
+QuestGiverStatusSummary parse_questgiver_status_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    QuestGiverStatusSummary summary;
+    summary.payload_size = payload.size();
+    summary.questgiver_guid = read_u64_le(payload, offset);
+    summary.status = read_u8(payload, offset);
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("questgiver status parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
+std::vector<std::uint8_t> build_questgiver_status_query_payload(std::uint64_t guid)
+{
+    return build_raw_guid_payload(guid);
+}
+
 std::vector<std::uint8_t> build_questgiver_query_quest_payload(std::uint64_t guid, std::uint32_t quest_id)
 {
     std::vector<std::uint8_t> payload;
@@ -2600,6 +2620,12 @@ bool world_packet_self_test()
     gossip_message_payload.insert(gossip_message_payload.end(), {'B', 0});      // title
     GossipMessageSummary gossip_message = parse_gossip_message_response(gossip_message_payload);
 
+    std::vector<std::uint8_t> quest_status_payload;
+    append_u64_le(quest_status_payload, 0xF130000123000007ULL);
+    append_u8(quest_status_payload, 8);
+    QuestGiverStatusSummary quest_status = parse_questgiver_status_response(quest_status_payload);
+    std::vector<std::uint8_t> quest_status_query_payload = build_questgiver_status_query_payload(0xF130000123000007ULL);
+
     std::vector<std::uint8_t> quest_details_payload;
     append_u64_le(quest_details_payload, 0xF130000123000003ULL); // npc guid
     append_u64_le(quest_details_payload, 0);                     // divider
@@ -2851,6 +2877,10 @@ bool world_packet_self_test()
         && gossip_message.quests[0].quest_id == 62
         && gossip_message.quests[1].quest_id == 63
         && gossip_message.quests[1].quest_level == 6
+        && quest_status.parsed
+        && quest_status.questgiver_guid == 0xF130000123000007ULL
+        && quest_status.status == 8
+        && quest_status_query_payload.size() == 8
         && quest_details.parsed
         && quest_details.quest_id == 783
         && quest_details.reward_choice_count == 1

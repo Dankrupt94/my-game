@@ -2254,3 +2254,35 @@ Plan:
   `ProtocolClientBridge`.
 - Validate against the local starter fixture target entry `823`, with output
   kept to ids, GUIDs, status numbers, and booleans only.
+
+Result:
+
+- Added `QuestGiverStatusSummary`, status-query payload support, and parser
+  self-test coverage for raw GUID plus status byte.
+- Added native `questgiver_status_probe(...)` and helper command
+  `--questgiver-status`.
+- Exposed `questgiver_status_probe(_selector)` through the Godot native
+  extension and `ProtocolClientBridge`, with helper fallback parsing.
+- Added `tools/quest_status_bridge_smoke.gd`.
+- Updated the Stage 17 parity matrix, acceptance gate, and world-session packet
+  notes with the status enum and validation evidence.
+
+Validation:
+
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `native/protocol_client/build-compat/acore_protocol_client --self-test`
+  passed, including synthetic quest-giver status parsing.
+- Fixture reset for `Codexstage` / quest `783` reported zero active/rewarded
+  rows before the status probe.
+- Native `--questgiver-status` passed against target entry `823`, receiving
+  `SMSG_QUESTGIVER_STATUS` (`0x183`) and status `2`.
+- `godot-4 --headless --path . --script res://tools/quest_status_bridge_smoke.gd`
+  passed through the Godot native extension with status `2`.
+- `godot-4 --headless --path . --script res://tools/protocol_bridge_smoke.gd`
+  passed after the bridge addition.
+
+Remaining work:
+
+- Multi-status marker refresh, marker transitions after quest mutations,
+  map/minimap marker plumbing, persistent-session integration, and UI-lane
+  rendering.

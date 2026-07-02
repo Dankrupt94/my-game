@@ -376,6 +376,21 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
   item-started quests, full-bag/full-log checks, map overlays, in-world click
   targeting, persistent sessions, and local-only quest text/icon rendering.
 
+### 2026-07-01 - Quest Giver Status Marker Probe
+
+- Added read-only `CMSG_QUESTGIVER_STATUS_QUERY` / `SMSG_QUESTGIVER_STATUS`
+  support through the native helper, Godot GDExtension, and
+  `ProtocolClientBridge`.
+- The probe resolves a live visible quest-giver target, sends the raw GUID, and
+  parses the returned server-owned `DIALOG_STATUS_*` byte for future in-world
+  quest markers.
+- Native `--questgiver-status` passed against fixture starter entry `823`,
+  receiving opcode `0x183` and status `2`.
+- `tools/quest_status_bridge_smoke.gd` passed through the Godot native extension.
+- Remaining marker parity: multi-status refresh, map/minimap marker plumbing,
+  marker state transitions after accept/reward/abandon, and persistent-session
+  integration.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

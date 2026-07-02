@@ -27,6 +27,7 @@ constexpr std::uint32_t CMSG_LOOT = 0x15D;
 constexpr std::uint32_t CMSG_LOOT_MONEY = 0x15E;
 constexpr std::uint32_t CMSG_LOOT_RELEASE = 0x15F;
 constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
+constexpr std::uint32_t CMSG_QUESTGIVER_STATUS_QUERY = 0x182;
 constexpr std::uint32_t CMSG_QUESTGIVER_HELLO = 0x184;
 constexpr std::uint32_t CMSG_QUESTGIVER_QUERY_QUEST = 0x186;
 constexpr std::uint32_t CMSG_QUESTGIVER_ACCEPT_QUEST = 0x189;
@@ -79,6 +80,7 @@ constexpr std::uint16_t SMSG_SELL_ITEM = 0x1A1;
 constexpr std::uint16_t SMSG_BUY_ITEM = 0x1A4;
 constexpr std::uint16_t SMSG_BUY_FAILED = 0x1A5;
 constexpr std::uint16_t SMSG_TRAINER_LIST = 0x1B1;
+constexpr std::uint16_t SMSG_QUESTGIVER_STATUS = 0x183;
 constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_LIST = 0x185;
 constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_DETAILS = 0x188;
 constexpr std::uint16_t SMSG_QUESTGIVER_REQUEST_ITEMS = 0x18B;
@@ -447,6 +449,14 @@ struct GossipMessageSummary
     std::vector<GossipQuestItemSummary> quests;
 };
 
+struct QuestGiverStatusSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t questgiver_guid = 0;
+    std::uint8_t status = 0;
+};
+
 struct QuestRewardItemSummary
 {
     std::uint32_t item_id = 0;
@@ -647,10 +657,12 @@ LootResponseSummary parse_loot_response(std::span<const std::uint8_t> payload);
 TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> payload);
 QuestGiverListSummary parse_questgiver_quest_list_response(std::span<const std::uint8_t> payload);
 GossipMessageSummary parse_gossip_message_response(std::span<const std::uint8_t> payload);
+QuestGiverStatusSummary parse_questgiver_status_response(std::span<const std::uint8_t> payload);
 QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const std::uint8_t> payload);
 QuestGiverOfferRewardSummary parse_questgiver_offer_reward_response(std::span<const std::uint8_t> payload);
 QuestGiverRequestItemsSummary parse_questgiver_request_items_response(std::span<const std::uint8_t> payload);
 QuestGiverQuestCompleteSummary parse_questgiver_quest_complete_response(std::span<const std::uint8_t> payload);
+std::vector<std::uint8_t> build_questgiver_status_query_payload(std::uint64_t guid);
 std::vector<std::uint8_t> build_questgiver_query_quest_payload(std::uint64_t guid, std::uint32_t quest_id);
 std::vector<std::uint8_t> build_questgiver_accept_quest_payload(std::uint64_t guid, std::uint32_t quest_id);
 std::vector<std::uint8_t> build_questgiver_complete_quest_payload(std::uint64_t guid, std::uint32_t quest_id);

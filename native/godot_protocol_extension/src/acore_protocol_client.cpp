@@ -665,6 +665,12 @@ void AcoreProtocolClient::_bind_methods()
         D_METHOD("questgiver_list_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "target_name"),
         &AcoreProtocolClient::questgiver_list_probe_selector);
     ClassDB::bind_method(
+        D_METHOD("questgiver_status_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
+        &AcoreProtocolClient::questgiver_status_probe);
+    ClassDB::bind_method(
+        D_METHOD("questgiver_status_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "target_name"),
+        &AcoreProtocolClient::questgiver_status_probe_selector);
+    ClassDB::bind_method(
         D_METHOD("questgiver_details_probe", "host", "port", "account", "password", "character_name", "target_entry", "quest_id", "target_name"),
         &AcoreProtocolClient::questgiver_details_probe);
     ClassDB::bind_method(
@@ -1100,6 +1106,77 @@ Dictionary AcoreProtocolClient::questgiver_details_probe_selector(
         result["reward_spell"] = static_cast<int>(flow.details.reward_spell);
         result["reward_choice_items"] = quest_reward_item_array(flow.details.reward_choice_items);
         result["reward_items"] = quest_reward_item_array(flow.details.reward_items);
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::questgiver_status_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    String const& target_name)
+{
+    return questgiver_status_probe_selector(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        String::num_int64(target_entry),
+        target_name);
+}
+
+Dictionary AcoreProtocolClient::questgiver_status_probe_selector(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    String const& target_selector,
+    String const& target_name)
+{
+    try
+    {
+        std::uint64_t const selector = parse_target_selector(target_selector, "questgiver status target selector");
+        acore_protocol::QuestGiverStatusProbeResult flow = acore_protocol::questgiver_status_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            selector,
+            to_std_string(target_name));
+
+        Dictionary result;
+        result["ok"] = flow.live_target_found && flow.status_query_sent && flow.status_response_seen;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["live_target_found"] = flow.live_target_found;
+        result["target_has_position"] = flow.target_has_position;
+        result["target_x"] = flow.target_x;
+        result["target_y"] = flow.target_y;
+        result["target_z"] = flow.target_z;
+        result["logged_in_world"] = flow.logged_in_world;
+        result["status_query_sent"] = flow.status_query_sent;
+        result["status_response_seen"] = flow.status_response_seen;
+        result["response_opcode"] = static_cast<int>(flow.response_opcode);
+        result["status"] = static_cast<int>(flow.status.status);
+        result["status_guid"] = guid_to_hex(flow.status.questgiver_guid);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);

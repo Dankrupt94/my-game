@@ -463,6 +463,8 @@ Relevant opcodes:
 
 | Opcode | Value | Stage 17 support |
 | --- | ---: | --- |
+| `CMSG_QUESTGIVER_STATUS_QUERY` | `0x182` | Sends selected visible quest-giver GUID for marker status lookup |
+| `SMSG_QUESTGIVER_STATUS` | `0x183` | Parses raw GUID plus one `DIALOG_STATUS_*` byte |
 | `CMSG_QUESTGIVER_HELLO` | `0x184` | Sends selected quest-giver GUID after moving within NPC interaction range |
 | `SMSG_QUESTGIVER_QUEST_LIST` | `0x185` | Parses standalone offered-quest rows when the server uses this response |
 | `CMSG_QUESTGIVER_QUERY_QUEST` | `0x186` | Sends selected quest-giver GUID and quest id for detail lookup |
@@ -482,6 +484,35 @@ Quest-giver hello request payload:
 | Field | Size | Notes |
 | --- | ---: | --- |
 | quest-giver GUID | 8 | Raw little-endian object GUID |
+
+Quest-giver status query payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| quest-giver GUID | 8 | Raw little-endian object GUID |
+
+Quest-giver status response payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| quest-giver GUID | 8 | Raw little-endian object GUID |
+| status | 1 | AzerothCore `DIALOG_STATUS_*` value |
+
+Known normal status values from local AzerothCore:
+
+| Value | Meaning |
+| ---: | --- |
+| 0 | None |
+| 1 | Unavailable |
+| 2 | Low-level available |
+| 3 | Low-level reward, repeatable |
+| 4 | Low-level available, repeatable |
+| 5 | Incomplete |
+| 6 | Reward, repeatable |
+| 7 | Available, repeatable |
+| 8 | Available |
+| 9 | Reward without minimap dot |
+| 10 | Reward |
 
 Quest detail request payload:
 
@@ -583,6 +614,9 @@ Observed Stage 17 result:
   entry `197`, sending complete/request/choose-reward packets, receiving
   `SMSG_QUESTGIVER_QUEST_COMPLETE`, confirming the active quest log was empty
   afterward, and observing a local rewarded-row audit before cleanup.
+- `--questgiver-status` and `tools/quest_status_bridge_smoke.gd` passed by
+  querying fixture starter entry `823`, receiving `SMSG_QUESTGIVER_STATUS`
+  (`0x183`), and parsing server status `2` from the clean fixture.
 - The Godot surface and helper fallback intentionally keep committed output to
   ids, flags, counts, and money/xp values. Quest title/body/objective text and
   icons remain a future local-only data/asset pipeline concern.
@@ -594,8 +628,8 @@ Observed Stage 17 result:
 Remaining quest packet work:
 
 - Add full quest-log UI integration, share packet support, failure-path coverage,
-  full-log/full-bag turn-in checks, and reward-choice UI beyond the no-choice
-  starter fixture.
+  full-log/full-bag turn-in checks, reward-choice UI beyond the no-choice
+  starter fixture, and multi-status marker refresh for visible quest givers.
 - Track objective progress from server state instead of treating detail packets
   as quest-log state.
 - Add in-world click targeting and persistent-session integration.
