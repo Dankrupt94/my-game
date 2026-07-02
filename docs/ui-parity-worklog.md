@@ -22,6 +22,20 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Social Panel Started (Codex UI lane)
+
+Goal: add a resident social-window surface to the active world-session HUD so
+safe friends, party, guild, and invite snapshots can display in the normal
+gameplay view.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render session-provided social dictionaries/arrays without calling or editing
+  the protocol bridge.
+- Keep invite, friend, ignore, group, and guild actions in Claude's
+  live-session lane.
+
 ## 2026-07-02 - World Session Trainer Panel (Codex UI lane)
 
 Context: Stage 17 has live trainer proof scenes, but the active world-session
