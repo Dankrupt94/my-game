@@ -2860,6 +2860,302 @@ QuestGiverAcceptProbeResult questgiver_accept_probe(
     return result;
 }
 
+QuestGiverRewardProbeResult questgiver_reward_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::uint32_t quest_id,
+    std::string const& target_name,
+    FlowOptions options)
+{
+    if (target_guid == 0)
+    {
+        throw std::runtime_error("questgiver target guid or entry must be non-zero");
+    }
+    if (quest_id == 0)
+    {
+        throw std::runtime_error("questgiver reward probe requires a non-zero quest id");
+    }
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+
+    QuestGiverRewardProbeResult result;
+    result.realm = session->realm;
+    result.character = selected;
+    result.target_entry = target_entry_from_selector(target_guid);
+    result.target_name = target_name;
+    result.quest_id = quest_id;
+
+    bool logged_in_world = false;
+    for (int i = 0; i < 160; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            result.visible_objects.insert(
+                result.visible_objects.end(),
+                update.visible_objects.begin(),
+                update.visible_objects.end());
+
+            if (!result.live_target_found)
+            {
+                std::optional<VisibleObjectSummary> target = choose_visible_target(result.visible_objects, target_guid, login);
+                if (target)
+                {
+                    result.target_guid = target->guid;
+                    result.target_entry = target->entry;
+                    result.target_has_position = target->has_position;
+                    result.target_x = target->x;
+                    result.target_y = target->y;
+                    result.target_z = target->z;
+                    result.live_target_found = true;
+                }
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            logged_in_world = true;
+            if (result.live_target_found)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (!logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before questgiver reward probe");
+    }
+    if (!result.live_target_found)
+    {
+        (void)request_graceful_logout(*session, options);
+        return result;
+    }
+
+    if (result.target_has_position)
+    {
+        float dx = login.x - result.target_x;
+        float dy = login.y - result.target_y;
+        float distance = std::sqrt(dx * dx + dy * dy);
+        if (distance < 0.01f)
+        {
+            dx = 1.0f;
+            dy = 0.0f;
+            distance = 1.0f;
+        }
+
+        MovementSample start;
+        start.flags = 0x00000001;
+        start.flags2 = 0;
+        start.time = movement_timestamp_ms();
+        start.x = login.x;
+        start.y = login.y;
+        start.z = login.z;
+        start.orientation = facing_angle(start.x, start.y, result.target_x, result.target_y);
+        start.fall_time = 0;
+
+        MovementSample approach = start;
+        approach.flags = 0;
+        approach.time = movement_timestamp_ms();
+        approach.x = result.target_x + (dx / distance) * 1.5f;
+        approach.y = result.target_y + (dy / distance) * 1.5f;
+        approach.z = result.target_z;
+        approach.orientation = facing_angle(approach.x, approach.y, result.target_x, result.target_y);
+
+        write_world_packet(session->socket.get(), MSG_MOVE_START_FORWARD, build_movement_payload(selected.guid, start), &session->crypt);
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        approach.time = movement_timestamp_ms();
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, approach), &session->crypt);
+        result.approach_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.selection_sent = true;
+    write_world_packet(session->socket.get(), CMSG_QUESTGIVER_HELLO, build_raw_guid_payload(result.target_guid), &session->crypt);
+    result.questgiver_hello_sent = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+    // Put the quest in the log first so the completion request is meaningful.
+    write_world_packet(session->socket.get(), CMSG_QUESTGIVER_ACCEPT_QUEST, build_questgiver_accept_quest_payload(result.target_guid, quest_id), &session->crypt);
+    result.accept_sent = true;
+    for (int i = 0; i < 80; ++i)
+    {
+        auto packet = read_world_packet_optional(session->socket.get(), &session->crypt, options.trace_world_packets, 250);
+        if (!packet)
+        {
+            continue;
+        }
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload, packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT, selected.guid);
+            for (QuestLogSlotSummary const& slot : update.quest_log.slots)
+            {
+                if (slot.quest_id == quest_id)
+                {
+                    result.quest_in_log_after_accept = true;
+                    result.accepted_slot = slot.slot;
+                }
+            }
+            if (result.quest_in_log_after_accept)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_QUESTGIVER_QUEST_INVALID)
+        {
+            result.quest_invalid_seen = true;
+            break;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            continue;
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    // Ask the server for the completion screen (non-mutating). A completable quest
+    // answers SMSG_QUESTGIVER_OFFER_REWARD; an incomplete one answers
+    // SMSG_QUESTGIVER_REQUEST_ITEMS. We never send CMSG_QUESTGIVER_CHOOSE_REWARD,
+    // so the quest is not turned in and stays abandonable.
+    if (result.quest_in_log_after_accept)
+    {
+        write_world_packet(session->socket.get(), CMSG_QUESTGIVER_COMPLETE_QUEST, build_questgiver_complete_quest_payload(result.target_guid, quest_id), &session->crypt);
+        result.complete_request_sent = true;
+        for (int i = 0; i < 80; ++i)
+        {
+            auto packet = read_world_packet_optional(session->socket.get(), &session->crypt, options.trace_world_packets, 250);
+            if (!packet)
+            {
+                continue;
+            }
+            if (packet->opcode == SMSG_QUESTGIVER_OFFER_REWARD)
+            {
+                result.offer_reward = parse_questgiver_offer_reward_response(packet->payload);
+                result.offer_reward_seen = result.offer_reward.parsed;
+                result.response_opcode = packet->opcode;
+                break;
+            }
+            if (packet->opcode == SMSG_QUESTGIVER_REQUEST_ITEMS)
+            {
+                result.request_items_seen = true;
+                result.response_opcode = packet->opcode;
+                break;
+            }
+            if (packet->opcode == SMSG_QUESTGIVER_QUEST_INVALID)
+            {
+                result.quest_invalid_seen = true;
+                result.response_opcode = packet->opcode;
+                break;
+            }
+            if (packet->opcode == SMSG_TIME_SYNC_REQ)
+            {
+                answer_time_sync_request(*session, *packet);
+                continue;
+            }
+            result.skipped_opcodes.push_back(packet->opcode);
+        }
+    }
+
+    // Abandon the quest to restore the character quest log to its prior state.
+    if (result.quest_in_log_after_accept && result.accepted_slot >= 0)
+    {
+        write_world_packet(
+            session->socket.get(),
+            CMSG_QUESTLOG_REMOVE_QUEST,
+            build_questlog_remove_quest_payload(static_cast<std::uint8_t>(result.accepted_slot)),
+            &session->crypt);
+        result.remove_sent = true;
+
+        for (int i = 0; i < 80; ++i)
+        {
+            auto packet = read_world_packet_optional(session->socket.get(), &session->crypt, options.trace_world_packets, 250);
+            if (!packet)
+            {
+                continue;
+            }
+            if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+            {
+                UpdateObjectSummary update = parse_update_object_summary(
+                    packet->payload, packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT, selected.guid);
+                for (QuestLogSlotSummary const& slot : update.quest_log.slots)
+                {
+                    if (slot.slot == result.accepted_slot && slot.quest_id == 0)
+                    {
+                        result.quest_removed_after_remove = true;
+                    }
+                }
+                if (result.quest_removed_after_remove)
+                {
+                    break;
+                }
+                continue;
+            }
+            if (packet->opcode == SMSG_TIME_SYNC_REQ)
+            {
+                answer_time_sync_request(*session, *packet);
+                continue;
+            }
+            result.skipped_opcodes.push_back(packet->opcode);
+        }
+    }
+
+    if (result.approach_movement_sent)
+    {
+        MovementSample back;
+        back.flags = 0;
+        back.flags2 = 0;
+        back.time = movement_timestamp_ms();
+        back.x = login.x;
+        back.y = login.y;
+        back.z = login.z;
+        back.orientation = login.orientation;
+        back.fall_time = 0;
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, back), &session->crypt);
+        result.return_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+
+    (void)request_graceful_logout(*session, options);
+    return result;
+}
+
 VendorListProbeResult vendor_list_probe(
     std::string const& host,
     std::string const& port,

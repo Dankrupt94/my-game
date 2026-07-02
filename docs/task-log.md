@@ -1917,3 +1917,52 @@ Remaining work:
   targeting, and persistent-session integration.
 - The already-landed native quest-details probe still needs its Godot
   extension/bridge/scene exposure.
+
+## 2026-07-02 - Stage 17 Quest Complete / Turn-in Slice (native)
+
+Goal: add the quest turn-in protocol step — request the completion/reward screen
+from a quest ender and parse the reward offer — without performing the
+irreversible turn-in on the shared test character.
+
+Result:
+
+- Opcode fix: `SMSG_QUESTGIVER_QUEST_INVALID` was wrong (`0x18A`, which is
+  actually `CMSG_QUESTGIVER_COMPLETE_QUEST`); corrected to `0x18F` per the
+  AzerothCore `Opcodes.h`. Added `SMSG_QUESTGIVER_REQUEST_ITEMS` (0x18B),
+  `SMSG_QUESTGIVER_OFFER_REWARD` (0x18D), `SMSG_QUESTGIVER_QUEST_COMPLETE`
+  (0x191), `CMSG_QUESTGIVER_COMPLETE_QUEST` (0x18A),
+  `CMSG_QUESTGIVER_REQUEST_REWARD` (0x18C), `CMSG_QUESTGIVER_CHOOSE_REWARD`
+  (0x18E).
+- Builders for complete-quest / request-reward / choose-reward, plus a
+  `SMSG_QUESTGIVER_OFFER_REWARD` parser matching `PlayerMenu::SendQuestGiverOfferReward`
+  (emotes precede reward items; choice items, reward items, money, xp, honor,
+  spell). Quest/reward text read for parsing but never stored or printed.
+- `questgiver_reward_probe`: scan/approach/select/hello, accept the quest (to
+  put it in the log), send the non-mutating `CMSG_QUESTGIVER_COMPLETE_QUEST`,
+  classify the response (offer-reward / request-items / invalid), then abandon
+  the quest to restore the log. It never sends `CMSG_QUESTGIVER_CHOOSE_REWARD`,
+  so no irreversible turn-in happens. `--questgiver-reward` CLI added.
+
+Validation:
+
+- `--self-test` passes (`WORLD_PACKET_SELF_TEST_OK`) with a new synthetic
+  `SMSG_QUESTGIVER_OFFER_REWARD` packet (quest 783, choice item 100, reward item
+  200x2, 1500 money, 500 xp) and complete/request-reward/choose-reward builder
+  size assertions.
+- Live vs `Codexstage` (level 10 Human, Northshire) against Willem (823),
+  quests 6 and 18: `live_target_found=1`, `accept_sent=1`,
+  `quest_invalid_seen=1` — the server answered `SMSG_QUESTGIVER_QUEST_INVALID`
+  (0x18F), confirming the corrected opcode is detected live (6/18 are later in
+  the Northshire chain and not yet takeable, so the accept is correctly
+  rejected). No state changed.
+
+Remaining work:
+
+- Live `SMSG_QUESTGIVER_OFFER_REWARD` end-to-end needs a completable quest whose
+  ender NPC is within visibility of the test character (no talk-to-complete quest
+  spawns near Codexstage), or a disposable quest-state fixture like
+  `prepare_trainer_buy_fixture.py`.
+- The irreversible turn-in (`CMSG_QUESTGIVER_CHOOSE_REWARD`) builder is
+  self-test-covered; live end-to-end turn-in should run on a disposable fixture
+  character (trainer-buy-success precedent).
+- Godot extension/bridge/scene exposure of the reward probe (this lane, next).
