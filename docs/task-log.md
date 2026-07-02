@@ -1,5 +1,21 @@
 # Task Log
 
+## 2026-07-02 - World Session Action Bar Data Started
+
+Goal: make the persistent world-session action bar render safe session action
+slot dictionaries instead of staying purely static, without touching Claude's
+native/protocol/bridge/live-session files.
+
+Plan:
+
+- Normalize safe action-slot dictionaries from selected character or enter-world
+  session data when present.
+- Render the first twelve session action slots into the bottom HUD action bar
+  using slot number, action id, and action type only.
+- Keep the existing fallback labels when live action-slot data is absent.
+- Extend the resident `Actions` panel with the same safe slot data.
+- Validate with headless Godot world-session checks.
+
 ## 2026-07-02 - World Session Target Panel Started
 
 Goal: add UI-lane target visibility to the persistent world-session HUD so
