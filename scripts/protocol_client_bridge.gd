@@ -414,6 +414,69 @@ func questgiver_reward_probe_selector(
 	return parsed
 
 
+func questgiver_turnin_probe(
+	character_name: String = "Codexstage",
+	target_entry: int = 197,
+	quest_id: int = 783,
+	reward_index: int = 0,
+	target_name: String = "Nearby Quest Ender",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	return questgiver_turnin_probe_selector(character_name, str(target_entry), quest_id, reward_index, target_name, host, port)
+
+
+func questgiver_turnin_probe_selector(
+	character_name: String = "Codexstage",
+	target_selector: String = "197",
+	quest_id: int = 783,
+	reward_index: int = 0,
+	target_name: String = "Nearby Quest Ender",
+	host: String = "127.0.0.1",
+	port: String = "3724") -> Dictionary:
+	var native_result := _run_native_questgiver_turnin_probe_selector(character_name, target_selector, quest_id, reward_index, target_name, host, port)
+	if not native_result.is_empty():
+		return native_result
+
+	var helper := _helper_path()
+	var env_file := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
+	if not FileAccess.file_exists(helper):
+		return _failure("Native protocol helper is not built yet: " + helper)
+	if not FileAccess.file_exists(env_file):
+		return _failure("Local protocol account file is missing: " + env_file)
+
+	var credentials := _load_protocol_credentials(env_file)
+	if not bool(credentials.get("ok", false)):
+		return credentials
+
+	var output: Array = []
+	var exit_code := _execute_helper_with_password(
+		helper,
+		PackedStringArray([
+			"--questgiver-turnin",
+			host,
+			port,
+			str(credentials["account"]),
+			character_name,
+			target_selector,
+			str(quest_id),
+			target_name,
+			str(reward_index),
+		]),
+		str(credentials["password"]),
+		output)
+	var text := "\n".join(output)
+	var parsed := _parse_questgiver_turnin_output(text)
+	parsed["exit_code"] = exit_code
+	parsed["output"] = text.strip_edges()
+	parsed["source"] = "helper process"
+	parsed["ok"] = exit_code == 0 \
+		and bool(parsed.get("offer_reward_seen", false)) \
+		and bool(parsed.get("choose_reward_sent", false)) \
+		and bool(parsed.get("quest_complete_seen", false)) \
+		and bool(parsed.get("quest_removed_from_log", false))
+	return parsed
+
+
 func trainer_buy_spell_probe(
 	character_name: String = "Codexstage",
 	target_entry: int = 911,
@@ -1549,6 +1612,43 @@ func _run_native_questgiver_reward_probe_selector(
 	return reward_parsed
 
 
+func _run_native_questgiver_turnin_probe_selector(
+	character_name: String,
+	target_selector: String,
+	quest_id: int,
+	reward_index: int,
+	target_name: String,
+	host: String,
+	port: String) -> Dictionary:
+	var credentials := _load_native_credentials()
+	if not credentials.get("available", false):
+		return credentials.get("result", {})
+
+	var client: Object = credentials["client"]
+	if not client.has_method("questgiver_turnin_probe_selector"):
+		return {}
+
+	var result = client.call(
+		"questgiver_turnin_probe_selector",
+		host,
+		port,
+		credentials["account"],
+		credentials["password"],
+		character_name,
+		target_selector,
+		quest_id,
+		reward_index,
+		target_name)
+	if typeof(result) != TYPE_DICTIONARY:
+		return _failure("Native Godot protocol client returned an unexpected questgiver turn-in result")
+
+	var turnin_parsed: Dictionary = result
+	turnin_parsed["source"] = "Godot native extension"
+	turnin_parsed["exit_code"] = 0 if bool(turnin_parsed.get("ok", false)) else 1
+	turnin_parsed["output"] = JSON.stringify(_redacted_result(turnin_parsed))
+	return turnin_parsed
+
+
 func _run_native_trainer_list_probe_selector(
 	character_name: String,
 	target_selector: String,
@@ -2640,6 +2740,54 @@ func _parse_questgiver_reward_output(output: String) -> Dictionary:
 				"item_id": _extract_int_field(line, "item_id="),
 				"item_count": _extract_int_field(line, "count="),
 			})
+	return result
+
+
+func _parse_questgiver_turnin_output(output: String) -> Dictionary:
+	var result := {
+		"auth_flow_ok": false,
+		"live_target_found": false,
+		"quest_in_log_before": false,
+		"quest_slot_before": -1,
+		"questgiver_hello_sent": false,
+		"complete_request_sent": false,
+		"offer_reward_seen": false,
+		"choose_reward_sent": false,
+		"quest_complete_seen": false,
+		"quest_removed_from_log": false,
+		"complete_quest_id": 0,
+		"complete_xp": 0,
+		"complete_money": 0,
+		"response_opcode": 0,
+		"target_guid": "0x0",
+		"target_entry": 0,
+		"quest_id": 0,
+		"reward_index": 0,
+	}
+	for raw_line in output.split("\n"):
+		var line := raw_line.strip_edges()
+		if line.begins_with("AUTH_FLOW_OK"):
+			result["auth_flow_ok"] = true
+			result["realm_line"] = line
+		elif line.begins_with("QUESTGIVER_TURNIN_PROBE"):
+			result["character_name"] = _extract_quoted_field(line, "character=\"")
+			result["target_guid"] = _extract_token_after(line, "target_guid=")
+			result["target_entry"] = _extract_int_field(line, "target_entry=")
+			result["quest_id"] = _extract_int_field(line, "quest_id=")
+			result["reward_index"] = _extract_int_field(line, "reward_index=")
+			result["live_target_found"] = _extract_int_field(line, "live_target_found=") == 1
+			result["quest_in_log_before"] = _extract_int_field(line, "quest_in_log_before=") == 1
+			result["quest_slot_before"] = _extract_int_field(line, "quest_slot_before=")
+			result["questgiver_hello_sent"] = _extract_int_field(line, "questgiver_hello_sent=") == 1
+			result["complete_request_sent"] = _extract_int_field(line, "complete_request_sent=") == 1
+			result["offer_reward_seen"] = _extract_int_field(line, "offer_reward_seen=") == 1
+			result["choose_reward_sent"] = _extract_int_field(line, "choose_reward_sent=") == 1
+			result["quest_complete_seen"] = _extract_int_field(line, "quest_complete_seen=") == 1
+			result["quest_removed_from_log"] = _extract_int_field(line, "quest_removed_from_log=") == 1
+			result["complete_quest_id"] = _extract_int_field(line, "complete_quest_id=")
+			result["complete_xp"] = _extract_int_field(line, "complete_xp=")
+			result["complete_money"] = _extract_int_field(line, "complete_money=")
+			result["response_opcode"] = _extract_hex_field(line, "response_opcode=0x")
 	return result
 
 

@@ -2018,8 +2018,24 @@ Validation:
   the server recorded the turn-in) then restored `Codexstage` to a clean slate
   (`status=None`, `rewarded=0`). No quest/reward text stored.
 
+Godot exposure (same day):
+
+- Extension binding `questgiver_turnin_probe(_selector)`, bridge methods
+  `questgiver_turnin_probe(_selector)` (native + `--questgiver-turnin` helper
+  fallback with a text parser), and `scenes/stage17_questgiver_turnin_view.tscn`
+  showing the offer/choose/complete/clear steps and completion xp/money.
+- `./tools/build_godot_protocol_extension_compat.sh` rebuilt the extension.
+- Flow: `python3 tools/prepare_quest_turnin_fixture.py` (setup) →
+  `ACORE_QUESTGIVER_TURNIN_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_questgiver_turnin_view.tscn`
+  → `python3 tools/prepare_quest_turnin_fixture.py --reset`. The self-test passed
+  through the native extension: `QUESTGIVER_TURNIN_SELF_TEST_OK quest_id=783
+  xp=10` (offer/chose/complete/cleared all true); reset then reported
+  `rewarded_before=1` and restored a clean slate. The fixture is run from the
+  shell around the scene because Godot's confined runtime lacks the mysql client
+  (same split as the trainer-buy-success self-test).
+
 Remaining work:
 
-- Godot extension/bridge/scene exposure of the turn-in probe (this lane, next).
 - Quest objective progress (`SMSG_QUESTUPDATE_ADD_KILL`/`ADD_ITEM`), quest-log UI,
   in-world click targeting, and persistent-session integration.
+- The already-landed native quest-details probe still needs Godot exposure.
