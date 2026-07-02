@@ -1,5 +1,22 @@
 # Task Log
 
+## 2026-07-02 - World Session Target Panel Started
+
+Goal: add UI-lane target visibility to the persistent world-session HUD so
+future live visible-object snapshots can drive a real target frame and target
+list without touching Claude's native/protocol/bridge/live-session files.
+
+Plan:
+
+- Add a compact always-visible target frame that shows selected target state.
+- Add a resident `Targets` panel using the existing movable/resizable
+  world-session panel system.
+- Normalize safe visible-object dictionaries from session data when available,
+  while preserving the current count-only fallback.
+- Keep the UI numeric-only for now: target index, type, entry/id, GUID,
+  distance/position when present, and visible-object count.
+- Validate with headless Godot world-session checks.
+
 ## 2026-07-02 - World Session Map Panel Started
 
 Goal: add a UI-lane resident map panel to the persistent world-session HUD so
