@@ -22,6 +22,39 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-01 - Movable World Session HUD Layout (Codex UI lane)
+
+Context: the world-session HUD panels existed inside the active game view, but
+they were fixed in the top HUD flow. A playable client needs the player-facing
+panels to move and remember their placement.
+
+Result:
+
+- Moved the world-session panel shell into an overlay so it can float above the
+  world view instead of taking space in the HUD stack.
+- Added drag handling on the panel header, grid snapping, viewport clamping, and
+  automatic layout save after dropping the panel.
+- Added `user://world-session-layout.cfg` for normal layout persistence and
+  `user://world-session-layout-self-test.cfg` for temporary self-test storage.
+- Added a `Reset HUD` action inside the Options panel to restore the default
+  panel position and remove the saved layout file.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_LAYOUT_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` saves a snapped panel position, reloads
+  it, resets to default, and confirms the temporary layout file is removed.
+- `ACORE_WORLD_SESSION_SELF_TEST=1` and
+  `ACORE_WORLD_SESSION_KEYBIND_SELF_TEST=1` still pass after the overlay
+  refactor.
+
+Remaining work:
+
+- Add multiple independently movable panels once live chat, inventory,
+  spellbook, quest, map, vendor, trainer, and combat surfaces are docked into
+  the world-session HUD.
+- Add full action-bar paging and drag/drop action placement.
+
 ## 2026-07-01 - World Session HUD Panels (Codex UI lane)
 
 Context: the world-session shell had buttons for chat, spells, actions, quests,
@@ -54,7 +87,7 @@ Remaining work:
 
 - Feed live chat, spellbook, action-button, quest, inventory, vendor, trainer,
   and combat data into these panels once the persistent session bridge is ready.
-- Add draggable/movable panel layout persistence and full action-bar paging.
+- Add full action-bar paging and drag/drop action placement.
 
 ## 2026-07-01 - World Session Keybinding Input (Codex UI lane)
 

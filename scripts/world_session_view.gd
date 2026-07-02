@@ -9,6 +9,11 @@ const WORLD_TO_GODOT_SCALE := 0.02
 const GRID_EXTENT := 220
 const GRID_STEP := 20
 const MARKER_MOVE_SPEED := 14.0
+const WORLD_SESSION_LAYOUT_FILE_PATH := "user://world-session-layout.cfg"
+const WORLD_SESSION_LAYOUT_SELF_TEST_FILE_PATH := "user://world-session-layout-self-test.cfg"
+const PANEL_DEFAULT_POSITION := Vector2(18.0, 156.0)
+const PANEL_DEFAULT_SIZE := Vector2(560.0, 260.0)
+const PANEL_DRAG_GRID := 10.0
 
 var player_marker: CharacterBody3D
 var target_marker: MeshInstance3D
@@ -18,12 +23,14 @@ var detail_label: Label
 var target_label: Label
 var quest_label: Label
 var session_label: Label
+var panel_overlay: Control
 var panel_shell: PanelContainer
 var panel_title_label: Label
 var panel_body: VBoxContainer
 var action_buttons: Array[Button] = []
 var shortcut_slots: Array[Button] = []
 
+var layout_file_path := WORLD_SESSION_LAYOUT_FILE_PATH
 var camera_yaw := 0.0
 var marker_velocity := Vector3.ZERO
 var authoritative_marker_position := Vector3.ZERO
@@ -34,14 +41,21 @@ var attack_was_pressed := false
 var interact_was_pressed := false
 var reset_was_pressed := false
 var jump_was_pressed := false
+var panel_dragging := false
+var panel_drag_offset := Vector2.ZERO
 
 
 func _ready() -> void:
+	if OS.get_environment("ACORE_WORLD_SESSION_LAYOUT_SELF_TEST") == "1":
+		layout_file_path = WORLD_SESSION_LAYOUT_SELF_TEST_FILE_PATH
+		_delete_layout_file(layout_file_path)
 	_apply_saved_keybindings()
 	_build_world()
 	_build_hud()
 	_apply_session_context()
-	if OS.get_environment("ACORE_WORLD_SESSION_KEYBIND_SELF_TEST") == "1":
+	if OS.get_environment("ACORE_WORLD_SESSION_LAYOUT_SELF_TEST") == "1":
+		call_deferred("_run_layout_self_test")
+	elif OS.get_environment("ACORE_WORLD_SESSION_KEYBIND_SELF_TEST") == "1":
 		call_deferred("_run_keybind_settings_self_test")
 	elif OS.get_environment("ACORE_WORLD_SESSION_SELF_TEST") == "1":
 		call_deferred("_run_self_test")
@@ -158,7 +172,7 @@ func _build_hud() -> void:
 	session_label = _hud_label()
 	layout.add_child(session_label)
 
-	_build_panel_shell(layout)
+	_build_panel_shell(layer)
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -405,11 +419,21 @@ func _hud_label() -> Label:
 	return label
 
 
-func _build_panel_shell(parent: Control) -> void:
+func _build_panel_shell(parent: CanvasLayer) -> void:
+	panel_overlay = Control.new()
+	panel_overlay.name = "SessionPanelOverlay"
+	panel_overlay.anchor_right = 1.0
+	panel_overlay.anchor_bottom = 1.0
+	panel_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(panel_overlay)
+
 	panel_shell = PanelContainer.new()
+	panel_shell.name = "SessionPanel"
 	panel_shell.visible = false
-	panel_shell.custom_minimum_size = Vector2(520, 210)
-	panel_shell.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	panel_shell.custom_minimum_size = PANEL_DEFAULT_SIZE
+	panel_shell.size = panel_shell.custom_minimum_size
+	panel_shell.position = PANEL_DEFAULT_POSITION
+	panel_shell.mouse_filter = Control.MOUSE_FILTER_STOP
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.045, 0.052, 0.058, 0.88)
 	panel_style.border_color = Color(0.28, 0.34, 0.36, 0.95)
@@ -419,7 +443,7 @@ func _build_panel_shell(parent: Control) -> void:
 	panel_style.corner_radius_bottom_left = 6
 	panel_style.corner_radius_bottom_right = 6
 	panel_shell.add_theme_stylebox_override("panel", panel_style)
-	parent.add_child(panel_shell)
+	panel_overlay.add_child(panel_shell)
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
@@ -434,9 +458,13 @@ func _build_panel_shell(parent: Control) -> void:
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 8)
+	header.mouse_filter = Control.MOUSE_FILTER_STOP
+	header.gui_input.connect(_on_panel_header_gui_input)
 	stack.add_child(header)
 
 	panel_title_label = _panel_label("Session Panel", 17)
+	panel_title_label.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel_title_label.gui_input.connect(_on_panel_header_gui_input)
 	panel_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(panel_title_label)
 
@@ -449,7 +477,10 @@ func _build_panel_shell(parent: Control) -> void:
 
 	panel_body = VBoxContainer.new()
 	panel_body.add_theme_constant_override("separation", 6)
+	panel_body.custom_minimum_size = Vector2(500.0, 0.0)
 	stack.add_child(panel_body)
+
+	_load_panel_layout()
 
 
 func _build_shortcut_slots(parent: Control) -> void:
@@ -513,10 +544,85 @@ func _show_session_panel(panel_name: String) -> void:
 		_:
 			panel_title_label.text = "Session Panel"
 			panel_body.add_child(_panel_label("No panel is registered for " + panel_name + ".", 14))
+	panel_shell.size = PANEL_DEFAULT_SIZE
+	_set_panel_position(panel_shell.position)
 
 
 func _hide_session_panel() -> void:
 	panel_shell.visible = false
+
+
+func _on_panel_header_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			panel_dragging = true
+			panel_drag_offset = panel_shell.get_global_mouse_position() - panel_shell.global_position
+			panel_shell.z_index = 50
+		elif panel_dragging:
+			panel_dragging = false
+			panel_shell.z_index = 0
+			_set_panel_position(panel_shell.position, true)
+			_save_panel_layout()
+	elif event is InputEventMouseMotion and panel_dragging:
+		var next_position := panel_shell.get_global_mouse_position() - panel_drag_offset
+		_set_panel_position(next_position)
+
+
+func _set_panel_position(next_position: Vector2, snap_to_grid: bool = false) -> void:
+	var target := next_position
+	if snap_to_grid:
+		target = Vector2(snapped(target.x, PANEL_DRAG_GRID), snapped(target.y, PANEL_DRAG_GRID))
+	panel_shell.position = _clamp_panel_position(target)
+
+
+func _clamp_panel_position(next_position: Vector2) -> Vector2:
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x < PANEL_DEFAULT_SIZE.x + 120.0 or viewport_size.y < PANEL_DEFAULT_SIZE.y + 120.0:
+		viewport_size = Vector2(1280.0, 720.0)
+	var panel_size := PANEL_DEFAULT_SIZE
+	var max_x: float = max(0.0, viewport_size.x - panel_size.x - 12.0)
+	var max_y: float = max(0.0, viewport_size.y - panel_size.y - 12.0)
+	return Vector2(clamp(next_position.x, 0.0, max_x), clamp(next_position.y, 0.0, max_y))
+
+
+func _save_panel_layout() -> Error:
+	var config := ConfigFile.new()
+	config.set_value("SessionPanel", "position", panel_shell.position)
+	config.set_value("SessionPanel", "size", panel_shell.size)
+	var error := config.save(layout_file_path)
+	if error == OK:
+		session_label.text = "HUD layout saved."
+	else:
+		session_label.text = "HUD layout save failed."
+	return error
+
+
+func _load_panel_layout() -> void:
+	var config := ConfigFile.new()
+	if config.load(layout_file_path) != OK:
+		_set_panel_position(PANEL_DEFAULT_POSITION)
+		return
+
+	if config.has_section_key("SessionPanel", "size"):
+		var stored_size = config.get_value("SessionPanel", "size")
+		if typeof(stored_size) == TYPE_VECTOR2:
+			panel_shell.size = stored_size
+	if config.has_section_key("SessionPanel", "position"):
+		var stored_position = config.get_value("SessionPanel", "position")
+		if typeof(stored_position) == TYPE_VECTOR2:
+			_set_panel_position(stored_position)
+
+
+func _reset_panel_layout() -> void:
+	_delete_layout_file(layout_file_path)
+	_set_panel_position(PANEL_DEFAULT_POSITION)
+	session_label.text = "HUD layout reset."
+
+
+func _delete_layout_file(path: String) -> void:
+	var absolute_path := ProjectSettings.globalize_path(path)
+	if FileAccess.file_exists(absolute_path):
+		DirAccess.remove_absolute(absolute_path)
 
 
 func _clear_panel_body() -> void:
@@ -593,6 +699,12 @@ func _build_options_panel() -> void:
 	for line in key_lines:
 		panel_body.add_child(_panel_label(line, 13))
 
+	var reset_button := Button.new()
+	reset_button.text = "Reset HUD"
+	reset_button.custom_minimum_size = Vector2(120, 32)
+	reset_button.pressed.connect(_reset_panel_layout)
+	panel_body.add_child(reset_button)
+
 
 func _queue_chat_line(message: String) -> void:
 	var trimmed := message.strip_edges()
@@ -606,6 +718,7 @@ func _panel_label(text: String, font_size: int = 14) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size = Vector2(500.0, 0.0)
 	label.add_theme_font_size_override("font_size", font_size)
 	label.modulate = Color(0.91, 0.94, 0.92)
 	return label
@@ -682,6 +795,44 @@ func _run_keybind_settings_self_test() -> void:
 
 	print("WORLD_SESSION_KEYBIND_SETTINGS_SELF_TEST_OK move_forward=KEY_UP camera_left=KEY_LEFT target_next=KEY_T")
 	get_tree().quit(0)
+
+
+func _run_layout_self_test() -> void:
+	_show_session_panel("options")
+	panel_shell.size = PANEL_DEFAULT_SIZE
+	_set_panel_position(Vector2(267.0, 318.0), true)
+	var snapped_position := _clamp_panel_position(Vector2(270.0, 320.0))
+	var snap_ok := panel_shell.position.distance_to(snapped_position) < 0.01
+	var save_ok := _save_panel_layout() == OK
+
+	panel_shell.position = Vector2.ZERO
+	_load_panel_layout()
+	var load_ok := panel_shell.position.distance_to(snapped_position) < 0.01
+
+	_reset_panel_layout()
+	var reset_position := _clamp_panel_position(PANEL_DEFAULT_POSITION)
+	var reset_ok := panel_shell.position.distance_to(reset_position) < 0.01
+	var cleanup_ok := not FileAccess.file_exists(ProjectSettings.globalize_path(layout_file_path))
+
+	if snap_ok and save_ok and load_ok and reset_ok and cleanup_ok:
+		print("WORLD_SESSION_LAYOUT_SELF_TEST_OK saved=(%.1f,%.1f) reset=(%.1f,%.1f)" % [
+			snapped_position.x,
+			snapped_position.y,
+			reset_position.x,
+			reset_position.y,
+		])
+		get_tree().quit(0)
+		return
+
+	_delete_layout_file(layout_file_path)
+	push_error("WORLD_SESSION_LAYOUT_SELF_TEST_FAILED snap_ok=%s save_ok=%s load_ok=%s reset_ok=%s cleanup_ok=%s" % [
+		str(snap_ok),
+		str(save_ok),
+		str(load_ok),
+		str(reset_ok),
+		str(cleanup_ok),
+	])
+	get_tree().quit(1)
 
 
 func _run_self_test() -> void:
