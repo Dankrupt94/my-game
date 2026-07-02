@@ -16,7 +16,7 @@ const PANEL_DEFAULT_SIZE := Vector2(560.0, 380.0)
 const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
-const PANEL_NAMES := ["chat", "spells", "actions", "quests", "options", "inventory"]
+const PANEL_NAMES := ["chat", "spells", "actions", "quests", "options", "inventory", "map"]
 const INVENTORY_SLOT_NAMES := [
 	"Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands",
 	"Finger 1", "Finger 2", "Trinket 1", "Trinket 2", "Back", "Main Hand", "Off Hand", "Ranged", "Tabard",
@@ -24,6 +24,57 @@ const INVENTORY_SLOT_NAMES := [
 	"Backpack 1", "Backpack 2", "Backpack 3", "Backpack 4", "Backpack 5", "Backpack 6", "Backpack 7", "Backpack 8",
 	"Backpack 9", "Backpack 10", "Backpack 11", "Backpack 12", "Backpack 13", "Backpack 14", "Backpack 15", "Backpack 16",
 ]
+
+
+class SessionMapPreview:
+	extends Control
+
+	var map_id := 0
+	var wow_position := Vector3.ZERO
+	var visible_count := 0
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(260.0, 180.0)
+
+	func set_state(next_map_id: int, next_position: Vector3, next_visible_count: int) -> void:
+		map_id = next_map_id
+		wow_position = next_position
+		visible_count = next_visible_count
+		queue_redraw()
+
+	func _draw() -> void:
+		var area := Rect2(Vector2.ZERO, size)
+		draw_rect(area, Color(0.070, 0.086, 0.084, 0.96), true)
+		draw_rect(area, Color(0.28, 0.36, 0.34, 1.0), false, 1.0)
+
+		var grid_color := Color(0.18, 0.24, 0.24, 0.85)
+		for step in range(1, 4):
+			var x := size.x * float(step) / 4.0
+			var y := size.y * float(step) / 4.0
+			draw_line(Vector2(x, 0.0), Vector2(x, size.y), grid_color, 1.0)
+			draw_line(Vector2(0.0, y), Vector2(size.x, y), grid_color, 1.0)
+
+		var center := size * 0.5
+		var position_offset := Vector2(
+			clamp(wow_position.x / 12000.0, -0.42, 0.42) * size.x,
+			clamp(-wow_position.y / 12000.0, -0.42, 0.42) * size.y
+		)
+		var marker_position := center + position_offset
+		draw_circle(marker_position, 7.0, Color(0.96, 0.78, 0.26, 1.0))
+		draw_arc(marker_position, 14.0, 0.0, TAU, 36, Color(0.96, 0.94, 0.70, 0.95), 2.0)
+
+		var blip_count: int = mini(visible_count, 8)
+		for index in range(blip_count):
+			var angle := TAU * float(index) / float(max(1, blip_count))
+			var radius := 34.0 + float(index % 3) * 18.0
+			var blip := marker_position + Vector2(cos(angle), sin(angle)) * radius
+			blip.x = clamp(blip.x, 10.0, size.x - 10.0)
+			blip.y = clamp(blip.y, 10.0, size.y - 10.0)
+			draw_circle(blip, 3.5, Color(0.32, 0.74, 0.94, 0.88))
+
+		var label := "map " + str(map_id)
+		draw_string(get_theme_default_font(), Vector2(10.0, 20.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 13, Color(0.82, 0.90, 0.88, 1.0))
+
 
 var player_marker: CharacterBody3D
 var target_marker: MeshInstance3D
@@ -46,6 +97,10 @@ var camera_yaw := 0.0
 var marker_velocity := Vector3.ZERO
 var authoritative_marker_position := Vector3.ZERO
 var visible_object_count := 0
+var session_map_id := 0
+var session_wow_position := Vector3.ZERO
+var session_orientation := 0.0
+var session_area_label := ""
 var session_inventory_slots: Array = []
 var session_coinage := -1
 var selected_target_index := -1
@@ -211,6 +266,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Actions", "actions")
 	_add_panel_button(nav_bar, "Quests", "quests")
 	_add_panel_button(nav_bar, "Bags", "inventory")
+	_add_panel_button(nav_bar, "Map", "map")
 	_add_panel_button(nav_bar, "Options", "options")
 	_add_scene_button(nav_bar, "Roster", CHARACTER_SELECT_SCENE)
 	_add_scene_button(nav_bar, "Dashboard", DASHBOARD_SCENE)
@@ -235,6 +291,10 @@ func _apply_session_data(character: Dictionary, enter_result: Dictionary, source
 	var wow_y := float(login.get("y", character.get("y", 0.0)))
 	var wow_z := float(login.get("z", character.get("z", 0.0)))
 	var marker_position := _godot_position(wow_x, wow_y, wow_z)
+	session_map_id = map_id
+	session_wow_position = Vector3(wow_x, wow_y, wow_z)
+	session_orientation = float(login.get("orientation", character.get("orientation", 0.0)))
+	session_area_label = _session_area_text(character, enter_result)
 
 	player_marker.position = marker_position
 	authoritative_marker_position = marker_position
@@ -300,6 +360,19 @@ func _extract_coinage(character: Dictionary, enter_result: Dictionary) -> int:
 			if candidate.has(key):
 				return int(candidate.get(key, -1))
 	return -1
+
+
+func _session_area_text(character: Dictionary, enter_result: Dictionary) -> String:
+	for key in ["area", "area_name", "zone", "zone_name"]:
+		var direct_value := str(enter_result.get(key, character.get(key, ""))).strip_edges()
+		if not direct_value.is_empty():
+			return direct_value
+	var login: Dictionary = enter_result.get("login", {})
+	for key in ["area", "area_name", "zone", "zone_name"]:
+		var login_value := str(login.get(key, "")).strip_edges()
+		if not login_value.is_empty():
+			return login_value
+	return ""
 
 
 func _normalize_inventory_slots(raw_slots: Array) -> Array:
@@ -628,6 +701,8 @@ func _panel_title(panel_name: String) -> String:
 			return "Quests"
 		"inventory":
 			return "Bags"
+		"map":
+			return "Map"
 		"options":
 			return "Options"
 		_:
@@ -658,7 +733,7 @@ func _build_shortcut_slots(parent: Control) -> void:
 	_add_shortcut_slot(parent, "9", "Reset", Callable(self, "_reset_marker_to_session"))
 	_add_shortcut_slot(parent, "0", "Jump", Callable(self, "_queue_jump"))
 	_add_shortcut_slot(parent, "-", "Bag", Callable(self, "_show_session_panel").bind("inventory"))
-	_add_shortcut_slot(parent, "=", "Map", Callable(self, "_show_session_panel").bind("quests"))
+	_add_shortcut_slot(parent, "=", "Map", Callable(self, "_show_session_panel").bind("map"))
 
 
 func _add_shortcut_slot(parent: Control, key_text: String, label_text: String, action: Callable) -> void:
@@ -706,6 +781,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_quests_panel()
 		"inventory":
 			_build_inventory_panel()
+		"map":
+			_build_map_panel()
 		"options":
 			_build_options_panel()
 		_:
@@ -1035,6 +1112,28 @@ func _inventory_populated_count(slots: Array) -> int:
 	return count
 
 
+func _build_map_panel() -> void:
+	panel_title_label.text = "Map"
+	var map_preview := SessionMapPreview.new()
+	map_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_preview.set_state(session_map_id, session_wow_position, visible_object_count)
+	panel_body.add_child(map_preview)
+
+	var area_text := "Area: waiting for session zone data."
+	if not session_area_label.is_empty():
+		area_text = "Area: " + session_area_label
+	panel_body.add_child(_panel_label(area_text, 13))
+	panel_body.add_child(_panel_label("Map: %s  Position: %s" % [
+		str(session_map_id),
+		_wow_position_text(session_wow_position),
+	], 13))
+	panel_body.add_child(_panel_label("Facing: %.2f  Visible objects: %s" % [
+		session_orientation,
+		str(visible_object_count),
+	], 13))
+	panel_body.add_child(_panel_label("Quest, vendor, trainer, party, and discovered-area markers will attach here when the persistent live session exposes those streams.", 13))
+
+
 func _build_options_panel() -> void:
 	panel_title_label.text = "Options"
 	var settings := SettingsRuntime.load_settings()
@@ -1094,6 +1193,10 @@ func _money_text(copper: int) -> String:
 	var silver: int = int((positive % 10000) / 100)
 	var copper_piece: int = positive % 100
 	return "%sg %ss %sc" % [str(gold), str(silver), str(copper_piece)]
+
+
+func _wow_position_text(position: Vector3) -> String:
+	return "%.2f, %.2f, %.2f" % [position.x, position.y, position.z]
 
 
 func _key_name(keycode: int) -> String:
@@ -1264,6 +1367,7 @@ func _run_self_test() -> void:
 			"y": -132.49,
 			"z": 83.53,
 			"orientation": 0.0,
+			"area_name": "Training Field",
 		},
 		"update": {
 			"visible_object_count": 3,
@@ -1359,27 +1463,50 @@ func _run_self_test() -> void:
 		and _inventory_slot_state(_inventory_slot_at(23)) == "Packed Lunch x3"
 		and inventory_grid_ok
 	)
+	_show_session_panel("map")
+	var map_shell := _panel_shell("map")
+	var map_title: Label = session_panels.get("map", {}).get("title", null)
+	var map_body: VBoxContainer = session_panels.get("map", {}).get("body", null)
+	var map_preview_ok := false
+	if map_body != null:
+		for child in map_body.get_children():
+			if child is SessionMapPreview:
+				map_preview_ok = true
+				break
+	var map_panel_ok := (
+		map_shell != null
+		and map_shell.visible
+		and map_title != null
+		and map_title.text == "Map"
+		and session_map_id == 0
+		and session_area_label == "Training Field"
+		and session_wow_position.distance_to(Vector3(-8949.95, -132.49, 83.53)) < 0.01
+		and map_preview_ok
+	)
 	var multi_panel_ok := (
 		chat_shell != null
 		and actions_shell != null
 		and inventory_shell != null
+		and map_shell != null
 		and chat_shell != actions_shell
 		and chat_shell != inventory_shell
+		and chat_shell != map_shell
 		and chat_shell.visible
 		and actions_shell.visible
 		and inventory_shell.visible
+		and map_shell.visible
 	)
 	for panel_name in PANEL_NAMES:
 		_hide_session_panel(panel_name)
 
 	var marker_ok := player_marker != null and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 8
+	var actions_ok := action_buttons.size() == 9
 	var shortcut_ok := shortcut_slots.size() == 12
 	var input_ok := no_target_key_ok and no_target_action_ok and no_target_interact_ok and target_key_ok and action_key_ok and interact_key_ok
-	var panel_ok := chat_panel_ok and actions_panel_ok and spells_panel_ok and quests_panel_ok and options_panel_ok and inventory_panel_ok and multi_panel_ok
+	var panel_ok := chat_panel_ok and actions_panel_ok and spells_panel_ok and quests_panel_ok and options_panel_ok and inventory_panel_ok and map_panel_ok and multi_panel_ok
 	if marker_ok and hud_ok and actions_ok and shortcut_ok and input_ok and panel_ok:
-		print("WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 actions=%s shortcuts=%s input=true panels=true inventory=true marker=(%.2f,%.2f,%.2f)" % [
+		print("WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 actions=%s shortcuts=%s input=true panels=true inventory=true map_panel=true marker=(%.2f,%.2f,%.2f)" % [
 			str(action_buttons.size()),
 			str(shortcut_slots.size()),
 			player_marker.position.x,
@@ -1389,7 +1516,7 @@ func _run_self_test() -> void:
 		get_tree().quit(0)
 		return
 
-	push_error("WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s inventory_panel_ok=%s" % [
+	push_error("WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s inventory_panel_ok=%s map_panel_ok=%s" % [
 		str(marker_ok),
 		str(hud_ok),
 		str(actions_ok),
@@ -1397,5 +1524,6 @@ func _run_self_test() -> void:
 		str(input_ok),
 		str(panel_ok),
 		str(inventory_panel_ok),
+		str(map_panel_ok),
 	])
 	get_tree().quit(1)

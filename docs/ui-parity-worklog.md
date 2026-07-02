@@ -22,6 +22,35 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-01 - World Session Map Panel (Codex UI lane)
+
+Context: the world-session HUD had a Map shortcut, but it opened the Quests
+panel. A playable client needs map/minimap access inside the active world view.
+
+Result:
+
+- Added a resident `Map` HUD panel to `scripts/world_session_view.gd`.
+- The `=` Map shortcut and nav button now open the Map panel in the
+  world-session overlay.
+- The panel renders a compact code-native minimap preview from safe session
+  state: map id, player position, orientation, and visible-object count.
+- Optional runtime area/zone text is displayed if the session provides it; no
+  client map assets or proprietary names are committed.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` now verifies the Map panel, synthetic
+  area label, stored world position, preview control, and coexistence with
+  other world-session HUD panels.
+
+Remaining work:
+
+- Feed live discovered-area, quest, trainer, vendor, party, and corpse markers
+  into this panel from Claude's persistent session lane.
+- Replace the code-native preview with local-only map textures/terrain data
+  when the asset/data pipeline is ready.
+
 ## 2026-07-01 - World Session Bags Panel (Codex UI lane)
 
 Context: the world-session HUD had a Bag shortcut, but it opened the Actions
