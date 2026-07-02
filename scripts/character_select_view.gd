@@ -1,7 +1,10 @@
 extends Control
 
+const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
+
 const DASHBOARD_SCENE := "res://main.tscn"
 const LOCAL_ACCOUNT_ENV := "res://local_runtime/account.env"
+const PROTOCOL_ACCOUNT_ENV := "res://local_runtime/protocol-test-account.env"
 
 # Login & Roster state
 var host_val := "127.0.0.1"
@@ -49,29 +52,74 @@ const CLASS_COLORS := {
 
 const RACES := ["Human", "Orc", "Dwarf", "Night Elf", "Undead", "Tauren", "Gnome", "Troll"]
 const CLASSES := ["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Death Knight", "Shaman", "Mage", "Warlock", "Druid"]
+const RACE_NAMES_BY_ID := {
+	1: "Human",
+	2: "Orc",
+	3: "Dwarf",
+	4: "Night Elf",
+	5: "Undead",
+	6: "Tauren",
+	7: "Gnome",
+	8: "Troll",
+	10: "Blood Elf",
+	11: "Draenei",
+}
+const CLASS_NAMES_BY_ID := {
+	1: "Warrior",
+	2: "Paladin",
+	3: "Hunter",
+	4: "Rogue",
+	5: "Priest",
+	6: "Death Knight",
+	7: "Shaman",
+	8: "Mage",
+	9: "Warlock",
+	11: "Druid",
+}
 
 
 func _ready() -> void:
 	_load_credentials()
+	_load_session_context()
 	_build_view()
 	_update_roster_list()
 	_select_character(-1)
+	if characters.size() > 0:
+		create_btn.disabled = false
+		status_label.text = "Roster loaded from login"
 
 	if OS.get_environment("ACORE_CHARACTER_SELECT_SELF_TEST") == "1":
 		call_deferred("_run_self_test")
+	elif OS.get_environment("ACORE_CHARACTER_SELECT_LIVE_SELF_TEST") == "1":
+		call_deferred("_run_live_self_test")
 
 
 func _load_credentials() -> void:
-	var path := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
-	if FileAccess.file_exists(path):
-		var file := FileAccess.open(path, FileAccess.READ)
-		while not file.eof_reached():
-			var line := file.get_line().strip_edges()
-			if line.begins_with("ACORE_PROTOCOL_ACCOUNT="):
-				account_val = line.split("=")[1].strip_edges()
-			elif line.begins_with("ACORE_PROTOCOL_PASSWORD="):
-				password_val = line.split("=")[1].strip_edges()
-		file.close()
+	for env_path in [PROTOCOL_ACCOUNT_ENV, LOCAL_ACCOUNT_ENV]:
+		var path := ProjectSettings.globalize_path(env_path)
+		if not FileAccess.file_exists(path):
+			continue
+		var values := _read_env_file(path)
+		account_val = str(values.get("ACORE_PROTOCOL_ACCOUNT", account_val))
+		password_val = str(values.get("ACORE_PROTOCOL_PASSWORD", password_val))
+		if not account_val.is_empty() and not password_val.is_empty():
+			return
+
+
+func _load_session_context() -> void:
+	var context := _session_context()
+	if context == null:
+		return
+	if str(context.host).strip_edges() != "":
+		host_val = str(context.host)
+	if str(context.port).strip_edges() != "":
+		port_val = str(context.port)
+	if str(context.account).strip_edges() != "":
+		account_val = str(context.account)
+	if str(context.password) != "":
+		password_val = str(context.password)
+	if typeof(context.characters) == TYPE_ARRAY and context.characters.size() > 0:
+		characters = _normalize_characters(context.characters)
 
 
 func _build_view() -> void:
@@ -128,10 +176,10 @@ func _build_view() -> void:
 	creds_grid.add_theme_constant_override("v_separation", 8)
 	left_side.add_child(creds_grid)
 
-	_add_grid_input(creds_grid, "Host:", host_val, func(val): host_val = val)
-	_add_grid_input(creds_grid, "Port:", port_val, func(val): port_val = val)
-	_add_grid_input(creds_grid, "Account:", account_val, func(val): account_val = val)
-	_add_grid_input(creds_grid, "Password:", password_val, func(val): password_val = val, true)
+	host_input = _add_grid_input(creds_grid, "Host:", host_val, func(val): host_val = val)
+	port_input = _add_grid_input(creds_grid, "Port:", port_val, func(val): port_val = val)
+	acc_input = _add_grid_input(creds_grid, "Account:", account_val, func(val): account_val = val)
+	pass_input = _add_grid_input(creds_grid, "Password:", password_val, func(val): password_val = val, true)
 
 	connect_btn = Button.new()
 	connect_btn.text = "Connect & Fetch Roster"
@@ -271,7 +319,7 @@ func _build_view() -> void:
 	actions_row.add_child(back_btn)
 
 
-func _add_grid_input(parent: Control, caption: String, default_text: String, callback: Callable, is_password := false) -> void:
+func _add_grid_input(parent: Control, caption: String, default_text: String, callback: Callable, is_password := false) -> LineEdit:
 	var lbl := Label.new()
 	lbl.text = caption
 	lbl.custom_minimum_size = Vector2(80, 0)
@@ -283,13 +331,15 @@ func _add_grid_input(parent: Control, caption: String, default_text: String, cal
 	line.custom_minimum_size = Vector2(200, 32)
 	line.text_changed.connect(callback)
 	parent.add_child(line)
+	return line
 
 
 func _update_roster_list() -> void:
+	characters = _normalize_characters(characters)
 	roster_list.clear()
 	for char in characters:
-		var cls_name = char["class"]
-		var txt := "%s (Level %d %s)" % [char["name"], char["level"], cls_name]
+		var cls_name := _character_class_name(char)
+		var txt := "%s (Level %d %s)" % [_character_name(char), _character_level(char), cls_name]
 		roster_list.add_item(txt)
 
 
@@ -308,15 +358,21 @@ func _select_character(idx: int) -> void:
 		return
 
 	var char = characters[idx]
-	detail_name.text = char["name"]
-	var cls_name = char["class"]
-	detail_lvl_class.text = "Level %d %s (%s)" % [char["level"], cls_name, char["race"]]
+	detail_name.text = _character_name(char)
+	var cls_name := _character_class_name(char)
+	detail_lvl_class.text = "Level %d %s (%s)" % [_character_level(char), cls_name, _character_race_name(char)]
 	detail_lvl_class.modulate = CLASS_COLORS.get(cls_name, Color.WHITE)
-	detail_location.text = "Location: Map %d (X: %.2f, Y: %.2f, Z: %.2f)" % [char["map"], char["x"], char["y"], char["z"]]
+	detail_location.text = "Location: Map %d (X: %.2f, Y: %.2f, Z: %.2f)" % [
+		_character_map(char),
+		_character_position_value(char, "x"),
+		_character_position_value(char, "y"),
+		_character_position_value(char, "z"),
+	]
 	enter_btn.disabled = false
 
 
 func _on_connect_pressed() -> void:
+	_sync_connection_from_inputs()
 	_log("Connecting to authserver to retrieve characters...")
 	if OS.get_environment("ACORE_CHARACTER_SELECT_SELF_TEST") == "1":
 		characters = [
@@ -343,6 +399,9 @@ func _on_connect_pressed() -> void:
 				"z": 30.0
 			}
 		]
+		characters = _normalize_characters(characters)
+		_store_connection()
+		_store_roster({"ok": true, "characters": characters})
 		_log("Fetched 2 characters (Mock).")
 		_update_roster_list()
 		_select_character(-1)
@@ -351,10 +410,12 @@ func _on_connect_pressed() -> void:
 		return
 
 	# Real C++ GDExtension flow call
-	var bridge = load("res://scripts/protocol_client_bridge.gd").new()
-	var result = bridge.run_character_flow(host_val, port_val)
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.run_character_flow(host_val, port_val, account_val, password_val)
 	if result.get("ok", false):
-		characters = result.get("characters", [])
+		characters = _normalize_characters(result.get("characters", []))
+		_store_connection()
+		_store_roster(result)
 		_log("Fetched %d characters from server." % characters.size())
 		_update_roster_list()
 		_select_character(-1)
@@ -396,8 +457,8 @@ func _on_create_pressed() -> void:
 
 	# Real GDExtension create character flow
 	# (For the scope of GDExtension, character creation returns success / list update)
-	var bridge = load("res://scripts/protocol_client_bridge.gd").new()
-	var result = bridge.create_character(name_txt, host_val, port_val) # theoretically mapped
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.create_test_character(name_txt, host_val, port_val)
 	if result.get("ok", false):
 		_log("Character created successfully.")
 		_on_connect_pressed() # Refetch
@@ -409,18 +470,24 @@ func _on_enter_world_pressed() -> void:
 	if selected_char_idx < 0:
 		return
 	var char = characters[selected_char_idx]
-	_log("Entering world with: " + char["name"] + "...")
+	_sync_connection_from_inputs()
+	_store_connection()
+	_store_selected_character(char)
+	_log("Entering world with: " + _character_name(char) + "...")
 
 	if OS.get_environment("ACORE_CHARACTER_SELECT_SELF_TEST") == "1":
 		_log("World session launched successfully. Transitioning to sandbox...")
+		_store_enter_world_result({"ok": true, "character_name": _character_name(char)})
 		return
 
 	# Real enter world call
-	var bridge = load("res://scripts/protocol_client_bridge.gd").new()
-	var result = bridge.enter_world(char["name"], host_val, port_val)
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.enter_world(_character_name(char), host_val, port_val, account_val, password_val)
+	_store_enter_world_result(result)
 	if result.get("ok", false):
 		_log("Logged in! Redirecting...")
-		get_tree().change_scene_to_file(DASHBOARD_SCENE)
+		if OS.get_environment("ACORE_CHARACTER_SELECT_LIVE_SELF_TEST") != "1":
+			get_tree().change_scene_to_file(DASHBOARD_SCENE)
 	else:
 		_log("Enter world failed: " + result.get("error", "Unknown error"))
 
@@ -476,11 +543,255 @@ func _run_self_test() -> void:
 	# 4. Enter World
 	selected_char_idx = 2
 	_on_enter_world_pressed()
+	var context := _session_context()
+	if context == null or str(context.account) != account_val:
+		_fail_self_test("Session context did not keep account from character select")
+		return
+	if context == null or str(context.password) != password_val:
+		_fail_self_test("Session context did not keep password for enter-world")
+		return
+	if context == null or str(context.selected_character.get("name", "")) != "Newchar":
+		_fail_self_test("Session context did not keep selected character")
+		return
 
 	print("CHARACTER_SELECT_SELF_TEST_OK: login pre-fills, character list cards, creator validation, and enter-world triggers passed.")
+	get_tree().quit(0)
+
+
+func _run_live_self_test() -> void:
+	print("CHARACTER_SELECT_LIVE_SELF_TEST: starting verification...")
+	if account_val.strip_edges().is_empty() or password_val.is_empty():
+		_fail_self_test("Live credentials were not available in local_runtime")
+		return
+
+	_on_connect_pressed()
+	if characters.is_empty():
+		_fail_self_test("Live roster did not return any characters")
+		return
+
+	_on_roster_selected(0)
+	if selected_char_idx != 0 or enter_btn.disabled:
+		_fail_self_test("Live roster selection did not enable enter-world")
+		return
+
+	_on_enter_world_pressed()
+	var context := _session_context()
+	if context == null or not bool(context.last_enter_world_result.get("ok", false)):
+		_fail_self_test("Live enter-world did not return ok")
+		return
+
+	print("CHARACTER_SELECT_LIVE_SELF_TEST_OK: fetched %s character(s) and entered world as %s." % [
+		str(characters.size()),
+		_character_name(characters[0]),
+	])
 	get_tree().quit(0)
 
 
 func _fail_self_test(reason: String) -> void:
 	push_error("CHARACTER_SELECT_SELF_TEST_FAILED: " + reason)
 	get_tree().quit(1)
+
+
+func _sync_connection_from_inputs() -> void:
+	if host_input != null:
+		host_val = host_input.text.strip_edges()
+	if port_input != null:
+		port_val = port_input.text.strip_edges()
+	if acc_input != null:
+		account_val = acc_input.text.strip_edges()
+	if pass_input != null:
+		password_val = pass_input.text
+
+
+func _store_connection() -> void:
+	var context := _session_context()
+	if context != null and context.has_method("set_connection"):
+		context.set_connection(host_val, port_val, account_val, password_val)
+
+
+func _store_roster(result: Dictionary) -> void:
+	var context := _session_context()
+	if context != null and context.has_method("set_roster"):
+		context.set_roster(result, characters)
+
+
+func _store_selected_character(character: Dictionary) -> void:
+	var context := _session_context()
+	if context != null and context.has_method("set_selected_character"):
+		context.set_selected_character(character)
+
+
+func _store_enter_world_result(result: Dictionary) -> void:
+	var context := _session_context()
+	if context != null and context.has_method("set_enter_world_result"):
+		context.set_enter_world_result(result)
+
+
+func _session_context() -> Node:
+	return get_node_or_null("/root/SessionContext")
+
+
+func _normalize_characters(raw_characters: Array) -> Array:
+	var normalized: Array = []
+	for raw_character in raw_characters:
+		var normalized_character := _normalize_character(raw_character)
+		if not normalized_character.is_empty():
+			normalized.append(normalized_character)
+	return normalized
+
+
+func _normalize_character(raw_character) -> Dictionary:
+	if typeof(raw_character) == TYPE_DICTIONARY:
+		var raw: Dictionary = raw_character
+		var race_value = raw.get("race", raw.get("race_id", 0))
+		var class_value = raw.get("class", raw.get("character_class", raw.get("class_id", 0)))
+		return {
+			"guid": str(raw.get("guid", "")),
+			"name": str(raw.get("name", "Unknown")),
+			"level": _int_value(raw.get("level", 0)),
+			"race": _race_name(race_value),
+			"race_id": _int_value(race_value),
+			"class": _class_name(class_value),
+			"class_id": _int_value(class_value),
+			"map": _int_value(raw.get("map", 0)),
+			"x": _float_value(raw.get("x", 0.0)),
+			"y": _float_value(raw.get("y", 0.0)),
+			"z": _float_value(raw.get("z", 0.0)),
+		}
+	if typeof(raw_character) == TYPE_STRING:
+		return _parse_character_line(str(raw_character))
+	return {}
+
+
+func _parse_character_line(line: String) -> Dictionary:
+	if not line.begins_with("CHAR "):
+		return {}
+	var position := _parse_vector_field(line, "pos=(")
+	var race_id := _extract_int_field(line, "race=")
+	var class_id := _extract_int_field(line, "class=")
+	return {
+		"guid": _extract_token_after(line, "guid="),
+		"name": _extract_quoted_field(line, "name=\""),
+		"level": _extract_int_field(line, "level="),
+		"race": _race_name(race_id),
+		"race_id": race_id,
+		"class": _class_name(class_id),
+		"class_id": class_id,
+		"map": _extract_int_field(line, "map="),
+		"x": float(position.get("x", 0.0)),
+		"y": float(position.get("y", 0.0)),
+		"z": float(position.get("z", 0.0)),
+	}
+
+
+func _character_name(character: Dictionary) -> String:
+	return str(character.get("name", "Unknown"))
+
+
+func _character_level(character: Dictionary) -> int:
+	return _int_value(character.get("level", 0))
+
+
+func _character_race_name(character: Dictionary) -> String:
+	return str(character.get("race", _race_name(character.get("race_id", 0))))
+
+
+func _character_class_name(character: Dictionary) -> String:
+	return str(character.get("class", _class_name(character.get("class_id", 0))))
+
+
+func _character_map(character: Dictionary) -> int:
+	return _int_value(character.get("map", 0))
+
+
+func _character_position_value(character: Dictionary, key: String) -> float:
+	return _float_value(character.get(key, 0.0))
+
+
+func _race_name(value) -> String:
+	if typeof(value) == TYPE_STRING and not str(value).is_valid_int():
+		return str(value)
+	var race_id := _int_value(value)
+	return str(RACE_NAMES_BY_ID.get(race_id, "Race " + str(race_id)))
+
+
+func _class_name(value) -> String:
+	if typeof(value) == TYPE_STRING and not str(value).is_valid_int():
+		return str(value)
+	var class_id := _int_value(value)
+	return str(CLASS_NAMES_BY_ID.get(class_id, "Class " + str(class_id)))
+
+
+func _int_value(value) -> int:
+	if typeof(value) == TYPE_INT:
+		return value
+	if typeof(value) == TYPE_FLOAT:
+		return int(value)
+	return int(str(value))
+
+
+func _float_value(value) -> float:
+	if typeof(value) == TYPE_FLOAT or typeof(value) == TYPE_INT:
+		return float(value)
+	return float(str(value))
+
+
+func _read_env_file(path: String) -> Dictionary:
+	var values := {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return values
+	while not file.eof_reached():
+		var line := file.get_line().strip_edges()
+		if line.is_empty() or line.begins_with("#"):
+			continue
+		var equals_index := line.find("=")
+		if equals_index == -1:
+			continue
+		values[line.substr(0, equals_index)] = line.substr(equals_index + 1).strip_edges()
+	file.close()
+	return values
+
+
+func _extract_quoted_field(line: String, marker: String) -> String:
+	var start := line.find(marker)
+	if start == -1:
+		return ""
+	start += marker.length()
+	var end := line.find("\"", start)
+	if end == -1:
+		return ""
+	return line.substr(start, end - start)
+
+
+func _extract_int_field(line: String, marker: String) -> int:
+	return int(_extract_token_after(line, marker))
+
+
+func _extract_token_after(line: String, marker: String) -> String:
+	var start := line.find(marker)
+	if start == -1:
+		return ""
+	start += marker.length()
+	var end := line.find(" ", start)
+	if end == -1:
+		return line.substr(start)
+	return line.substr(start, end - start)
+
+
+func _parse_vector_field(line: String, marker: String) -> Dictionary:
+	var start := line.find(marker)
+	if start == -1:
+		return {}
+	start += marker.length()
+	var end := line.find(")", start)
+	if end == -1:
+		return {}
+	var parts := line.substr(start, end - start).split(",")
+	if parts.size() != 3:
+		return {}
+	return {
+		"x": float(parts[0]),
+		"y": float(parts[1]),
+		"z": float(parts[2]),
+	}

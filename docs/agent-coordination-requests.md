@@ -11,6 +11,27 @@ lane can apply it without breaking its own tests.
 
 ---
 
+## APPLIED — Login session context UI handoff
+
+**Applied by:** Codex UI lane · 2026-07-01
+**Files:** `scripts/session_context.gd`, `scripts/game_login_view.gd`,
+`scripts/character_select_view.gd`, `project.godot`
+
+The UI-lane follow-up below is now implemented:
+
+- typed host/account/password are captured in memory,
+- `game_login_view` calls `run_character_flow(host, port, account, password)`,
+- the authenticated roster is carried to `character_select_view`,
+- `character_select_view` can refetch with the same typed credentials, and
+- `enter_world(name, host, port, account, password)` is called for the selected
+  character.
+
+The password is not persisted or logged. Character creation still uses the
+existing local-account bridge path because the bridge does not yet expose typed
+credential overrides for create-character.
+
+---
+
 ## APPLIED — Login credentials in bridge auth (commit 3672d9c)
 
 **Applied by:** Claude (now native/protocol lane) · 2026-07-01
@@ -54,6 +75,8 @@ path works and returns the same roster (`ok=true`), and deliberately-wrong
 override creds fail (`ok=false`) — proving the passed creds are actually used.
 
 ### UI-lane follow-up (now Codex's lane)
+
+Status: applied by Codex in the UI lane on 2026-07-01.
 
 `game_login_view` → `character_select_view` should pass typed credentials into
 the live flow now that the bridge accepts them:

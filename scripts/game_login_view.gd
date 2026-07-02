@@ -1,10 +1,15 @@
 extends Control
 
+const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
+
 const CHARACTER_SELECT_SCENE := "res://scenes/character_select_view.tscn"
 const DASHBOARD_SCENE := "res://main.tscn"
 const LOCAL_ACCOUNT_ENV := "res://local_runtime/account.env"
+const PROTOCOL_ACCOUNT_ENV := "res://local_runtime/protocol-test-account.env"
 
 # Login parameters
+var host_val := "127.0.0.1"
+var port_val := "3724"
 var account_val := ""
 var password_val := ""
 var music_playing := true
@@ -15,6 +20,8 @@ var num_particles := 40
 var particle_container: Control
 
 # UI References
+var host_input: LineEdit
+var port_input: LineEdit
 var account_input: LineEdit
 var password_input: LineEdit
 var login_btn: Button
@@ -30,24 +37,40 @@ const COLOR_FROZEN_LIGHT := Color(0.18, 0.32, 0.45)
 
 func _ready() -> void:
 	_load_credentials()
+	_load_session_context()
 	_build_view()
 	_initialize_particles()
 	
 	if OS.get_environment("ACORE_GAME_LOGIN_SELF_TEST") == "1":
 		call_deferred("_run_self_test")
+	elif OS.get_environment("ACORE_GAME_LOGIN_LIVE_SELF_TEST") == "1":
+		call_deferred("_run_live_self_test")
 
 
 func _load_credentials() -> void:
-	var path := ProjectSettings.globalize_path(LOCAL_ACCOUNT_ENV)
-	if FileAccess.file_exists(path):
-		var file := FileAccess.open(path, FileAccess.READ)
-		while not file.eof_reached():
-			var line := file.get_line().strip_edges()
-			if line.begins_with("ACORE_PROTOCOL_ACCOUNT="):
-				account_val = line.split("=")[1].strip_edges()
-			elif line.begins_with("ACORE_PROTOCOL_PASSWORD="):
-				password_val = line.split("=")[1].strip_edges()
-		file.close()
+	for env_path in [PROTOCOL_ACCOUNT_ENV, LOCAL_ACCOUNT_ENV]:
+		var path := ProjectSettings.globalize_path(env_path)
+		if not FileAccess.file_exists(path):
+			continue
+		var values := _read_env_file(path)
+		account_val = str(values.get("ACORE_PROTOCOL_ACCOUNT", account_val))
+		password_val = str(values.get("ACORE_PROTOCOL_PASSWORD", password_val))
+		if not account_val.is_empty() and not password_val.is_empty():
+			return
+
+
+func _load_session_context() -> void:
+	var context := _session_context()
+	if context == null:
+		return
+	if str(context.host).strip_edges() != "":
+		host_val = str(context.host)
+	if str(context.port).strip_edges() != "":
+		port_val = str(context.port)
+	if str(context.account).strip_edges() != "":
+		account_val = str(context.account)
+	if str(context.password) != "":
+		password_val = str(context.password)
 
 
 func _build_view() -> void:
@@ -162,6 +185,22 @@ func _build_view() -> void:
 	form_stack.add_theme_constant_override("separation", 14)
 	form_stack.alignment = BoxContainer.ALIGNMENT_CENTER
 	form_margin.add_child(form_stack)
+
+	var endpoint_row := HBoxContainer.new()
+	endpoint_row.add_theme_constant_override("separation", 8)
+	form_stack.add_child(endpoint_row)
+
+	host_input = LineEdit.new()
+	host_input.text = host_val
+	host_input.placeholder_text = "Host"
+	host_input.custom_minimum_size = Vector2(170, 32)
+	endpoint_row.add_child(host_input)
+
+	port_input = LineEdit.new()
+	port_input.text = port_val
+	port_input.placeholder_text = "Port"
+	port_input.custom_minimum_size = Vector2(82, 32)
+	endpoint_row.add_child(port_input)
 
 	var acc_lbl := Label.new()
 	acc_lbl.text = "Account Name:"
@@ -294,24 +333,73 @@ func _process(delta: float) -> void:
 
 
 func _on_login_pressed() -> void:
+	var host := host_input.text.strip_edges()
+	var port := port_input.text.strip_edges()
 	var acc := account_input.text.strip_edges()
 	var pwd := password_input.text.strip_edges()
 
-	if acc.is_empty() or pwd.is_empty():
-		_log("Error: Account name and password fields cannot be empty.")
+	if host.is_empty() or port.is_empty() or acc.is_empty() or pwd.is_empty():
+		_log("Error: host, port, account name, and password are required.")
 		status_label.text = "Connection Failed"
 		return
 
-	_log("Validating credentials with authserver...")
+	_store_connection(host, port, acc, pwd)
 	status_label.text = "Authenticating..."
-	
-	# Transition scene
-	call_deferred("_transition_to_character_select")
+	login_btn.disabled = true
+	_log("Validating credentials with authserver...")
+
+	if OS.get_environment("ACORE_GAME_LOGIN_SELF_TEST") == "1":
+		var mock_characters := [
+			{
+				"guid": "0x001",
+				"name": "Codexstage",
+				"level": 80,
+				"race": "Human",
+				"class": "Warrior",
+				"map": 0,
+				"x": 10.0,
+				"y": 20.0,
+				"z": 30.0,
+			},
+		]
+		_store_roster({"ok": true, "characters": mock_characters}, mock_characters)
+		call_deferred("_transition_to_character_select")
+		return
+
+	var bridge := ProtocolClientBridge.new()
+	var result := bridge.run_character_flow(host, port, acc, pwd)
+	if bool(result.get("ok", false)):
+		var roster: Array = result.get("characters", [])
+		_store_roster(result, roster)
+		_log("Authenticated. Fetched %s character(s)." % str(roster.size()))
+		status_label.text = "Authenticated"
+		if OS.get_environment("ACORE_GAME_LOGIN_LIVE_SELF_TEST") != "1":
+			call_deferred("_transition_to_character_select")
+	else:
+		login_btn.disabled = false
+		status_label.text = "Connection Failed"
+		_log("Login failed: " + str(result.get("error", "Unknown error")))
 
 
 func _transition_to_character_select() -> void:
 	_log("Transitioning to Character Selection screen...")
 	get_tree().change_scene_to_file(CHARACTER_SELECT_SCENE)
+
+
+func _store_connection(host: String, port: String, account: String, password: String) -> void:
+	host_val = host
+	port_val = port
+	account_val = account
+	password_val = password
+	var context := _session_context()
+	if context != null and context.has_method("set_connection"):
+		context.set_connection(host, port, account, password)
+
+
+func _store_roster(result: Dictionary, roster: Array) -> void:
+	var context := _session_context()
+	if context != null and context.has_method("set_roster"):
+		context.set_roster(result, roster)
 
 
 func _on_music_toggle_pressed() -> void:
@@ -358,11 +446,61 @@ func _run_self_test() -> void:
 
 	# 3. Trigger Login
 	_on_login_pressed()
+	var context := _session_context()
+	if context == null or str(context.account) != account_input.text.strip_edges():
+		_fail_self_test("Session context did not capture login account")
+		return
+	if context == null or str(context.password).is_empty():
+		_fail_self_test("Session context did not keep in-memory password for enter-world handoff")
+		return
+	if context == null or not bool(context.authenticated):
+		_fail_self_test("Session context did not record authenticated roster")
+		return
 
 	print("GAME_LOGIN_SELF_TEST_OK: login layout elements pre-filled, particle loop initializers, music toggles, and character select scene redirections checked.")
+	get_tree().quit(0)
+
+
+func _run_live_self_test() -> void:
+	print("GAME_LOGIN_LIVE_SELF_TEST: starting verification...")
+	if account_input.text.strip_edges().is_empty() or password_input.text.is_empty():
+		_fail_self_test("Live login credentials were not available in local_runtime")
+		return
+
+	_on_login_pressed()
+	var context := _session_context()
+	var character_count := 0
+	if context != null and typeof(context.characters) == TYPE_ARRAY:
+		character_count = context.characters.size()
+	if context == null or not bool(context.authenticated) or character_count <= 0:
+		_fail_self_test("Live login did not authenticate and carry a roster")
+		return
+
+	print("GAME_LOGIN_LIVE_SELF_TEST_OK: authenticated typed credentials and carried %s character(s)." % str(character_count))
 	get_tree().quit(0)
 
 
 func _fail_self_test(reason: String) -> void:
 	push_error("GAME_LOGIN_SELF_TEST_FAILED: " + reason)
 	get_tree().quit(1)
+
+
+func _session_context() -> Node:
+	return get_node_or_null("/root/SessionContext")
+
+
+func _read_env_file(path: String) -> Dictionary:
+	var values := {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return values
+	while not file.eof_reached():
+		var line := file.get_line().strip_edges()
+		if line.is_empty() or line.begins_with("#"):
+			continue
+		var equals_index := line.find("=")
+		if equals_index == -1:
+			continue
+		values[line.substr(0, equals_index)] = line.substr(equals_index + 1).strip_edges()
+	file.close()
+	return values

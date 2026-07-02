@@ -23,6 +23,47 @@ lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-01 - Login Session Handoff (Codex UI lane)
+
+Context: Claude added optional account/password bridge parameters in the
+native/protocol lane. Codex stayed in the UI lane and wired the login and
+character-select screens to use those parameters without editing
+`scripts/protocol_client_bridge.gd`.
+
+Result:
+
+- Added `scripts/session_context.gd` as an autoloaded in-memory runtime handoff.
+- `game_login_view` now collects host, port, account, and password, calls
+  `ProtocolClientBridge.run_character_flow(host, port, account, password)`, and
+  only advances to character select after an authenticated roster result.
+- `character_select_view` consumes the roster from `SessionContext`, can refetch
+  the roster with the same typed credentials, normalizes native-extension
+  dictionaries and helper-process `CHAR ...` rows, and passes typed credentials
+  into `enter_world`.
+- The password remains runtime-only; it is not written to disk or printed.
+
+Validation:
+
+- `ACORE_GAME_LOGIN_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/game_login_view.tscn` passed with synthetic credentials and
+  in-memory roster handoff.
+- `ACORE_CHARACTER_SELECT_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/character_select_view.tscn` passed, including selected-character
+  handoff for enter-world.
+- `godot-4 --headless --path . --quit` loaded clean.
+- With ignored local runtime/build outputs linked into the temporary worktree
+  for validation only, `ACORE_GAME_LOGIN_LIVE_SELF_TEST=1` authenticated typed
+  credentials and carried 1 character to the next screen.
+- With the same temporary local-only links, `ACORE_CHARACTER_SELECT_LIVE_SELF_TEST=1`
+  fetched 1 live character and entered world as the selected character.
+
+Remaining work:
+
+- Native/protocol lane: add typed-account support for character creation if
+  normal account-driven character creation is kept in this UI.
+- UI lane: route successful enter-world into the persistent gameplay HUD/session
+  instead of returning to the dashboard.
+
 ## 2026-07-01 - Bridge accepts login credentials (native/protocol lane)
 
 - `run_character_flow` / `enter_world` gained optional `account`/`password`

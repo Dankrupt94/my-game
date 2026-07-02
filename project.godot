@@ -14,6 +14,10 @@ config/name="AzerothCore Godot Companion"
 run/main_scene="res://scenes/game_login_view.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
+[autoload]
+
+SessionContext="*res://scripts/session_context.gd"
+
 [display]
 
 window/size/viewport_width=1280
