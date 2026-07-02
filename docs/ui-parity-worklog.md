@@ -22,6 +22,22 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Death And Respawn Panel Started (Codex UI lane)
+
+Goal: add resident death, ghost, corpse-run, and resurrection status surfaces
+to the active world-session HUD so safe live-session snapshots can display in
+the normal gameplay view.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render session-provided alive/dead/ghost state, release timers, corpse
+  distance/position, resurrection offers, durability loss, and respawn health
+  summaries without calling or editing the protocol bridge.
+- Keep live death packets, release-spirit requests, graveyard teleport,
+  corpse-respawn requests, resurrection accept/decline, and server failure
+  states in Claude's live-session lane.
+
 ## 2026-07-02 - World Session Auction Panel (Codex UI lane)
 
 Context: the Stage 17 parity spec requires normal auction browse/search,
