@@ -3,6 +3,7 @@ extends Control
 const ProtocolClientBridge = preload("res://scripts/protocol_client_bridge.gd")
 
 const DASHBOARD_SCENE := "res://main.tscn"
+const WORLD_SESSION_SCENE := "res://scenes/world_session_view.tscn"
 const LOCAL_ACCOUNT_ENV := "res://local_runtime/account.env"
 const PROTOCOL_ACCOUNT_ENV := "res://local_runtime/protocol-test-account.env"
 
@@ -487,7 +488,7 @@ func _on_enter_world_pressed() -> void:
 	if result.get("ok", false):
 		_log("Logged in! Redirecting...")
 		if OS.get_environment("ACORE_CHARACTER_SELECT_LIVE_SELF_TEST") != "1":
-			get_tree().change_scene_to_file(DASHBOARD_SCENE)
+			get_tree().change_scene_to_file(WORLD_SESSION_SCENE)
 	else:
 		_log("Enter world failed: " + result.get("error", "Unknown error"))
 

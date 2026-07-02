@@ -13,6 +13,7 @@ const BRIDGE_TOKEN_PATH := "res://local_runtime/host-bridge-token.txt"
 const SANDBOX_SCENE := "res://scenes/gameplay_sandbox.tscn"
 const MULTIPLAYER_SCENE := "res://scenes/multiplayer_sandbox.tscn"
 const ENTER_WORLD_SCENE := "res://scenes/enter_world_view.tscn"
+const WORLD_SESSION_SCENE := "res://scenes/world_session_view.tscn"
 const MOVEMENT_SCENE := "res://scenes/movement_reconciliation_view.tscn"
 const OBJECT_VISIBILITY_SCENE := "res://scenes/object_visibility_view.tscn"
 const INTERACTION_COMBAT_SCENE := "res://scenes/interaction_combat_view.tscn"
@@ -96,6 +97,10 @@ func _register_command_actions() -> void:
 		"open_enter_world": {
 			"label": "Enter World",
 			"handler": Callable(self, "_action_open_enter_world"),
+		},
+		"open_world_session": {
+			"label": "World Session",
+			"handler": Callable(self, "_action_open_world_session"),
 		},
 		"open_movement": {
 			"label": "Move Test",
@@ -257,6 +262,7 @@ func _build_dashboard() -> void:
 	actions.add_child(_action_button("open_sandbox"))
 	actions.add_child(_action_button("open_multiplayer"))
 	actions.add_child(_action_button("open_enter_world"))
+	actions.add_child(_action_button("open_world_session"))
 	actions.add_child(_action_button("open_movement"))
 	actions.add_child(_action_button("open_object_visibility"))
 	actions.add_child(_action_button("open_interaction_combat"))
@@ -505,6 +511,12 @@ func _action_open_enter_world() -> void:
 	var error := get_tree().change_scene_to_file(ENTER_WORLD_SCENE)
 	if error != OK:
 		_append_log("Could not open enter-world scene. Error code: " + str(error))
+
+
+func _action_open_world_session() -> void:
+	var error := get_tree().change_scene_to_file(WORLD_SESSION_SCENE)
+	if error != OK:
+		_append_log("Could not open world-session scene. Error code: " + str(error))
 
 
 func _action_open_movement() -> void:

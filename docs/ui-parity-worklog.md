@@ -23,6 +23,41 @@ lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-01 - World Session Shell (Codex UI lane)
+
+Context: the login and character-select UI can now authenticate, fetch a roster,
+and call `enter_world`. The next UI gap was that a successful enter-world still
+returned to the dashboard instead of landing in a game-facing session surface.
+
+Result:
+
+- Added `scenes/world_session_view.tscn` and `scripts/world_session_view.gd`.
+- Successful character-select enter-world now routes to the world-session shell.
+- The shell reads `SessionContext.selected_character` and
+  `SessionContext.last_enter_world_result`, renders the selected character name,
+  map, server-reported coordinates, visible-object count when present, a 3D
+  marker/grid, basic HUD bars, and panel navigation buttons.
+- The dashboard now has a `World Session` button for manual inspection.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` validates the shell with synthetic
+  session data.
+- `ACORE_GAME_LOGIN_LIVE_SELF_TEST=1` still authenticated typed credentials and
+  carried 1 character after the new world-session routing.
+- `ACORE_CHARACTER_SELECT_LIVE_SELF_TEST=1` still fetched 1 live character and
+  entered world as the selected character after the new world-session routing.
+
+Remaining work:
+
+- Keep one persistent authenticated protocol session alive after enter-world
+  instead of using one-shot bridge probes.
+- Replace the marker shell with server-synchronized movement, object spawning,
+  click targeting, and integrated HUD panels.
+- Move chat, spellbook, action bars, inventory, questing, vendors, trainers, and
+  combat from separate proof scenes into this session shell.
+
 ## 2026-07-01 - Login Session Handoff (Codex UI lane)
 
 Context: Claude added optional account/password bridge parameters in the
