@@ -655,6 +655,56 @@ int questgiver_accept_probe(
     return result.accepted_confirmed || result.already_in_log ? 0 : 1;
 }
 
+int quest_abandon_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_selector,
+    std::string const& quest_id,
+    std::string const& target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::QuestLogAbandonProbeResult result = acore_protocol::quest_log_abandon_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_selector),
+        static_cast<std::uint32_t>(std::stoul(quest_id)),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "QUEST_ABANDON_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " quest_id=" << result.quest_id
+              << " quest_log_slot=" << static_cast<int>(result.quest_log_slot)
+              << " accept_ok=" << (result.accept_ok ? 1 : 0)
+              << " accepted_confirmed=" << (result.accept_result.accepted_confirmed ? 1 : 0)
+              << " already_in_log=" << (result.accept_result.already_in_log ? 1 : 0)
+              << " quest_log_slot_found=" << (result.quest_log_slot_found ? 1 : 0)
+              << " logged_in_world=" << (result.logged_in_world ? 1 : 0)
+              << " remove_sent=" << (result.remove_sent ? 1 : 0)
+              << " quest_log_before_remove_seen=" << (result.quest_log_before_remove_seen ? 1 : 0)
+              << " quest_log_after_remove_seen=" << (result.quest_log_after_remove_seen ? 1 : 0)
+              << " quest_in_log_before_remove=" << (result.quest_in_log_before_remove ? 1 : 0)
+              << " quest_in_log_after_remove=" << (result.quest_in_log_after_remove ? 1 : 0)
+              << " abandon_confirmed=" << (result.abandon_confirmed ? 1 : 0)
+              << " before_populated=" << result.quest_log_before_remove.populated_count
+              << " after_populated=" << result.quest_log_after_remove.populated_count
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    print_quest_log_slots("QUEST_LOG_BEFORE_REMOVE_SLOT", result.quest_log_before_remove);
+    print_quest_log_slots("QUEST_LOG_AFTER_REMOVE_SLOT", result.quest_log_after_remove);
+    return result.abandon_confirmed ? 0 : 1;
+}
+
 int trainer_buy_spell_probe(
     std::string const& host,
     std::string const& port,
@@ -1684,6 +1734,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --npc-interaction <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --trainer-list <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --questgiver-accept <host> <port> <account> <character-name> <target-guid-or-entry> <quest-id> <target-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --quest-abandon-proof <host> <port> <account> <character-name> <target-guid-or-entry> <quest-id> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --trainer-buy <host> <port> <account> <character-name> <target-guid-or-entry> <target-name> <spell-id>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --loot-open-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
@@ -1771,6 +1822,11 @@ int main(int argc, char** argv)
         if (argc == 9 && std::strcmp(argv[1], "--questgiver-accept") == 0)
         {
             return questgiver_accept_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
+        }
+
+        if (argc == 9 && std::strcmp(argv[1], "--quest-abandon-proof") == 0)
+        {
+            return quest_abandon_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
         }
 
         if (argc == 9 && std::strcmp(argv[1], "--trainer-buy") == 0)

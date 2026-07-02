@@ -677,6 +677,12 @@ void AcoreProtocolClient::_bind_methods()
         D_METHOD("questgiver_accept_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "quest_id", "target_name"),
         &AcoreProtocolClient::questgiver_accept_probe_selector);
     ClassDB::bind_method(
+        D_METHOD("quest_abandon_probe", "host", "port", "account", "password", "character_name", "target_entry", "quest_id", "target_name"),
+        &AcoreProtocolClient::quest_abandon_probe);
+    ClassDB::bind_method(
+        D_METHOD("quest_abandon_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "quest_id", "target_name"),
+        &AcoreProtocolClient::quest_abandon_probe_selector);
+    ClassDB::bind_method(
         D_METHOD("trainer_buy_spell_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name", "spell_id"),
         &AcoreProtocolClient::trainer_buy_spell_probe);
     ClassDB::bind_method(
@@ -1184,6 +1190,90 @@ Dictionary AcoreProtocolClient::questgiver_accept_probe_selector(
         result["after_populated"] = static_cast<int>(flow.quest_log_after.populated_count);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::quest_abandon_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    int64_t quest_id,
+    String const& target_name)
+{
+    return quest_abandon_probe_selector(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        String::num_int64(target_entry),
+        quest_id,
+        target_name);
+}
+
+Dictionary AcoreProtocolClient::quest_abandon_probe_selector(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    String const& target_selector,
+    int64_t quest_id,
+    String const& target_name)
+{
+    try
+    {
+        std::uint64_t const selector = parse_target_selector(target_selector, "quest abandon target selector");
+        if (quest_id <= 0)
+        {
+            throw std::runtime_error("quest abandon quest id must be non-zero");
+        }
+
+        acore_protocol::QuestLogAbandonProbeResult flow = acore_protocol::quest_log_abandon_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            selector,
+            static_cast<std::uint32_t>(quest_id),
+            to_std_string(target_name));
+
+        Dictionary result;
+        result["ok"] = flow.abandon_confirmed;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["quest_id"] = static_cast<int>(flow.quest_id);
+        result["quest_log_slot"] = static_cast<int>(flow.quest_log_slot);
+        result["accept_ok"] = flow.accept_ok;
+        result["accepted_confirmed"] = flow.accept_result.accepted_confirmed;
+        result["already_in_log"] = flow.accept_result.already_in_log;
+        result["quest_log_slot_found"] = flow.quest_log_slot_found;
+        result["logged_in_world"] = flow.logged_in_world;
+        result["remove_sent"] = flow.remove_sent;
+        result["quest_log_before_remove_seen"] = flow.quest_log_before_remove_seen;
+        result["quest_log_after_remove_seen"] = flow.quest_log_after_remove_seen;
+        result["quest_in_log_before_remove"] = flow.quest_in_log_before_remove;
+        result["quest_in_log_after_remove"] = flow.quest_in_log_after_remove;
+        result["abandon_confirmed"] = flow.abandon_confirmed;
+        result["quest_log_before_remove"] = quest_log_dictionary(flow.quest_log_before_remove);
+        result["quest_log_after_remove"] = quest_log_dictionary(flow.quest_log_after_remove);
+        result["before_populated"] = static_cast<int>(flow.quest_log_before_remove.populated_count);
+        result["after_populated"] = static_cast<int>(flow.quest_log_after_remove.populated_count);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;

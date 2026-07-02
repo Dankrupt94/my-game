@@ -1599,6 +1599,13 @@ std::vector<std::uint8_t> build_questgiver_accept_quest_payload(std::uint64_t gu
     return payload;
 }
 
+std::vector<std::uint8_t> build_questlog_remove_quest_payload(std::uint8_t slot)
+{
+    std::vector<std::uint8_t> payload;
+    append_u8(payload, slot);
+    return payload;
+}
+
 QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const std::uint8_t> payload)
 {
     std::size_t offset = 0;

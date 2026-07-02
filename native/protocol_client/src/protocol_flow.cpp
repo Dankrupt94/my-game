@@ -1217,6 +1217,22 @@ bool quest_log_contains(PlayerQuestLogSummary const& quest_log, std::uint32_t qu
     return false;
 }
 
+QuestLogSlotSummary const* find_quest_log_quest(PlayerQuestLogSummary const& quest_log, std::uint32_t quest_id)
+{
+    if (quest_id == 0)
+    {
+        return nullptr;
+    }
+    for (QuestLogSlotSummary const& slot : quest_log.slots)
+    {
+        if (slot.populated && slot.quest_id == quest_id)
+        {
+            return &slot;
+        }
+    }
+    return nullptr;
+}
+
 std::uint32_t first_u32_le_or_zero(std::vector<std::uint8_t> const& payload)
 {
     if (payload.size() < 4)
@@ -2967,6 +2983,223 @@ QuestGiverAcceptProbeResult questgiver_accept_probe(
         && result.accept_sent
         && !result.failure_seen;
     result.already_in_log = result.quest_in_log_before && result.quest_in_log_after;
+    return result;
+}
+
+QuestLogAbandonProbeResult quest_log_abandon_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::uint32_t quest_id,
+    std::string const& target_name,
+    FlowOptions options)
+{
+    if (target_guid == 0)
+    {
+        throw std::runtime_error("quest abandon target guid or entry must be non-zero");
+    }
+    if (quest_id == 0)
+    {
+        throw std::runtime_error("quest abandon probe requires a non-zero quest id");
+    }
+
+    QuestLogAbandonProbeResult result;
+    result.quest_id = quest_id;
+    result.target_entry = target_entry_from_selector(target_guid);
+    result.target_name = target_name;
+
+    QuestGiverAcceptProbeResult accept = questgiver_accept_probe(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        target_guid,
+        quest_id,
+        target_name,
+        options);
+    result.accept_result = accept;
+    result.realm = accept.realm;
+    result.character = accept.character;
+    result.target_guid = accept.target_guid;
+    result.target_entry = accept.target_entry;
+    result.accept_ok = accept.accepted_confirmed || accept.already_in_log;
+    result.quest_log_before_remove = accept.quest_log_after;
+    result.quest_log_before_remove_seen = accept.quest_log_after_seen;
+    result.quest_in_log_before_remove = quest_log_contains(result.quest_log_before_remove, quest_id);
+    result.skipped_opcodes.insert(
+        result.skipped_opcodes.end(),
+        accept.skipped_opcodes.begin(),
+        accept.skipped_opcodes.end());
+
+    if (!result.accept_ok || !result.quest_in_log_before_remove)
+    {
+        QuestLogSnapshotResult before = read_quest_log_snapshot(host, port, account, password, character_name, options);
+        result.quest_log_before_remove = before.quest_log;
+        result.quest_log_before_remove_seen = before.quest_log_seen;
+        result.quest_in_log_before_remove = quest_log_contains(before.quest_log, quest_id);
+        result.skipped_opcodes.insert(
+            result.skipped_opcodes.end(),
+            before.skipped_opcodes.begin(),
+            before.skipped_opcodes.end());
+        if (!result.quest_in_log_before_remove)
+        {
+            return result;
+        }
+    }
+
+    QuestLogSlotSummary const* initial_slot = find_quest_log_quest(result.quest_log_before_remove, quest_id);
+    if (!initial_slot)
+    {
+        return result;
+    }
+    result.quest_log_slot = initial_slot->slot;
+    result.quest_log_slot_found = true;
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    (void)login_selected_character(*session, selected, options);
+    result.realm = session->realm;
+    result.character = selected;
+
+    for (int i = 0; i < 160; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (result.logged_in_world)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            if (update.quest_log.seen)
+            {
+                merge_quest_log_summary(result.quest_log_before_remove, update.quest_log);
+                result.quest_log_before_remove_seen = true;
+                result.quest_in_log_before_remove = quest_log_contains(result.quest_log_before_remove, quest_id);
+                QuestLogSlotSummary const* refreshed_slot = find_quest_log_quest(result.quest_log_before_remove, quest_id);
+                if (refreshed_slot)
+                {
+                    result.quest_log_slot = refreshed_slot->slot;
+                    result.quest_log_slot_found = true;
+                }
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            result.logged_in_world = true;
+            break;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (!result.logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before quest abandon probe");
+    }
+    if (!result.quest_in_log_before_remove || !result.quest_log_slot_found)
+    {
+        (void)request_graceful_logout(*session, options);
+        return result;
+    }
+
+    result.quest_log_after_remove = result.quest_log_before_remove;
+    result.quest_in_log_after_remove = result.quest_in_log_before_remove;
+    write_world_packet(
+        session->socket.get(),
+        CMSG_QUESTLOG_REMOVE_QUEST,
+        build_questlog_remove_quest_payload(result.quest_log_slot),
+        &session->crypt);
+    result.remove_sent = true;
+
+    for (int i = 0; i < 120; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (result.quest_log_after_remove_seen && !result.quest_in_log_after_remove)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            if (update.quest_log.seen)
+            {
+                merge_quest_log_summary(result.quest_log_after_remove, update.quest_log);
+                result.quest_log_after_remove_seen = true;
+                result.quest_in_log_after_remove = quest_log_contains(result.quest_log_after_remove, quest_id);
+                if (!result.quest_in_log_after_remove)
+                {
+                    break;
+                }
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    (void)request_graceful_logout(*session, options);
+
+    if (!result.quest_log_after_remove_seen || result.quest_in_log_after_remove)
+    {
+        QuestLogSnapshotResult after = read_quest_log_snapshot(host, port, account, password, character_name, options);
+        result.quest_log_after_remove = after.quest_log;
+        result.quest_log_after_remove_seen = after.quest_log_seen;
+        result.quest_in_log_after_remove = quest_log_contains(after.quest_log, quest_id);
+        result.skipped_opcodes.insert(
+            result.skipped_opcodes.end(),
+            after.skipped_opcodes.begin(),
+            after.skipped_opcodes.end());
+    }
+
+    result.abandon_confirmed = result.accept_ok
+        && result.quest_log_before_remove_seen
+        && result.quest_log_after_remove_seen
+        && result.quest_in_log_before_remove
+        && !result.quest_in_log_after_remove
+        && result.quest_log_slot_found
+        && result.remove_sent;
     return result;
 }
 

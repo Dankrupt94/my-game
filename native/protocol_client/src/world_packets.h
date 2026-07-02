@@ -30,6 +30,7 @@ constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
 constexpr std::uint32_t CMSG_QUESTGIVER_HELLO = 0x184;
 constexpr std::uint32_t CMSG_QUESTGIVER_QUERY_QUEST = 0x186;
 constexpr std::uint32_t CMSG_QUESTGIVER_ACCEPT_QUEST = 0x189;
+constexpr std::uint32_t CMSG_QUESTLOG_REMOVE_QUEST = 0x194;
 constexpr std::uint32_t CMSG_LIST_INVENTORY = 0x19E;
 constexpr std::uint32_t CMSG_SELL_ITEM = 0x1A0;
 constexpr std::uint32_t CMSG_BUY_ITEM = 0x1A2;
@@ -597,6 +598,7 @@ GossipMessageSummary parse_gossip_message_response(std::span<const std::uint8_t>
 QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const std::uint8_t> payload);
 std::vector<std::uint8_t> build_questgiver_query_quest_payload(std::uint64_t guid, std::uint32_t quest_id);
 std::vector<std::uint8_t> build_questgiver_accept_quest_payload(std::uint64_t guid, std::uint32_t quest_id);
+std::vector<std::uint8_t> build_questlog_remove_quest_payload(std::uint8_t slot);
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std::uint8_t> payload);
 VendorListSummary parse_vendor_list_response(std::span<const std::uint8_t> payload);

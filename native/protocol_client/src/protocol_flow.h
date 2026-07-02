@@ -218,6 +218,30 @@ struct QuestGiverAcceptProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct QuestLogAbandonProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t target_guid = 0;
+    std::uint32_t target_entry = 0;
+    std::string target_name;
+    std::uint32_t quest_id = 0;
+    std::uint8_t quest_log_slot = 0;
+    bool accept_ok = false;
+    bool quest_log_slot_found = false;
+    bool logged_in_world = false;
+    bool remove_sent = false;
+    bool quest_log_before_remove_seen = false;
+    bool quest_log_after_remove_seen = false;
+    bool quest_in_log_before_remove = false;
+    bool quest_in_log_after_remove = false;
+    bool abandon_confirmed = false;
+    QuestGiverAcceptProbeResult accept_result;
+    PlayerQuestLogSummary quest_log_before_remove;
+    PlayerQuestLogSummary quest_log_after_remove;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct TrainerBuySpellProbeResult
 {
     RealmInfo realm;
@@ -688,6 +712,17 @@ QuestGiverDetailsProbeResult questgiver_details_probe(
     FlowOptions options = {});
 
 QuestGiverAcceptProbeResult questgiver_accept_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t target_guid,
+    std::uint32_t quest_id,
+    std::string const& target_name,
+    FlowOptions options = {});
+
+QuestLogAbandonProbeResult quest_log_abandon_probe(
     std::string const& host,
     std::string const& port,
     std::string const& account,

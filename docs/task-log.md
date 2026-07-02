@@ -2132,3 +2132,48 @@ Remaining work:
 - Quest detail (`CMSG_QUESTGIVER_QUERY_QUEST` / `SMSG_QUESTGIVER_QUEST_DETAILS`),
   accept/complete/reward protocol, objective/quest-log tracking, in-world click
   targeting, persistent-session integration, and dashboard navigation (UI lane).
+
+## 2026-07-01 - Stage 17 Quest Abandon Proof Bridge
+
+Goal: prove the Godot protocol bridge can complete a bounded quest-log mutation:
+accept the local fixture quest, find the server-owned quest-log slot, send the
+quest-log remove packet for that slot, and confirm the quest is gone afterward.
+
+Result:
+
+- Added `CMSG_QUESTLOG_REMOVE_QUEST` (0x194) and a one-byte slot payload builder.
+- Added `QuestLogAbandonProbeResult` and `quest_log_abandon_probe(...)`, which
+  reuses the working quest-accept flow, snapshots the quest log, removes the live
+  slot, and snapshots/merges the after state.
+- Added native helper command `--quest-abandon-proof`.
+- Exposed the proof through the Godot native extension as
+  `quest_abandon_probe(_selector)`.
+- Added `ProtocolClientBridge.quest_abandon_probe(_selector)` with native
+  extension first and helper-process fallback.
+- Added `tools/quest_abandon_bridge_smoke.gd` for parser plus live bridge
+  verification.
+
+Validation:
+
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `native/protocol_client/build-compat/acore_protocol_client --self-test`
+  passed.
+- Fixture reset for `Codexstage` / quest `783` reported zero active/rewarded
+  rows before and after reset.
+- Native `--quest-abandon-proof` passed against target entry `823`: accepted
+  quest `783`, found slot `0`, sent remove, and confirmed
+  `quest_in_log_after_remove=0`.
+- `godot-4 --headless --path . --script res://tools/quest_abandon_bridge_smoke.gd`
+  passed through the Godot native extension: slot `0`, before populated `1`,
+  after populated `0`.
+- Post-smoke fixture dry-run reported zero active/rewarded rows for quest `783`.
+- `godot-4 --headless --path . --script res://tools/protocol_bridge_smoke.gd`
+  passed.
+- `godot-4 --headless --path . --script res://tools/quest_log_bridge_smoke.gd`
+  passed with 25 slots and zero populated slots.
+- Local `qwen-agent` advisory review reported no blockers for the code diff.
+
+Remaining work:
+
+- Quest completion/reward selection, objective progress updates, full quest log
+  UI state, persistent-session integration, and UI lane polish.
