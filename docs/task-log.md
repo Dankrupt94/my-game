@@ -1,5 +1,20 @@
 # Task Log
 
+## 2026-07-02 - World Session Map Panel Started
+
+Goal: add a UI-lane resident map panel to the persistent world-session HUD so
+the `Map` shortcut no longer routes to the Quests panel, without touching
+Claude's native/protocol/bridge/live-session work.
+
+Plan:
+
+- Add a `map` resident panel using the same movable/resizable world-session
+  panel system as Chat, Actions, Quests, Bags, and Options.
+- Route the `Map` shortcut and a nav-bar button to the new panel.
+- Render safe numeric session data only: map id, server-reported position,
+  Godot marker position, target snapshot count, and selected target index.
+- Validate with headless Godot self-tests.
+
 ## 2026-07-02 - World Session Quest Tracker Started
 
 Goal: extend the UI-lane quest work from a resident popup panel into a small
