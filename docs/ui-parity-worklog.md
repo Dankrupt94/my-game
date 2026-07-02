@@ -22,18 +22,32 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Loot Panel Started (Codex UI lane)
+## 2026-07-02 - World Session Loot Panel (Codex UI lane)
 
-Goal: add a resident loot-window surface to the active world-session HUD so
-safe loot snapshots can display in the normal gameplay view.
+Context: Stage 17 has live loot proof scenes, but the active world-session HUD
+did not yet have a resident normal loot-window surface.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Render session-provided loot status, money, and item rows without calling or
-  editing the protocol bridge.
-- Keep actual loot pickup/release/autostore actions in Claude's live-session
-  lane.
+- Added a resident `Loot` panel to `scripts/world_session_view.gd`.
+- The panel renders safe session loot dictionaries without calling the protocol
+  bridge: status, target entry/GUID, response opcode, loot money, item rows,
+  removed-item notices, and changed inventory slots when present.
+- Actual loot pickup, release, autostore, and click-targeting behavior remains
+  in Claude's live-session/native lane.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `loot_panel=true`.
+
+Remaining work:
+
+- Feed live loot snapshots from Claude's persistent session lane into the
+  world-session context after combat/corpse loot.
+- Add player-driven loot row pickup, money loot, release/autostore controls,
+  full-bag/error feedback, group loot rolls, local-only names/icons/tooltips,
+  and persistent inventory refresh.
 
 ## 2026-07-02 - World Session Character Panel (Codex UI lane)
 

@@ -1,5 +1,32 @@
 # Task Log
 
+## 2026-07-02 - World Session Loot Panel
+
+Goal: add a first resident loot-window surface to the active world-session HUD
+without touching Claude's native/protocol/bridge/live-session files.
+
+Result:
+
+- Added a `Loot` panel to the world-session movable/resizable HUD system.
+- The panel renders safe session loot data: status, target entry/GUID, response
+  opcode, loot money, item rows, removed-item notices, and changed inventory
+  slots when present.
+- The panel stays display-only; pickup, release, autostore, and real click
+  targeting remain live-session lane work.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `loot_panel=true`.
+
+Remaining work:
+
+- Feed live loot snapshots from the persistent session lane after combat/corpse
+  loot.
+- Add player-driven loot row pickup, money loot, release/autostore controls,
+  full-bag/error feedback, group loot rolls, local-only names/icons/tooltips,
+  and persistent inventory refresh.
+
 ## 2026-07-02 - World Session Character Panel
 
 Goal: add a first resident character/paper-doll style HUD surface to the

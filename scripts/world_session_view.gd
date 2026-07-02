@@ -17,7 +17,8 @@ const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
 const PANEL_NAMES := [
-	"chat", "character", "spells", "actions", "targets", "quests", "map", "options", "inventory"
+	"chat", "character", "spells", "actions", "targets", "quests", "loot", "map", "options",
+	"inventory"
 ]
 const ACTION_BAR_DISPLAY_COUNT := 12
 const ACTION_BAR_KEYS := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="]
@@ -96,6 +97,7 @@ var visible_objects: Array = []
 var session_chat_rows: Array = []
 var session_spell_rows: Array = []
 var session_action_slots: Array = []
+var session_loot_snapshot: Dictionary = {}
 var session_inventory_slots: Array = []
 var session_coinage := -1
 var selected_target_index := -1
@@ -265,6 +267,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Actions", "actions")
 	_add_panel_button(nav_bar, "Targets", "targets")
 	_add_panel_button(nav_bar, "Quests", "quests")
+	_add_panel_button(nav_bar, "Loot", "loot")
 	_add_panel_button(nav_bar, "Map", "map")
 	_add_panel_button(nav_bar, "Bags", "inventory")
 	_add_panel_button(nav_bar, "Options", "options")
@@ -474,6 +477,7 @@ func _apply_session_data(
 	session_chat_rows = _extract_chat_rows(character, enter_result)
 	session_spell_rows = _extract_spell_rows(character, enter_result)
 	session_action_slots = _extract_action_slots(character, enter_result)
+	session_loot_snapshot = _extract_loot_snapshot(character, enter_result)
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
 	session_quest_slots = _extract_quest_slots(character, enter_result)
@@ -732,6 +736,122 @@ func _normalize_action_slots(raw_slots: Array) -> Array:
 			slot["populated"] = int(slot.get("action", 0)) > 0 or int(slot.get("type", -1)) >= 0
 		slots.append(slot)
 	return slots
+
+
+func _extract_loot_snapshot(character: Dictionary, enter_result: Dictionary) -> Dictionary:
+	var candidates: Array = [
+		character.get("loot", {}),
+		character.get("loot_window", {}),
+		character.get("loot_response", {}),
+		enter_result.get("loot", {}),
+		enter_result.get("loot_window", {}),
+		enter_result.get("loot_response", {}),
+	]
+	if _looks_like_loot_snapshot(character):
+		candidates.append(character)
+	if _looks_like_loot_snapshot(enter_result):
+		candidates.append(enter_result)
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("loot", {}))
+		candidates.append(update.get("loot_window", {}))
+		candidates.append(update.get("loot_response", {}))
+		if _looks_like_loot_snapshot(update):
+			candidates.append(update)
+
+	for candidate in candidates:
+		if not candidate is Dictionary or candidate.is_empty():
+			continue
+		var snapshot := _normalize_loot_snapshot(candidate)
+		if bool(snapshot.get("has_loot_data", false)):
+			return snapshot
+	return {}
+
+
+func _looks_like_loot_snapshot(snapshot: Dictionary) -> bool:
+	for key in [
+		"loot_response_seen",
+		"loot_release_response_seen",
+		"loot_error",
+		"gold",
+		"loot_money",
+		"loot_items",
+		"items",
+		"changed_slots",
+		"loot_item_removed_count",
+	]:
+		if snapshot.has(key):
+			return true
+	return false
+
+
+func _normalize_loot_snapshot(raw_snapshot: Dictionary) -> Dictionary:
+	var raw_items = raw_snapshot.get(
+		"items", raw_snapshot.get("loot_items", raw_snapshot.get("rows", []))
+	)
+	var items := _normalize_loot_items(raw_items if raw_items is Array else [])
+	var raw_changed = raw_snapshot.get(
+		"changed_slots", raw_snapshot.get("inventory_changes", [])
+	)
+	var changed_slots := _normalize_inventory_slots(raw_changed if raw_changed is Array else [])
+	var money := -1
+	for key in ["gold", "loot_money", "money", "coinage", "copper"]:
+		if raw_snapshot.has(key):
+			money = int(raw_snapshot.get(key, -1))
+			break
+
+	var status := "Loot snapshot: waiting for live loot response."
+	if bool(raw_snapshot.get("loot_response_seen", false)):
+		if bool(raw_snapshot.get("loot_error", false)):
+			status = "Server denied loot: error " + str(raw_snapshot.get("loot_error_code", 0))
+		else:
+			status = "Loot window: open"
+	elif bool(raw_snapshot.get("loot_release_response_seen", false)):
+		status = "Loot window: closed by server"
+	elif not items.is_empty() or not changed_slots.is_empty() or money >= 0:
+		status = "Loot snapshot"
+
+	var has_loot_data := (
+		_looks_like_loot_snapshot(raw_snapshot)
+		or not items.is_empty()
+		or not changed_slots.is_empty()
+		or money >= 0
+	)
+	return {
+		"has_loot_data": has_loot_data,
+		"status": status,
+		"money": money,
+		"items": items,
+		"changed_slots": changed_slots,
+		"target_guid": raw_snapshot.get("target_guid", raw_snapshot.get("guid", "")),
+		"target_entry": raw_snapshot.get("target_entry", raw_snapshot.get("entry", 0)),
+		"response_opcode": raw_snapshot.get("response_opcode", 0),
+		"removed_count": raw_snapshot.get("loot_item_removed_count", 0),
+	}
+
+
+func _normalize_loot_items(raw_items: Array) -> Array:
+	var items: Array = []
+	for index in range(raw_items.size()):
+		var raw_item = raw_items[index]
+		if not raw_item is Dictionary:
+			continue
+		var item: Dictionary = raw_item.duplicate(true)
+		if not item.has("slot"):
+			if item.has("loot_slot"):
+				item["slot"] = int(item.get("loot_slot", index))
+			elif item.has("index"):
+				item["slot"] = int(item.get("index", index))
+			else:
+				item["slot"] = index
+		if not item.has("item_id") and item.has("item_entry"):
+			item["item_id"] = int(item.get("item_entry", 0))
+		if not item.has("count") and item.has("stack_count"):
+			item["count"] = int(item.get("stack_count", 0))
+		if not item.has("count"):
+			item["count"] = 1 if int(item.get("item_id", 0)) > 0 else 0
+		items.append(item)
+	return items
 
 
 func _extract_inventory_slots(character: Dictionary, enter_result: Dictionary) -> Array:
@@ -1211,6 +1331,8 @@ func _panel_title(panel_name: String) -> String:
 			return "Targets"
 		"quests":
 			return "Quests"
+		"loot":
+			return "Loot"
 		"map":
 			return "Map"
 		"inventory":
@@ -1314,6 +1436,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_targets_panel()
 		"quests":
 			_build_quests_panel()
+		"loot":
+			_build_loot_panel()
 		"map":
 			_build_map_panel()
 		"inventory":
@@ -1879,6 +2003,100 @@ func _build_quests_panel() -> void:
 
 	for slot in active_slots:
 		panel_body.add_child(_quest_slot_button(slot))
+
+
+func _build_loot_panel() -> void:
+	panel_title_label.text = "Loot"
+	if session_loot_snapshot.is_empty():
+		panel_body.add_child(_panel_label("Loot window: waiting for session loot data.", 13))
+		panel_body.add_child(
+			_panel_label(
+				(
+					"Target, pickup, autostore, and release actions remain in the "
+					+ "persistent live-session lane."
+				),
+				13
+			)
+		)
+		return
+
+	panel_body.add_child(_panel_label(str(session_loot_snapshot.get("status", "Loot")), 13))
+	var target_entry := int(session_loot_snapshot.get("target_entry", 0))
+	var target_guid := str(session_loot_snapshot.get("target_guid", "")).strip_edges()
+	if target_entry > 0 or not target_guid.is_empty():
+		panel_body.add_child(
+			_panel_label(
+				"Target: entry %s guid %s" % [str(target_entry), target_guid],
+				13
+			)
+		)
+	var money := int(session_loot_snapshot.get("money", -1))
+	if money >= 0:
+		panel_body.add_child(_panel_label("Loot money: " + _money_text(money), 13))
+	var opcode := int(session_loot_snapshot.get("response_opcode", 0))
+	if opcode > 0:
+		panel_body.add_child(_panel_label("Response opcode: 0x%03x" % opcode, 13))
+	var removed_count := int(session_loot_snapshot.get("removed_count", 0))
+	if removed_count > 0:
+		panel_body.add_child(_panel_label("Removed item notices: " + str(removed_count), 13))
+
+	var items: Array = session_loot_snapshot.get("items", [])
+	if items.is_empty():
+		panel_body.add_child(_panel_label("Loot items: no item rows in this snapshot.", 13))
+	else:
+		panel_body.add_child(_panel_label("Loot items: " + str(items.size()), 14))
+		for index in range(min(items.size(), 24)):
+			var item = items[index]
+			if item is Dictionary:
+				panel_body.add_child(_loot_item_button(item))
+
+	var changed_slots: Array = session_loot_snapshot.get("changed_slots", [])
+	if not changed_slots.is_empty():
+		panel_body.add_child(_panel_label("Inventory changes: " + str(changed_slots.size()), 14))
+		for slot in changed_slots:
+			if slot is Dictionary:
+				panel_body.add_child(_panel_label(_inventory_slot_detail(slot, int(slot.get("slot", 0))), 13))
+
+	panel_body.add_child(_panel_label("Loot actions: waiting for live session controls.", 13))
+
+
+func _loot_item_button(item: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = _loot_item_text(item)
+	button.tooltip_text = _loot_item_detail(item)
+	button.custom_minimum_size = Vector2(220.0, 44.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_loot_item.bind(item))
+	return button
+
+
+func _show_loot_item(item: Dictionary) -> void:
+	session_label.text = _loot_item_detail(item)
+	status_label.text = "Loot row selected: " + _loot_item_text(item).replace("\n", " | ")
+
+
+func _loot_item_text(item: Dictionary) -> String:
+	var item_name := str(item.get("item_name", "")).strip_edges()
+	var item_id := int(item.get("item_id", 0))
+	if item_name.is_empty():
+		item_name = "item " + str(item_id)
+	return "Slot %s\n%s x%s" % [
+		str(item.get("slot", 0)),
+		item_name,
+		str(item.get("count", 0)),
+	]
+
+
+func _loot_item_detail(item: Dictionary) -> String:
+	var parts: Array[String] = [
+		"slot " + str(item.get("slot", 0)),
+		"item " + str(item.get("item_id", 0)),
+		"count " + str(item.get("count", 0)),
+	]
+	for key in ["quality", "display_id", "random_property_id", "suffix_factor"]:
+		if item.has(key):
+			parts.append(key + " " + str(item.get(key)))
+	return " | ".join(parts)
 
 
 func _build_map_panel() -> void:
@@ -2465,6 +2683,39 @@ func _run_self_test() -> void:
 				},
 			],
 		},
+		"loot":
+		{
+			"loot_response_seen": true,
+			"target_guid": "0xf130000045000daa",
+			"target_entry": 69,
+			"response_opcode": 0x160,
+			"gold": 42,
+			"loot_item_removed_count": 1,
+			"items":
+			[
+				{
+					"slot": 0,
+					"item_id": 25,
+					"count": 2,
+				},
+				{
+					"slot": 1,
+					"item_entry": 117,
+					"stack_count": 1,
+				},
+			],
+			"changed_slots":
+			[
+				{
+					"slot": 23,
+					"populated": true,
+					"item_name": "Looted Keepsake",
+					"item_entry": 25,
+					"stack_count": 2,
+					"item_guid": "0x4000000000000200",
+				},
+			],
+		},
 		"action_buttons":
 		{
 			"buttons":
@@ -2669,6 +2920,24 @@ func _run_self_test() -> void:
 		and _control_tree_text_contains(quest_tracker_body, "obj1 1")
 		and _control_tree_text_contains(quest_tracker_body, "Open")
 	)
+	_show_session_panel("loot")
+	var loot_shell := _panel_shell("loot")
+	var loot_title: Label = session_panels.get("loot", {}).get("title", null)
+	var loot_body: VBoxContainer = session_panels.get("loot", {}).get("body", null)
+	var loot_items: Array = session_loot_snapshot.get("items", [])
+	var loot_panel_ok := (
+		loot_shell != null
+		and loot_shell.visible
+		and loot_title != null
+		and loot_title.text == "Loot"
+		and loot_body != null
+		and int(session_loot_snapshot.get("money", -1)) == 42
+		and loot_items.size() == 2
+		and _control_tree_text_contains(loot_body, "Loot money: 0g 0s 42c")
+		and _control_tree_text_contains(loot_body, "Loot items: 2")
+		and _control_tree_text_contains(loot_body, "item 25")
+		and _control_tree_text_contains(loot_body, "Inventory changes: 1")
+	)
 	_show_session_panel("map")
 	var map_shell := _panel_shell("map")
 	var map_title: Label = session_panels.get("map", {}).get("title", null)
@@ -2729,7 +2998,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 11
+	var actions_ok := action_buttons.size() == 12
 	var shortcut_ok := (
 		shortcut_slots.size() == 12
 		and shortcut_slots[0].text.find("spell 78") != -1
@@ -2751,6 +3020,7 @@ func _run_self_test() -> void:
 		and target_frame_ok
 		and spells_panel_ok
 		and quests_panel_ok
+		and loot_panel_ok
 		and map_panel_ok
 		and quest_tracker_ok
 		and options_panel_ok
@@ -2763,7 +3033,7 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
-				+ "map_panel=true "
+				+ "loot_panel=true map_panel=true "
 				+ "targets=true action_slots=true spellbook=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
 			)
@@ -2784,7 +3054,7 @@ func _run_self_test() -> void:
 			"WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s "
 			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
 			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
-			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s"
+			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s loot_panel_ok=%s"
 		)
 		% [
 			str(marker_ok),
@@ -2799,6 +3069,7 @@ func _run_self_test() -> void:
 			str(targets_panel_ok),
 			str(target_frame_ok),
 			str(character_panel_ok),
+			str(loot_panel_ok),
 		]
 	)
 	push_error(self_test_error)
