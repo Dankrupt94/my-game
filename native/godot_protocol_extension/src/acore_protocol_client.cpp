@@ -354,6 +354,63 @@ Dictionary trainer_list_dictionary(TrainerListSummary const& trainer_list)
     return value;
 }
 
+Array questgiver_quest_array(std::vector<QuestGiverQuestSummary> const& quests)
+{
+    Array values;
+    for (QuestGiverQuestSummary const& q : quests)
+    {
+        Dictionary d;
+        d["quest_id"] = static_cast<int>(q.quest_id);
+        d["quest_icon"] = static_cast<int>(q.quest_icon);
+        d["quest_level"] = static_cast<int>(q.quest_level);
+        d["quest_flags"] = static_cast<int>(q.quest_flags);
+        d["repeatable"] = static_cast<int>(q.repeatable);
+        values.append(d);
+    }
+    return values;
+}
+
+Array gossip_quest_array(std::vector<GossipQuestItemSummary> const& quests)
+{
+    Array values;
+    for (GossipQuestItemSummary const& q : quests)
+    {
+        Dictionary d;
+        d["quest_id"] = static_cast<int>(q.quest_id);
+        d["quest_icon"] = static_cast<int>(q.quest_icon);
+        d["quest_level"] = static_cast<int>(q.quest_level);
+        d["quest_flags"] = static_cast<int>(q.quest_flags);
+        d["repeatable"] = static_cast<int>(q.repeatable);
+        values.append(d);
+    }
+    return values;
+}
+
+Dictionary questgiver_list_dictionary(QuestGiverListSummary const& list)
+{
+    Dictionary value;
+    value["parsed"] = list.parsed;
+    value["payload_size"] = static_cast<int>(list.payload_size);
+    value["questgiver_guid"] = guid_to_hex(list.questgiver_guid);
+    value["quest_count"] = static_cast<int>(list.quest_count);
+    value["quests"] = questgiver_quest_array(list.quests);
+    return value;
+}
+
+Dictionary gossip_message_dictionary(GossipMessageSummary const& gossip)
+{
+    Dictionary value;
+    value["parsed"] = gossip.parsed;
+    value["payload_size"] = static_cast<int>(gossip.payload_size);
+    value["sender_guid"] = guid_to_hex(gossip.sender_guid);
+    value["menu_id"] = static_cast<int>(gossip.menu_id);
+    value["title_text_id"] = static_cast<int>(gossip.title_text_id);
+    value["gossip_option_count"] = static_cast<int>(gossip.gossip_option_count);
+    value["quest_count"] = static_cast<int>(gossip.quest_count);
+    value["quests"] = gossip_quest_array(gossip.quests);
+    return value;
+}
+
 Dictionary trainer_buy_response_dictionary(TrainerBuyResponseSummary const& response)
 {
     Dictionary value;
@@ -518,6 +575,12 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("trainer_list_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "target_name"),
         &AcoreProtocolClient::trainer_list_probe_selector);
+    ClassDB::bind_method(
+        D_METHOD("questgiver_list_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name"),
+        &AcoreProtocolClient::questgiver_list_probe);
+    ClassDB::bind_method(
+        D_METHOD("questgiver_list_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "target_name"),
+        &AcoreProtocolClient::questgiver_list_probe_selector);
     ClassDB::bind_method(
         D_METHOD("trainer_buy_spell_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name", "spell_id"),
         &AcoreProtocolClient::trainer_buy_spell_probe);
@@ -764,6 +827,80 @@ Dictionary AcoreProtocolClient::trainer_list_probe_selector(
         result["spell_count"] = static_cast<int>(flow.trainer_list.spell_count);
         result["greeting"] = String(flow.trainer_list.greeting.c_str());
         result["spells"] = trainer_spell_array(flow.trainer_list.spells);
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::questgiver_list_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    String const& target_name)
+{
+    return questgiver_list_probe_selector(host, port, account, password, character_name, String::num_int64(target_entry), target_name);
+}
+
+Dictionary AcoreProtocolClient::questgiver_list_probe_selector(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    String const& target_selector,
+    String const& target_name)
+{
+    try
+    {
+        std::uint64_t const selector = parse_target_selector(target_selector, "questgiver target selector");
+        acore_protocol::QuestGiverListProbeResult flow = acore_protocol::questgiver_list_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            selector,
+            to_std_string(target_name));
+
+        bool const got_quests = (flow.quest_list_response_seen && flow.quest_list.quest_count > 0)
+            || (flow.gossip_fallback_seen && flow.gossip.quest_count > 0);
+
+        Dictionary result;
+        result["ok"] = flow.live_target_found && flow.selection_sent && flow.questgiver_hello_sent && got_quests;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["live_target_found"] = flow.live_target_found;
+        result["target_has_position"] = flow.target_has_position;
+        result["approach_movement_sent"] = flow.approach_movement_sent;
+        result["return_movement_sent"] = flow.return_movement_sent;
+        result["selection_sent"] = flow.selection_sent;
+        result["questgiver_hello_sent"] = flow.questgiver_hello_sent;
+        result["quest_list_response_seen"] = flow.quest_list_response_seen;
+        result["gossip_fallback_seen"] = flow.gossip_fallback_seen;
+        result["response_opcode"] = static_cast<int>(flow.response_opcode);
+        result["quest_list"] = questgiver_list_dictionary(flow.quest_list);
+        result["gossip"] = gossip_message_dictionary(flow.gossip);
+        // Unified quest view from whichever path the quest giver answered on.
+        result["quest_count"] = flow.quest_list_response_seen
+            ? static_cast<int>(flow.quest_list.quest_count)
+            : static_cast<int>(flow.gossip.quest_count);
+        result["quests"] = flow.quest_list_response_seen
+            ? questgiver_quest_array(flow.quest_list.quests)
+            : gossip_quest_array(flow.gossip.quests);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);

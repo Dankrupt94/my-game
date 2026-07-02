@@ -1822,3 +1822,47 @@ Validation:
 Remaining work:
 
 - Add buy, sell, repair, inventory refresh after purchase/sale, stock/failure UI, item metadata/icons/tooltips through local-only pipelines, in-world click targeting, and persistent-session integration.
+
+## 2026-07-01 - Stage 17 Quest Giver List Slice
+
+Goal: add a live quest-giver interaction that lists the quests an NPC offers the
+current character, following the Stage 17 vendor/trainer probe pattern, without
+committing proprietary quest title text.
+
+Result:
+
+- Native packet layer: `CMSG_QUESTGIVER_HELLO` (0x184), `SMSG_QUESTGIVER_QUEST_LIST`
+  (0x185) parser, and `SMSG_GOSSIP_MESSAGE` (0x17d) parser that extracts the
+  quests embedded in a gossip response (matching AzerothCore `SendGossipMenu` /
+  `SendQuestGiverQuestList`).
+- `questgiver_list_probe` flow (visible-target scan, approach, select, hello,
+  parse) + `--questgiver-list` CLI. It records the standalone quest list when the
+  NPC returns 0x185 and the gossip-embedded quests when it returns 0x17d.
+- Godot native extension `questgiver_list_probe(_selector)`, bridge methods, and
+  `scenes/stage17_questgiver_view.tscn` listing offered quests (id/level/flags).
+- Quest/gossip titles are read for correct parsing but never stored, printed, or
+  committed.
+
+Finding: live AzerothCore quest givers answer `CMSG_QUESTGIVER_HELLO` with
+`SMSG_GOSSIP_MESSAGE` (quests embedded), not the standalone 0x185 list, so the
+gossip-embedded parse is the path that matters in practice.
+
+Validation:
+
+- `native/protocol_client/build/acore_protocol_client --self-test` passes
+  (`WORLD_PACKET_SELF_TEST_OK`) covering both the 0x185 and gossip parsers.
+- Native `--questgiver-list` vs `Codexstage` against Deputy Willem (823):
+  `live_target_found=1`, response opcode `0x17d`, gossip menu `57020`,
+  `gossip_quest_count=1`, quest id `783` (level 1) — matched to the DB
+  `creature_queststarter` row for 823 and `quest_template.QuestLevel`.
+- `./tools/build_godot_protocol_extension_compat.sh` rebuilt the Godot extension
+  and compat helper.
+- `ACORE_QUESTGIVER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_questgiver_view.tscn`
+  passed end-to-end through the native extension: `QUESTGIVER_LIST_SELF_TEST_OK
+  quest_count=1 response_opcode=0x17d`.
+
+Remaining work:
+
+- Quest detail (`CMSG_QUESTGIVER_QUERY_QUEST` / `SMSG_QUESTGIVER_QUEST_DETAILS`),
+  accept/complete/reward protocol, objective/quest-log tracking, in-world click
+  targeting, persistent-session integration, and dashboard navigation (UI lane).
