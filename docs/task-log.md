@@ -1,5 +1,21 @@
 # Task Log
 
+## 2026-07-02 - World Session Quest Panel Started
+
+Goal: return to the UI lane after the tooling stage by adding a resident quest
+panel to the persistent world-session HUD without touching Claude's
+native/protocol/bridge/live-session work.
+
+Plan:
+
+- Reuse the existing movable/resizable world-session panel pattern.
+- Add a `Quests` resident HUD panel that can render server-shaped quest-log
+  slot dictionaries using safe numeric fields only.
+- Keep the current bridge/protocol lane untouched; use synthetic session data
+  in the UI self-test until Claude's persistent session lane exposes live quest
+  snapshots to the HUD.
+- Update UI documentation and validate with headless Godot self-tests.
+
 ## 2026-07-01 - Stage 17 Vendor Transaction Inventory Feedback Started
 
 Goal: make the vendor buy/sell proof show visible inventory state evidence instead of only reporting a roundtrip flag.
