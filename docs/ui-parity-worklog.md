@@ -22,6 +22,21 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Chat Log Data Started (Codex UI lane)
+
+Goal: continue moving normal-client HUD surfaces into the active
+world-session view by teaching the resident `Chat` panel to render safe
+session chat rows while keeping send behavior local until the live-session lane
+wires server chat actions.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Consume session-provided chat dictionaries/arrays; do not call or edit the
+  protocol bridge.
+- Add headless self-test coverage that proves the Chat panel renders session
+  chat rows.
+
 ## 2026-07-02 - World Session Spellbook Data (Codex UI lane)
 
 Context: the world-session HUD had a `Spells` shortcut and panel, but that
