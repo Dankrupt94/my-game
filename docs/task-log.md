@@ -1,5 +1,23 @@
 # Task Log
 
+## 2026-07-02 - Quest Abandon Proof Started
+
+Goal: add a bounded live quest abandon proof through the Godot client path,
+using the existing accept and quest-log snapshot work so the local character
+starts and ends clean.
+
+Plan:
+
+- Add `CMSG_QUESTLOG_REMOVE_QUEST` with the AzerothCore payload shape: a single
+  quest-log slot byte.
+- Build an accept-then-abandon probe that accepts the local starter fixture
+  quest, finds its server-owned quest-log slot, sends remove-quest for that
+  slot, and proves the quest is gone from a later snapshot.
+- Expose the proof through the native helper, Godot GDExtension, and
+  `ProtocolClientBridge`.
+- Keep committed output numeric only and validate with a disposable offline
+  fixture reset before/after.
+
 ## 2026-07-02 - Live Quest Log Snapshot Bridge Started
 
 Goal: use the temporary Claude-side window to expose a read-only live quest-log
