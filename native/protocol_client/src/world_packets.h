@@ -30,6 +30,9 @@ constexpr std::uint32_t CMSG_GOSSIP_HELLO = 0x17B;
 constexpr std::uint32_t CMSG_QUESTGIVER_HELLO = 0x184;
 constexpr std::uint32_t CMSG_QUESTGIVER_QUERY_QUEST = 0x186;
 constexpr std::uint32_t CMSG_QUESTGIVER_ACCEPT_QUEST = 0x189;
+constexpr std::uint32_t CMSG_QUESTGIVER_COMPLETE_QUEST = 0x18A;
+constexpr std::uint32_t CMSG_QUESTGIVER_REQUEST_REWARD = 0x18C;
+constexpr std::uint32_t CMSG_QUESTGIVER_CHOOSE_REWARD = 0x18E;
 constexpr std::uint32_t CMSG_QUESTLOG_REMOVE_QUEST = 0x194;
 constexpr std::uint32_t CMSG_LIST_INVENTORY = 0x19E;
 constexpr std::uint32_t CMSG_SELL_ITEM = 0x1A0;
@@ -78,7 +81,10 @@ constexpr std::uint16_t SMSG_BUY_FAILED = 0x1A5;
 constexpr std::uint16_t SMSG_TRAINER_LIST = 0x1B1;
 constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_LIST = 0x185;
 constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_DETAILS = 0x188;
+constexpr std::uint16_t SMSG_QUESTGIVER_REQUEST_ITEMS = 0x18B;
+constexpr std::uint16_t SMSG_QUESTGIVER_OFFER_REWARD = 0x18D;
 constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_INVALID = 0x18F;
+constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_COMPLETE = 0x191;
 constexpr std::uint16_t SMSG_QUESTGIVER_QUEST_FAILED = 0x192;
 constexpr std::uint16_t SMSG_QUESTLOG_FULL = 0x195;
 constexpr std::uint16_t SMSG_QUESTUPDATE_FAILED = 0x196;
@@ -466,6 +472,52 @@ struct QuestGiverDetailsSummary
     std::vector<QuestRewardItemSummary> reward_items;
 };
 
+struct QuestGiverOfferRewardSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t npc_guid = 0;
+    std::uint32_t quest_id = 0;
+    bool enable_next = false;
+    std::uint32_t quest_flags = 0;
+    std::uint32_t suggested_players = 0;
+    std::uint32_t emote_count = 0;
+    std::int32_t reward_choice_count = 0;
+    std::int32_t reward_item_count = 0;
+    std::uint32_t money_reward = 0;
+    std::uint32_t xp_reward = 0;
+    std::uint32_t honor_reward = 0;
+    std::uint32_t reward_spell = 0;
+    std::vector<QuestRewardItemSummary> reward_choice_items;
+    std::vector<QuestRewardItemSummary> reward_items;
+};
+
+struct QuestGiverRequestItemsSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t npc_guid = 0;
+    std::uint32_t quest_id = 0;
+    std::uint32_t quest_flags = 0;
+    std::uint32_t suggested_players = 0;
+    std::uint32_t required_money = 0;
+    std::int32_t required_item_count = 0;
+    std::uint32_t completion_flags = 0;
+    std::vector<QuestRewardItemSummary> required_items;
+};
+
+struct QuestGiverQuestCompleteSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint32_t quest_id = 0;
+    std::uint32_t xp_reward = 0;
+    std::uint32_t money_reward = 0;
+    std::uint32_t honor_reward = 0;
+    std::uint32_t bonus_talents = 0;
+    std::uint32_t arena_points = 0;
+};
+
 struct VendorItemSummary
 {
     std::uint32_t vendor_slot = 0;
@@ -596,8 +648,14 @@ TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> pay
 QuestGiverListSummary parse_questgiver_quest_list_response(std::span<const std::uint8_t> payload);
 GossipMessageSummary parse_gossip_message_response(std::span<const std::uint8_t> payload);
 QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const std::uint8_t> payload);
+QuestGiverOfferRewardSummary parse_questgiver_offer_reward_response(std::span<const std::uint8_t> payload);
+QuestGiverRequestItemsSummary parse_questgiver_request_items_response(std::span<const std::uint8_t> payload);
+QuestGiverQuestCompleteSummary parse_questgiver_quest_complete_response(std::span<const std::uint8_t> payload);
 std::vector<std::uint8_t> build_questgiver_query_quest_payload(std::uint64_t guid, std::uint32_t quest_id);
 std::vector<std::uint8_t> build_questgiver_accept_quest_payload(std::uint64_t guid, std::uint32_t quest_id);
+std::vector<std::uint8_t> build_questgiver_complete_quest_payload(std::uint64_t guid, std::uint32_t quest_id);
+std::vector<std::uint8_t> build_questgiver_request_reward_payload(std::uint64_t guid, std::uint32_t quest_id);
+std::vector<std::uint8_t> build_questgiver_choose_reward_payload(std::uint64_t guid, std::uint32_t quest_id, std::uint32_t reward_choice);
 std::vector<std::uint8_t> build_questlog_remove_quest_payload(std::uint8_t slot);
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std::uint8_t> payload);

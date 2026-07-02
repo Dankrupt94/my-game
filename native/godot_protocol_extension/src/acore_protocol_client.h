@@ -139,6 +139,30 @@ public:
         godot::String const& target_selector,
         int64_t quest_id,
         godot::String const& target_name);
+    godot::Dictionary quest_reward_probe(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        int64_t starter_entry,
+        int64_t reward_target_entry,
+        int64_t quest_id,
+        int64_t reward_choice,
+        godot::String const& starter_name,
+        godot::String const& reward_target_name);
+    godot::Dictionary quest_reward_probe_selector(
+        godot::String const& host,
+        godot::String const& port,
+        godot::String const& account,
+        godot::String const& password,
+        godot::String const& character_name,
+        godot::String const& starter_selector,
+        godot::String const& reward_target_selector,
+        int64_t quest_id,
+        int64_t reward_choice,
+        godot::String const& starter_name,
+        godot::String const& reward_target_name);
     godot::Dictionary trainer_buy_spell_probe(
         godot::String const& host,
         godot::String const& port,

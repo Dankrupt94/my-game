@@ -451,12 +451,13 @@ Remaining loot packet work:
 - Parse and surface loot errors, bind prompts, quest item rules, group loot settings, rolls, master loot, and permission edge cases.
 - Add long-session persistence checks for looted money/items.
 
-## Quest Giver List And Details Slice
+## Quest Giver, Quest Log, And Reward Slice
 
 Stage 17 now has the first live quest-giver list and detail packet paths. This
-is still not full quest parity: the current scene lists offered quest ids and
-queries one detail packet, but it does not accept, complete, reward, abandon,
-share, or track objectives yet.
+is still not full quest parity: the current project can list, inspect, accept,
+abandon, and complete/reward the bounded starter fixture, but it does not yet
+provide full normal quest-log UI, objective tracking, sharing, map overlays, or
+persistent-session questing.
 
 Relevant opcodes:
 
@@ -466,6 +467,14 @@ Relevant opcodes:
 | `SMSG_QUESTGIVER_QUEST_LIST` | `0x185` | Parses standalone offered-quest rows when the server uses this response |
 | `CMSG_QUESTGIVER_QUERY_QUEST` | `0x186` | Sends selected quest-giver GUID and quest id for detail lookup |
 | `SMSG_QUESTGIVER_QUEST_DETAILS` | `0x188` | Parses safe numeric detail fields and reward item ids/counts |
+| `CMSG_QUESTGIVER_ACCEPT_QUEST` | `0x189` | Accepts the fixture quest and proves the active log changes |
+| `CMSG_QUESTGIVER_COMPLETE_QUEST` | `0x18A` | Starts turn-in at the involved reward target |
+| `SMSG_QUESTGIVER_REQUEST_ITEMS` | `0x18B` | Parses safe numeric required-item rows if the server asks for items |
+| `CMSG_QUESTGIVER_REQUEST_REWARD` | `0x18C` | Requests the reward offer from the involved reward target |
+| `SMSG_QUESTGIVER_OFFER_REWARD` | `0x18D` | Parses safe numeric reward counts, money, XP, and spell id |
+| `CMSG_QUESTGIVER_CHOOSE_REWARD` | `0x18E` | Chooses a reward row; fixture uses choice index `0` |
+| `SMSG_QUESTGIVER_QUEST_COMPLETE` | `0x191` | Confirms the quest reward was granted |
+| `CMSG_QUESTLOG_REMOVE_QUEST` | `0x194` | Removes a quest by server-owned quest-log slot |
 | `SMSG_GOSSIP_MESSAGE` | `0x17D` | Parses gossip-embedded quest rows used by live local quest givers |
 
 Quest-giver hello request payload:
@@ -488,6 +497,19 @@ Quest accept request payload:
 | quest-giver GUID | 8 | Raw little-endian object GUID |
 | quest id | 4 | Quest template id to accept |
 | unknown | 4 | Sent as `0`, matching AzerothCore's handler shape |
+
+Quest completion/reward request payloads:
+
+| Packet | Field | Size | Notes |
+| --- | --- | ---: | --- |
+| `CMSG_QUESTGIVER_COMPLETE_QUEST` | reward-target GUID | 8 | Raw little-endian involved NPC/GameObject GUID |
+| `CMSG_QUESTGIVER_COMPLETE_QUEST` | quest id | 4 | Quest template id being completed |
+| `CMSG_QUESTGIVER_REQUEST_REWARD` | reward-target GUID | 8 | Same involved target GUID |
+| `CMSG_QUESTGIVER_REQUEST_REWARD` | quest id | 4 | Quest template id being rewarded |
+| `CMSG_QUESTGIVER_CHOOSE_REWARD` | reward-target GUID | 8 | Same involved target GUID |
+| `CMSG_QUESTGIVER_CHOOSE_REWARD` | quest id | 4 | Quest template id being rewarded |
+| `CMSG_QUESTGIVER_CHOOSE_REWARD` | reward choice | 4 | Zero-based selected reward row; `0` for no choice rows |
+| `CMSG_QUESTLOG_REMOVE_QUEST` | quest-log slot | 1 | Server-owned slot index from the live quest log |
 
 Quest-log proof fields:
 
@@ -553,6 +575,14 @@ Observed Stage 17 result:
 - `tools/quest_log_bridge_smoke.gd` passed through the Godot native extension,
   proving a standalone read-only quest-log snapshot reaches the script bridge
   with `slot_count=25`.
+- `--quest-abandon-proof` and `tools/quest_abandon_bridge_smoke.gd` passed by
+  accepting fixture quest `783`, finding slot `0`, sending
+  `CMSG_QUESTLOG_REMOVE_QUEST`, and confirming the quest was absent afterward.
+- `--quest-reward-proof` and `tools/quest_reward_bridge_smoke.gd` passed by
+  accepting fixture quest `783` from starter entry `823`, finding reward target
+  entry `197`, sending complete/request/choose-reward packets, receiving
+  `SMSG_QUESTGIVER_QUEST_COMPLETE`, confirming the active quest log was empty
+  afterward, and observing a local rewarded-row audit before cleanup.
 - The Godot surface and helper fallback intentionally keep committed output to
   ids, flags, counts, and money/xp values. Quest title/body/objective text and
   icons remain a future local-only data/asset pipeline concern.
@@ -563,8 +593,9 @@ Observed Stage 17 result:
 
 Remaining quest packet work:
 
-- Add complete, reward choice, full quest-log UI, abandon, and share packet
-  support.
+- Add full quest-log UI integration, share packet support, failure-path coverage,
+  full-log/full-bag turn-in checks, and reward-choice UI beyond the no-choice
+  starter fixture.
 - Track objective progress from server state instead of treating detail packets
   as quest-log state.
 - Add in-world click targeting and persistent-session integration.

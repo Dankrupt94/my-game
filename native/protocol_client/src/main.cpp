@@ -705,6 +705,82 @@ int quest_abandon_probe(
     return result.abandon_confirmed ? 0 : 1;
 }
 
+int quest_reward_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& starter_selector,
+    std::string const& reward_target_selector,
+    std::string const& quest_id,
+    std::string const& reward_choice,
+    std::string const& starter_name,
+    std::string const& reward_target_name)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::QuestRewardProbeResult result = acore_protocol::quest_reward_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(starter_selector),
+        parse_guid_arg(reward_target_selector),
+        static_cast<std::uint32_t>(std::stoul(quest_id)),
+        static_cast<std::uint32_t>(std::stoul(reward_choice)),
+        starter_name,
+        reward_target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "QUEST_REWARD_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " starter_guid=0x" << std::hex << result.starter_guid << std::dec
+              << " starter_entry=" << result.starter_entry
+              << " reward_target_guid=0x" << std::hex << result.reward_target_guid << std::dec
+              << " reward_target_entry=" << result.reward_target_entry
+              << " quest_id=" << result.quest_id
+              << " reward_choice=" << result.reward_choice
+              << " accept_ok=" << (result.accept_ok ? 1 : 0)
+              << " live_reward_target_found=" << (result.live_reward_target_found ? 1 : 0)
+              << " reward_target_has_position=" << (result.reward_target_has_position ? 1 : 0)
+              << " visible_objects=" << result.visible_objects.size()
+              << " approach_movement_sent=" << (result.approach_movement_sent ? 1 : 0)
+              << " return_movement_sent=" << (result.return_movement_sent ? 1 : 0)
+              << " selection_sent=" << (result.selection_sent ? 1 : 0)
+              << " logged_in_world=" << (result.logged_in_world ? 1 : 0)
+              << " complete_sent=" << (result.complete_sent ? 1 : 0)
+              << " request_reward_sent=" << (result.request_reward_sent ? 1 : 0)
+              << " request_reward_response_seen=" << (result.request_reward_response_seen ? 1 : 0)
+              << " choose_reward_sent=" << (result.choose_reward_sent ? 1 : 0)
+              << " request_items_seen=" << (result.request_items_seen ? 1 : 0)
+              << " offer_reward_seen=" << (result.offer_reward_seen ? 1 : 0)
+              << " quest_complete_seen=" << (result.quest_complete_seen ? 1 : 0)
+              << " quest_update_complete_seen=" << (result.quest_update_complete_seen ? 1 : 0)
+              << " failure_seen=" << (result.failure_seen ? 1 : 0)
+              << " failure_opcode=0x" << std::hex << result.failure_opcode << std::dec
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << " failure_reason=" << result.failure_reason
+              << " quest_log_before_reward_seen=" << (result.quest_log_before_reward_seen ? 1 : 0)
+              << " quest_log_after_reward_seen=" << (result.quest_log_after_reward_seen ? 1 : 0)
+              << " quest_in_log_before_reward=" << (result.quest_in_log_before_reward ? 1 : 0)
+              << " quest_in_log_after_reward=" << (result.quest_in_log_after_reward ? 1 : 0)
+              << " reward_confirmed=" << (result.reward_confirmed ? 1 : 0)
+              << " before_populated=" << result.quest_log_before_reward.populated_count
+              << " after_populated=" << result.quest_log_after_reward.populated_count
+              << " reward_choice_count=" << result.offer_reward.reward_choice_count
+              << " reward_item_count=" << result.offer_reward.reward_item_count
+              << " reward_money=" << result.quest_complete.money_reward
+              << " reward_xp=" << result.quest_complete.xp_reward
+              << " skipped=" << result.skipped_opcodes.size()
+              << "\n";
+    print_quest_log_slots("QUEST_LOG_BEFORE_REWARD_SLOT", result.quest_log_before_reward);
+    print_quest_log_slots("QUEST_LOG_AFTER_REWARD_SLOT", result.quest_log_after_reward);
+    return result.reward_confirmed ? 0 : 1;
+}
+
 int trainer_buy_spell_probe(
     std::string const& host,
     std::string const& port,
@@ -1735,6 +1811,7 @@ void usage()
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --trainer-list <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --questgiver-accept <host> <port> <account> <character-name> <target-guid-or-entry> <quest-id> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --quest-abandon-proof <host> <port> <account> <character-name> <target-guid-or-entry> <quest-id> <target-name>\n"
+              << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --quest-reward-proof <host> <port> <account> <character-name> <starter-guid-or-entry> <reward-guid-or-entry> <quest-id> <reward-choice> <starter-name> <reward-target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --trainer-buy <host> <port> <account> <character-name> <target-guid-or-entry> <target-name> <spell-id>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --combat-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
               << "  ACORE_PROTOCOL_PASSWORD=... acore_protocol_client --loot-open-probe <host> <port> <account> <character-name> <target-guid-or-entry> <target-name>\n"
@@ -1827,6 +1904,16 @@ int main(int argc, char** argv)
         if (argc == 9 && std::strcmp(argv[1], "--quest-abandon-proof") == 0)
         {
             return quest_abandon_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
+        }
+
+        if (argc == 11 && std::strcmp(argv[1], "--quest-reward-proof") == 0)
+        {
+            return quest_reward_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8], argv[9], argv[10], argv[10]);
+        }
+
+        if (argc == 12 && std::strcmp(argv[1], "--quest-reward-proof") == 0)
+        {
+            return quest_reward_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8], argv[9], argv[10], argv[11]);
         }
 
         if (argc == 9 && std::strcmp(argv[1], "--trainer-buy") == 0)

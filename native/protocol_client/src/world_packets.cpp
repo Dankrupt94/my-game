@@ -1599,6 +1599,34 @@ std::vector<std::uint8_t> build_questgiver_accept_quest_payload(std::uint64_t gu
     return payload;
 }
 
+std::vector<std::uint8_t> build_questgiver_complete_quest_payload(std::uint64_t guid, std::uint32_t quest_id)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, guid);
+    append_u32_le(payload, quest_id);
+    return payload;
+}
+
+std::vector<std::uint8_t> build_questgiver_request_reward_payload(std::uint64_t guid, std::uint32_t quest_id)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, guid);
+    append_u32_le(payload, quest_id);
+    return payload;
+}
+
+std::vector<std::uint8_t> build_questgiver_choose_reward_payload(
+    std::uint64_t guid,
+    std::uint32_t quest_id,
+    std::uint32_t reward_choice)
+{
+    std::vector<std::uint8_t> payload;
+    append_u64_le(payload, guid);
+    append_u32_le(payload, quest_id);
+    append_u32_le(payload, reward_choice);
+    return payload;
+}
+
 std::vector<std::uint8_t> build_questlog_remove_quest_payload(std::uint8_t slot)
 {
     std::vector<std::uint8_t> payload;
@@ -1689,6 +1717,139 @@ QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const
     if (offset != payload.size())
     {
         throw std::runtime_error("quest details parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
+QuestGiverOfferRewardSummary parse_questgiver_offer_reward_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    QuestGiverOfferRewardSummary summary;
+    summary.payload_size = payload.size();
+    summary.npc_guid = read_u64_le(payload, offset);
+    summary.quest_id = read_u32_le(payload, offset);
+    (void)read_c_string(payload, offset); // title (proprietary; discarded)
+    (void)read_c_string(payload, offset); // reward text (proprietary; discarded)
+    summary.enable_next = read_u8(payload, offset) != 0;
+    summary.quest_flags = read_u32_le(payload, offset);
+    summary.suggested_players = read_u32_le(payload, offset);
+    summary.emote_count = read_u32_le(payload, offset);
+    if (summary.emote_count > 64)
+    {
+        throw std::runtime_error("quest reward offer has an implausible emote count");
+    }
+    for (std::uint32_t i = 0; i < summary.emote_count; ++i)
+    {
+        (void)read_u32_le(payload, offset); // emote delay
+        (void)read_u32_le(payload, offset); // emote
+    }
+
+    summary.reward_choice_count = static_cast<std::int32_t>(read_u32_le(payload, offset));
+    if (summary.reward_choice_count < 0 || summary.reward_choice_count > 64)
+    {
+        throw std::runtime_error("quest reward offer has an implausible reward-choice count");
+    }
+    for (std::int32_t i = 0; i < summary.reward_choice_count; ++i)
+    {
+        QuestRewardItemSummary item;
+        item.item_id = read_u32_le(payload, offset);
+        item.item_count = read_u32_le(payload, offset);
+        (void)read_u32_le(payload, offset); // display info id
+        summary.reward_choice_items.push_back(item);
+    }
+
+    summary.reward_item_count = static_cast<std::int32_t>(read_u32_le(payload, offset));
+    if (summary.reward_item_count < 0 || summary.reward_item_count > 64)
+    {
+        throw std::runtime_error("quest reward offer has an implausible reward-item count");
+    }
+    for (std::int32_t i = 0; i < summary.reward_item_count; ++i)
+    {
+        QuestRewardItemSummary item;
+        item.item_id = read_u32_le(payload, offset);
+        item.item_count = read_u32_le(payload, offset);
+        (void)read_u32_le(payload, offset); // display info id
+        summary.reward_items.push_back(item);
+    }
+
+    summary.money_reward = read_u32_le(payload, offset);
+    summary.xp_reward = read_u32_le(payload, offset);
+    summary.honor_reward = read_u32_le(payload, offset);
+    (void)read_u32_le(payload, offset); // honor multiplier (float bits)
+    (void)read_u32_le(payload, offset); // unused
+    summary.reward_spell = read_u32_le(payload, offset);
+    (void)read_u32_le(payload, offset); // reward spell cast
+    (void)read_u32_le(payload, offset); // char title id
+    (void)read_u32_le(payload, offset); // bonus talents
+    (void)read_u32_le(payload, offset); // reward arena points
+    (void)read_u32_le(payload, offset); // unk
+    for (int i = 0; i < 5; ++i) (void)read_u32_le(payload, offset); // reward faction id
+    for (int i = 0; i < 5; ++i) (void)read_u32_le(payload, offset); // reward faction value
+    for (int i = 0; i < 5; ++i) (void)read_u32_le(payload, offset); // reward faction value override
+
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("quest reward offer parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
+QuestGiverRequestItemsSummary parse_questgiver_request_items_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    QuestGiverRequestItemsSummary summary;
+    summary.payload_size = payload.size();
+    summary.npc_guid = read_u64_le(payload, offset);
+    summary.quest_id = read_u32_le(payload, offset);
+    (void)read_c_string(payload, offset); // title (proprietary; discarded)
+    (void)read_c_string(payload, offset); // request items text (proprietary; discarded)
+    (void)read_u32_le(payload, offset); // unknown
+    (void)read_u32_le(payload, offset); // completion/incomplete emote
+    (void)read_u32_le(payload, offset); // close on cancel
+    summary.quest_flags = read_u32_le(payload, offset);
+    summary.suggested_players = read_u32_le(payload, offset);
+    summary.required_money = read_u32_le(payload, offset);
+    summary.required_item_count = static_cast<std::int32_t>(read_u32_le(payload, offset));
+    if (summary.required_item_count < 0 || summary.required_item_count > 64)
+    {
+        throw std::runtime_error("quest request-items has an implausible required-item count");
+    }
+    for (std::int32_t i = 0; i < summary.required_item_count; ++i)
+    {
+        QuestRewardItemSummary item;
+        item.item_id = read_u32_le(payload, offset);
+        item.item_count = read_u32_le(payload, offset);
+        (void)read_u32_le(payload, offset); // display info id
+        summary.required_items.push_back(item);
+    }
+    summary.completion_flags = read_u32_le(payload, offset);
+    (void)read_u32_le(payload, offset); // completion button text id
+    (void)read_u32_le(payload, offset); // incomplete button text id
+    (void)read_u32_le(payload, offset); // close button text id
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("quest request-items parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
+QuestGiverQuestCompleteSummary parse_questgiver_quest_complete_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    QuestGiverQuestCompleteSummary summary;
+    summary.payload_size = payload.size();
+    summary.quest_id = read_u32_le(payload, offset);
+    summary.xp_reward = read_u32_le(payload, offset);
+    summary.money_reward = read_u32_le(payload, offset);
+    summary.honor_reward = read_u32_le(payload, offset);
+    summary.bonus_talents = read_u32_le(payload, offset);
+    summary.arena_points = read_u32_le(payload, offset);
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("quest complete parser left trailing bytes");
     }
     summary.parsed = true;
     return summary;
@@ -2474,6 +2635,73 @@ bool world_packet_self_test()
     append_u32_le(quest_details_payload, 0);                     // emote delay
     QuestGiverDetailsSummary quest_details = parse_questgiver_quest_details_response(quest_details_payload);
 
+    std::vector<std::uint8_t> quest_offer_payload;
+    append_u64_le(quest_offer_payload, 0xF130000123000004ULL); // npc guid
+    append_u32_le(quest_offer_payload, 783);                   // quest id
+    quest_offer_payload.insert(quest_offer_payload.end(), {'R', 0}); // title
+    quest_offer_payload.insert(quest_offer_payload.end(), {'T', 0}); // reward text
+    append_u8(quest_offer_payload, 1);                         // enable next
+    append_u32_le(quest_offer_payload, 8);                     // quest flags
+    append_u32_le(quest_offer_payload, 0);                     // suggested players
+    append_u32_le(quest_offer_payload, 1);                     // emote count
+    append_u32_le(quest_offer_payload, 0);                     // emote delay
+    append_u32_le(quest_offer_payload, 1);                     // emote
+    append_u32_le(quest_offer_payload, 1);                     // reward choice count
+    append_u32_le(quest_offer_payload, 100);                   // choice item id
+    append_u32_le(quest_offer_payload, 1);                     // choice item count
+    append_u32_le(quest_offer_payload, 5);                     // choice display id
+    append_u32_le(quest_offer_payload, 1);                     // reward item count
+    append_u32_le(quest_offer_payload, 200);                   // reward item id
+    append_u32_le(quest_offer_payload, 2);                     // reward item count
+    append_u32_le(quest_offer_payload, 6);                     // reward display id
+    append_u32_le(quest_offer_payload, 1200);                  // money reward
+    append_u32_le(quest_offer_payload, 450);                   // xp reward
+    append_u32_le(quest_offer_payload, 0);                     // honor
+    append_u32_le(quest_offer_payload, 0);                     // honor multiplier
+    append_u32_le(quest_offer_payload, 8);                     // unused
+    append_u32_le(quest_offer_payload, 0);                     // reward spell
+    append_u32_le(quest_offer_payload, 0);                     // reward spell cast
+    append_u32_le(quest_offer_payload, 0);                     // char title id
+    append_u32_le(quest_offer_payload, 0);                     // bonus talents
+    append_u32_le(quest_offer_payload, 0);                     // reward arena points
+    append_u32_le(quest_offer_payload, 0);                     // unk
+    for (int i = 0; i < 15; ++i) append_u32_le(quest_offer_payload, 0); // 3x5 reputation arrays
+    QuestGiverOfferRewardSummary quest_offer = parse_questgiver_offer_reward_response(quest_offer_payload);
+
+    std::vector<std::uint8_t> quest_request_items_payload;
+    append_u64_le(quest_request_items_payload, 0xF130000123000005ULL);
+    append_u32_le(quest_request_items_payload, 783);
+    quest_request_items_payload.insert(quest_request_items_payload.end(), {'I', 0}); // title
+    quest_request_items_payload.insert(quest_request_items_payload.end(), {'N', 0}); // request text
+    append_u32_le(quest_request_items_payload, 0);                  // unknown
+    append_u32_le(quest_request_items_payload, 1);                  // emote
+    append_u32_le(quest_request_items_payload, 0);                  // close on cancel
+    append_u32_le(quest_request_items_payload, 8);                  // flags
+    append_u32_le(quest_request_items_payload, 0);                  // suggested players
+    append_u32_le(quest_request_items_payload, 0);                  // required money
+    append_u32_le(quest_request_items_payload, 1);                  // required item count
+    append_u32_le(quest_request_items_payload, 25);                 // item id
+    append_u32_le(quest_request_items_payload, 2);                  // item count
+    append_u32_le(quest_request_items_payload, 7);                  // display id
+    append_u32_le(quest_request_items_payload, 3);                  // completion flags
+    append_u32_le(quest_request_items_payload, 4);
+    append_u32_le(quest_request_items_payload, 8);
+    append_u32_le(quest_request_items_payload, 16);
+    QuestGiverRequestItemsSummary quest_request_items = parse_questgiver_request_items_response(quest_request_items_payload);
+
+    std::vector<std::uint8_t> quest_complete_payload;
+    append_u32_le(quest_complete_payload, 783);
+    append_u32_le(quest_complete_payload, 450);
+    append_u32_le(quest_complete_payload, 1200);
+    append_u32_le(quest_complete_payload, 0);
+    append_u32_le(quest_complete_payload, 0);
+    append_u32_le(quest_complete_payload, 0);
+    QuestGiverQuestCompleteSummary quest_complete = parse_questgiver_quest_complete_response(quest_complete_payload);
+
+    std::vector<std::uint8_t> complete_request_payload = build_questgiver_complete_quest_payload(0xF130000123000006ULL, 783);
+    std::vector<std::uint8_t> reward_request_payload = build_questgiver_request_reward_payload(0xF130000123000006ULL, 783);
+    std::vector<std::uint8_t> choose_reward_payload = build_questgiver_choose_reward_payload(0xF130000123000006ULL, 783, 2);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -2634,6 +2862,29 @@ bool world_packet_self_test()
         && quest_details.reward_items.size() == 1
         && quest_details.reward_items[0].item_id == 200
         && quest_details.reward_items[0].item_count == 2
+        && quest_offer.parsed
+        && quest_offer.quest_id == 783
+        && quest_offer.enable_next
+        && quest_offer.reward_choice_count == 1
+        && quest_offer.reward_item_count == 1
+        && quest_offer.money_reward == 1200
+        && quest_offer.xp_reward == 450
+        && quest_offer.reward_choice_items.size() == 1
+        && quest_offer.reward_choice_items[0].item_id == 100
+        && quest_offer.reward_items.size() == 1
+        && quest_offer.reward_items[0].item_id == 200
+        && quest_request_items.parsed
+        && quest_request_items.quest_id == 783
+        && quest_request_items.required_item_count == 1
+        && quest_request_items.required_items.size() == 1
+        && quest_request_items.required_items[0].item_id == 25
+        && quest_complete.parsed
+        && quest_complete.quest_id == 783
+        && quest_complete.xp_reward == 450
+        && quest_complete.money_reward == 1200
+        && complete_request_payload.size() == 12
+        && reward_request_payload.size() == 12
+        && choose_reward_payload.size() == 16
         && trainer_buy_success.parsed
         && trainer_buy_success.succeeded
         && !trainer_buy_success.failed

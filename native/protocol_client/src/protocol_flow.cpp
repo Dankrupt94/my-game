@@ -3203,6 +3203,450 @@ QuestLogAbandonProbeResult quest_log_abandon_probe(
     return result;
 }
 
+QuestRewardProbeResult quest_reward_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t starter_guid,
+    std::uint64_t reward_target_guid,
+    std::uint32_t quest_id,
+    std::uint32_t reward_choice,
+    std::string const& starter_name,
+    std::string const& reward_target_name,
+    FlowOptions options)
+{
+    if (starter_guid == 0)
+    {
+        throw std::runtime_error("quest reward starter guid or entry must be non-zero");
+    }
+    if (reward_target_guid == 0)
+    {
+        throw std::runtime_error("quest reward target guid or entry must be non-zero");
+    }
+    if (quest_id == 0)
+    {
+        throw std::runtime_error("quest reward probe requires a non-zero quest id");
+    }
+
+    QuestRewardProbeResult result;
+    result.quest_id = quest_id;
+    result.reward_choice = reward_choice;
+    result.starter_entry = target_entry_from_selector(starter_guid);
+    result.starter_name = starter_name;
+    result.reward_target_entry = target_entry_from_selector(reward_target_guid);
+    result.reward_target_name = reward_target_name;
+
+    QuestGiverAcceptProbeResult accept = questgiver_accept_probe(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        starter_guid,
+        quest_id,
+        starter_name,
+        options);
+    result.accept_result = accept;
+    result.realm = accept.realm;
+    result.character = accept.character;
+    result.starter_guid = accept.target_guid;
+    result.starter_entry = accept.target_entry;
+    result.accept_ok = accept.accepted_confirmed || accept.already_in_log;
+    result.quest_log_before_reward = accept.quest_log_after;
+    result.quest_log_before_reward_seen = accept.quest_log_after_seen;
+    result.quest_in_log_before_reward = quest_log_contains(result.quest_log_before_reward, quest_id);
+    result.skipped_opcodes.insert(
+        result.skipped_opcodes.end(),
+        accept.skipped_opcodes.begin(),
+        accept.skipped_opcodes.end());
+
+    if (!result.accept_ok || !result.quest_in_log_before_reward)
+    {
+        QuestLogSnapshotResult before = read_quest_log_snapshot(host, port, account, password, character_name, options);
+        result.quest_log_before_reward = before.quest_log;
+        result.quest_log_before_reward_seen = before.quest_log_seen;
+        result.quest_in_log_before_reward = quest_log_contains(before.quest_log, quest_id);
+        result.skipped_opcodes.insert(
+            result.skipped_opcodes.end(),
+            before.skipped_opcodes.begin(),
+            before.skipped_opcodes.end());
+        if (!result.quest_in_log_before_reward)
+        {
+            return result;
+        }
+    }
+
+    auto session = connect_authenticated_world(host, port, account, password, options);
+    std::vector<CharacterSummary> characters = request_character_enum(*session, options, nullptr);
+    CharacterSummary selected = select_character(characters, character_name);
+    LoginVerifyWorld login = login_selected_character(*session, selected, options);
+    result.realm = session->realm;
+    result.character = selected;
+
+    for (int i = 0; i < 180; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (result.logged_in_world && result.live_reward_target_found)
+            {
+                break;
+            }
+            continue;
+        }
+
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            result.visible_objects.insert(
+                result.visible_objects.end(),
+                update.visible_objects.begin(),
+                update.visible_objects.end());
+            if (update.quest_log.seen)
+            {
+                merge_quest_log_summary(result.quest_log_before_reward, update.quest_log);
+                result.quest_log_before_reward_seen = true;
+                result.quest_in_log_before_reward = quest_log_contains(result.quest_log_before_reward, quest_id);
+            }
+            if (!result.live_reward_target_found)
+            {
+                std::optional<VisibleObjectSummary> target = choose_visible_target(result.visible_objects, reward_target_guid, login);
+                if (target)
+                {
+                    result.reward_target_guid = target->guid;
+                    result.reward_target_entry = target->entry;
+                    result.reward_target_has_position = target->has_position;
+                    result.reward_target_x = target->x;
+                    result.reward_target_y = target->y;
+                    result.reward_target_z = target->z;
+                    result.live_reward_target_found = true;
+                }
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            result.logged_in_world = true;
+            if (result.live_reward_target_found)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_CHARACTER_LOGIN_FAILED)
+        {
+            throw std::runtime_error("character login failed with response 0x" + hex(packet->payload));
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (!result.logged_in_world)
+    {
+        throw std::runtime_error("did not receive post-login SMSG_TIME_SYNC_REQ before quest reward probe");
+    }
+    if (!result.live_reward_target_found || !result.quest_in_log_before_reward)
+    {
+        (void)request_graceful_logout(*session, options);
+        return result;
+    }
+
+    if (result.reward_target_has_position)
+    {
+        float dx = login.x - result.reward_target_x;
+        float dy = login.y - result.reward_target_y;
+        float distance = std::sqrt(dx * dx + dy * dy);
+        if (distance < 0.01f)
+        {
+            dx = 1.0f;
+            dy = 0.0f;
+            distance = 1.0f;
+        }
+
+        MovementSample start;
+        start.flags = 0x00000001;
+        start.flags2 = 0;
+        start.time = movement_timestamp_ms();
+        start.x = login.x;
+        start.y = login.y;
+        start.z = login.z;
+        start.orientation = facing_angle(start.x, start.y, result.reward_target_x, result.reward_target_y);
+        start.fall_time = 0;
+
+        MovementSample approach = start;
+        approach.flags = 0;
+        approach.time = movement_timestamp_ms();
+        approach.x = result.reward_target_x + (dx / distance) * 1.5f;
+        approach.y = result.reward_target_y + (dy / distance) * 1.5f;
+        approach.z = result.reward_target_z;
+        approach.orientation = facing_angle(approach.x, approach.y, result.reward_target_x, result.reward_target_y);
+
+        write_world_packet(session->socket.get(), MSG_MOVE_START_FORWARD, build_movement_payload(selected.guid, start), &session->crypt);
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        approach.time = movement_timestamp_ms();
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, approach), &session->crypt);
+        result.approach_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    write_world_packet(session->socket.get(), CMSG_SET_SELECTION, build_raw_guid_payload(result.reward_target_guid), &session->crypt);
+    result.selection_sent = true;
+    write_world_packet(
+        session->socket.get(),
+        CMSG_QUESTGIVER_COMPLETE_QUEST,
+        build_questgiver_complete_quest_payload(result.reward_target_guid, quest_id),
+        &session->crypt);
+    result.complete_sent = true;
+
+    for (int i = 0; i < 100; ++i)
+    {
+        auto packet = read_world_packet_optional(
+            session->socket.get(),
+            &session->crypt,
+            options.trace_world_packets,
+            250);
+        if (!packet)
+        {
+            if (result.offer_reward_seen || result.request_items_seen || result.failure_seen)
+            {
+                break;
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_QUESTGIVER_OFFER_REWARD)
+        {
+            result.offer_reward = parse_questgiver_offer_reward_response(packet->payload);
+            result.offer_reward_seen = result.offer_reward.parsed && result.offer_reward.quest_id == quest_id;
+            result.response_opcode = packet->opcode;
+            break;
+        }
+        if (packet->opcode == SMSG_QUESTGIVER_REQUEST_ITEMS)
+        {
+            result.request_items = parse_questgiver_request_items_response(packet->payload);
+            result.request_items_seen = result.request_items.parsed && result.request_items.quest_id == quest_id;
+            result.response_opcode = packet->opcode;
+            break;
+        }
+        if (packet->opcode == SMSG_QUESTUPDATE_COMPLETE)
+        {
+            result.quest_update_complete_seen = first_u32_le_or_zero(packet->payload) == quest_id;
+            result.response_opcode = packet->opcode;
+            continue;
+        }
+        if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+        {
+            UpdateObjectSummary update = parse_update_object_summary(
+                packet->payload,
+                packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                selected.guid);
+            if (update.quest_log.seen)
+            {
+                merge_quest_log_summary(result.quest_log_before_reward, update.quest_log);
+                result.quest_log_before_reward_seen = true;
+                result.quest_in_log_before_reward = quest_log_contains(result.quest_log_before_reward, quest_id);
+            }
+            continue;
+        }
+        if (packet->opcode == SMSG_QUESTGIVER_QUEST_INVALID
+            || packet->opcode == SMSG_QUESTGIVER_QUEST_FAILED
+            || packet->opcode == SMSG_QUESTUPDATE_FAILED
+            || packet->opcode == SMSG_QUESTUPDATE_FAILEDTIMER)
+        {
+            result.failure_seen = true;
+            result.failure_opcode = packet->opcode;
+            result.response_opcode = packet->opcode;
+            result.failure_reason = first_u32_le_or_zero(packet->payload);
+            break;
+        }
+        if (packet->opcode == SMSG_TIME_SYNC_REQ)
+        {
+            answer_time_sync_request(*session, *packet);
+            continue;
+        }
+        result.skipped_opcodes.push_back(packet->opcode);
+    }
+
+    if (!result.failure_seen)
+    {
+        write_world_packet(
+            session->socket.get(),
+            CMSG_QUESTGIVER_REQUEST_REWARD,
+            build_questgiver_request_reward_payload(result.reward_target_guid, quest_id),
+            &session->crypt);
+        result.request_reward_sent = true;
+
+        for (int i = 0; i < 80; ++i)
+        {
+            auto packet = read_world_packet_optional(
+                session->socket.get(),
+                &session->crypt,
+                options.trace_world_packets,
+                250);
+            if (!packet)
+            {
+                if (result.request_reward_response_seen || result.failure_seen)
+                {
+                    break;
+                }
+                continue;
+            }
+            if (packet->opcode == SMSG_QUESTGIVER_OFFER_REWARD)
+            {
+                result.offer_reward = parse_questgiver_offer_reward_response(packet->payload);
+                result.offer_reward_seen = result.offer_reward.parsed && result.offer_reward.quest_id == quest_id;
+                result.request_reward_response_seen = result.offer_reward_seen;
+                result.response_opcode = packet->opcode;
+                break;
+            }
+            if (packet->opcode == SMSG_QUESTGIVER_REQUEST_ITEMS)
+            {
+                result.request_items = parse_questgiver_request_items_response(packet->payload);
+                result.request_items_seen = result.request_items.parsed && result.request_items.quest_id == quest_id;
+                result.request_reward_response_seen = result.request_items_seen;
+                result.response_opcode = packet->opcode;
+                break;
+            }
+            if (packet->opcode == SMSG_QUESTGIVER_QUEST_INVALID
+                || packet->opcode == SMSG_QUESTGIVER_QUEST_FAILED
+                || packet->opcode == SMSG_QUESTUPDATE_FAILED
+                || packet->opcode == SMSG_QUESTUPDATE_FAILEDTIMER)
+            {
+                result.failure_seen = true;
+                result.failure_opcode = packet->opcode;
+                result.response_opcode = packet->opcode;
+                result.failure_reason = first_u32_le_or_zero(packet->payload);
+                break;
+            }
+            if (packet->opcode == SMSG_TIME_SYNC_REQ)
+            {
+                answer_time_sync_request(*session, *packet);
+                continue;
+            }
+            result.skipped_opcodes.push_back(packet->opcode);
+        }
+    }
+
+    if (result.offer_reward_seen && !result.failure_seen)
+    {
+        write_world_packet(
+            session->socket.get(),
+            CMSG_QUESTGIVER_CHOOSE_REWARD,
+            build_questgiver_choose_reward_payload(result.reward_target_guid, quest_id, reward_choice),
+            &session->crypt);
+        result.choose_reward_sent = true;
+        result.quest_log_after_reward = result.quest_log_before_reward;
+        result.quest_in_log_after_reward = result.quest_in_log_before_reward;
+
+        for (int i = 0; i < 140; ++i)
+        {
+            auto packet = read_world_packet_optional(
+                session->socket.get(),
+                &session->crypt,
+                options.trace_world_packets,
+                250);
+            if (!packet)
+            {
+                if (result.quest_complete_seen && result.quest_log_after_reward_seen)
+                {
+                    break;
+                }
+                continue;
+            }
+            if (packet->opcode == SMSG_QUESTGIVER_QUEST_COMPLETE)
+            {
+                result.quest_complete = parse_questgiver_quest_complete_response(packet->payload);
+                result.quest_complete_seen = result.quest_complete.parsed && result.quest_complete.quest_id == quest_id;
+                result.response_opcode = packet->opcode;
+                continue;
+            }
+            if (packet->opcode == SMSG_UPDATE_OBJECT || packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT)
+            {
+                UpdateObjectSummary update = parse_update_object_summary(
+                    packet->payload,
+                    packet->opcode == SMSG_COMPRESSED_UPDATE_OBJECT,
+                    selected.guid);
+                if (update.quest_log.seen)
+                {
+                    merge_quest_log_summary(result.quest_log_after_reward, update.quest_log);
+                    result.quest_log_after_reward_seen = true;
+                    result.quest_in_log_after_reward = quest_log_contains(result.quest_log_after_reward, quest_id);
+                }
+                continue;
+            }
+            if (packet->opcode == SMSG_QUESTGIVER_QUEST_INVALID
+                || packet->opcode == SMSG_QUESTGIVER_QUEST_FAILED
+                || packet->opcode == SMSG_QUESTUPDATE_FAILED
+                || packet->opcode == SMSG_QUESTUPDATE_FAILEDTIMER)
+            {
+                result.failure_seen = true;
+                result.failure_opcode = packet->opcode;
+                result.response_opcode = packet->opcode;
+                result.failure_reason = first_u32_le_or_zero(packet->payload);
+                break;
+            }
+            if (packet->opcode == SMSG_TIME_SYNC_REQ)
+            {
+                answer_time_sync_request(*session, *packet);
+                continue;
+            }
+            result.skipped_opcodes.push_back(packet->opcode);
+        }
+    }
+
+    if (result.approach_movement_sent)
+    {
+        MovementSample back;
+        back.flags = 0;
+        back.flags2 = 0;
+        back.time = movement_timestamp_ms();
+        back.x = login.x;
+        back.y = login.y;
+        back.z = login.z;
+        back.orientation = login.orientation;
+        back.fall_time = 0;
+        write_world_packet(session->socket.get(), MSG_MOVE_STOP, build_movement_payload(selected.guid, back), &session->crypt);
+        result.return_movement_sent = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+
+    (void)request_graceful_logout(*session, options);
+
+    if (!result.quest_log_after_reward_seen || result.quest_in_log_after_reward)
+    {
+        QuestLogSnapshotResult after = read_quest_log_snapshot(host, port, account, password, character_name, options);
+        result.quest_log_after_reward = after.quest_log;
+        result.quest_log_after_reward_seen = after.quest_log_seen;
+        result.quest_in_log_after_reward = quest_log_contains(after.quest_log, quest_id);
+        result.skipped_opcodes.insert(
+            result.skipped_opcodes.end(),
+            after.skipped_opcodes.begin(),
+            after.skipped_opcodes.end());
+    }
+
+    result.reward_confirmed = result.accept_ok
+        && result.complete_sent
+        && result.request_reward_sent
+        && result.request_reward_response_seen
+        && result.choose_reward_sent
+        && result.offer_reward_seen
+        && result.quest_complete_seen
+        && result.quest_log_before_reward_seen
+        && result.quest_log_after_reward_seen
+        && result.quest_in_log_before_reward
+        && !result.quest_in_log_after_reward
+        && !result.failure_seen;
+    return result;
+}
+
 VendorListProbeResult vendor_list_probe(
     std::string const& host,
     std::string const& port,

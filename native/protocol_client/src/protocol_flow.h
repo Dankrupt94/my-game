@@ -242,6 +242,55 @@ struct QuestLogAbandonProbeResult
     std::vector<std::uint16_t> skipped_opcodes;
 };
 
+struct QuestRewardProbeResult
+{
+    RealmInfo realm;
+    CharacterSummary character;
+    std::uint64_t starter_guid = 0;
+    std::uint32_t starter_entry = 0;
+    std::string starter_name;
+    std::uint64_t reward_target_guid = 0;
+    std::uint32_t reward_target_entry = 0;
+    std::string reward_target_name;
+    std::uint32_t quest_id = 0;
+    std::uint32_t reward_choice = 0;
+    bool accept_ok = false;
+    bool live_reward_target_found = false;
+    bool reward_target_has_position = false;
+    float reward_target_x = 0;
+    float reward_target_y = 0;
+    float reward_target_z = 0;
+    bool approach_movement_sent = false;
+    bool return_movement_sent = false;
+    bool selection_sent = false;
+    bool logged_in_world = false;
+    bool complete_sent = false;
+    bool request_reward_sent = false;
+    bool request_reward_response_seen = false;
+    bool choose_reward_sent = false;
+    bool request_items_seen = false;
+    bool offer_reward_seen = false;
+    bool quest_complete_seen = false;
+    bool quest_update_complete_seen = false;
+    bool failure_seen = false;
+    std::uint16_t response_opcode = 0;
+    std::uint16_t failure_opcode = 0;
+    std::uint32_t failure_reason = 0;
+    bool quest_log_before_reward_seen = false;
+    bool quest_log_after_reward_seen = false;
+    bool quest_in_log_before_reward = false;
+    bool quest_in_log_after_reward = false;
+    bool reward_confirmed = false;
+    QuestGiverAcceptProbeResult accept_result;
+    QuestGiverRequestItemsSummary request_items;
+    QuestGiverOfferRewardSummary offer_reward;
+    QuestGiverQuestCompleteSummary quest_complete;
+    PlayerQuestLogSummary quest_log_before_reward;
+    PlayerQuestLogSummary quest_log_after_reward;
+    std::vector<VisibleObjectSummary> visible_objects;
+    std::vector<std::uint16_t> skipped_opcodes;
+};
+
 struct TrainerBuySpellProbeResult
 {
     RealmInfo realm;
@@ -731,6 +780,20 @@ QuestLogAbandonProbeResult quest_log_abandon_probe(
     std::uint64_t target_guid,
     std::uint32_t quest_id,
     std::string const& target_name,
+    FlowOptions options = {});
+
+QuestRewardProbeResult quest_reward_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& password,
+    std::string const& character_name,
+    std::uint64_t starter_guid,
+    std::uint64_t reward_target_guid,
+    std::uint32_t quest_id,
+    std::uint32_t reward_choice,
+    std::string const& starter_name,
+    std::string const& reward_target_name,
     FlowOptions options = {});
 
 TrainerBuySpellProbeResult trainer_buy_spell_probe(

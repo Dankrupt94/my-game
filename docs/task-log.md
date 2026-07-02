@@ -2196,3 +2196,44 @@ Plan:
 - Validate with fixture reset before and after, using the local database only
   for setup/cleanup proof; the actual turn-in must happen through AzerothCore
   packets.
+
+Result:
+
+- Added packet builders for complete, request-reward, choose-reward, and safe
+  numeric parsers for request-items, offer-reward, and quest-complete responses.
+- Added native `quest_reward_probe(...)` and helper command
+  `--quest-reward-proof`.
+- Exposed `quest_reward_probe(_selector)` through the Godot native extension
+  and `ProtocolClientBridge`, with helper-process fallback parsing.
+- Added `tools/quest_reward_bridge_smoke.gd`.
+- Updated the Stage 17 parity matrix, acceptance gate, and world-session packet
+  notes.
+
+Validation:
+
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `native/protocol_client/build-compat/acore_protocol_client --self-test`
+  passed, including synthetic reward-offer/request-items/quest-complete parser
+  coverage.
+- Fixture reset for `Codexstage` / quest `783` reported zero active/rewarded
+  rows before the native proof.
+- Native `--quest-reward-proof` passed: accepted quest `783` from starter entry
+  `823`, found reward target entry `197`, sent complete/request/choose-reward,
+  received `SMSG_QUESTGIVER_QUEST_COMPLETE` (`0x191`), and confirmed the quest
+  left the active log.
+- Post-native dry-run observed one `character_queststatus_rewarded` row, proving
+  the local server recorded the reward; the fixture reset then cleared that row.
+- `godot-4 --headless --path . --script res://tools/quest_reward_bridge_smoke.gd`
+  passed through the Godot native extension with before populated `1`, after
+  populated `0`, XP `10`, and money `0`.
+- Post-Godot dry-run observed one rewarded row, and the fixture reset cleared it
+  back to zero.
+- `godot-4 --headless --path . --script res://tools/protocol_bridge_smoke.gd`
+  passed after the new bridge method was added.
+
+Remaining work:
+
+- Objective-progress packets and quest-log counter updates, reward-choice UI for
+  quests that actually have selectable reward rows, share/failure paths,
+  full-log/full-bag checks, persistent-session HUD wiring, and local-only text
+  and icon rendering.

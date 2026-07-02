@@ -352,6 +352,30 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
   the persistent HUD and continue into completion/reward-choice/objective
   progress flows.
 
+### 2026-07-01 - Quest Abandon And Reward Proof Bridges
+
+- Added `CMSG_QUESTLOG_REMOVE_QUEST` support and
+  `quest_abandon_probe(_selector)` through the native helper, Godot
+  GDExtension, and `ProtocolClientBridge`.
+- Added the first bounded quest turn-in proof using
+  `CMSG_QUESTGIVER_COMPLETE_QUEST`, `CMSG_QUESTGIVER_REQUEST_REWARD`,
+  `CMSG_QUESTGIVER_CHOOSE_REWARD`, `SMSG_QUESTGIVER_OFFER_REWARD`, and
+  `SMSG_QUESTGIVER_QUEST_COMPLETE`.
+- `--quest-abandon-proof` accepted fixture quest `783`, found live quest-log
+  slot `0`, sent the remove packet, and confirmed the quest was absent from the
+  after snapshot.
+- `--quest-reward-proof` accepted fixture quest `783` from starter entry `823`,
+  found reward target entry `197`, sent complete/request/choose-reward packets,
+  received the reward-complete packet, confirmed the quest left the active log,
+  and a local rewarded-row audit observed the reward before cleanup.
+- `tools/quest_abandon_bridge_smoke.gd` and
+  `tools/quest_reward_bridge_smoke.gd` both passed through the Godot native
+  extension.
+- Remaining quest parity: objective progress, reward-choice UI for quests with
+  actual choice rows, full quest-log/HUD wiring, share/failure states,
+  item-started quests, full-bag/full-log checks, map overlays, in-world click
+  targeting, persistent sessions, and local-only quest text/icon rendering.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

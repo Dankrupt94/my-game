@@ -683,6 +683,12 @@ void AcoreProtocolClient::_bind_methods()
         D_METHOD("quest_abandon_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "quest_id", "target_name"),
         &AcoreProtocolClient::quest_abandon_probe_selector);
     ClassDB::bind_method(
+        D_METHOD("quest_reward_probe", "host", "port", "account", "password", "character_name", "starter_entry", "reward_target_entry", "quest_id", "reward_choice", "starter_name", "reward_target_name"),
+        &AcoreProtocolClient::quest_reward_probe);
+    ClassDB::bind_method(
+        D_METHOD("quest_reward_probe_selector", "host", "port", "account", "password", "character_name", "starter_selector", "reward_target_selector", "quest_id", "reward_choice", "starter_name", "reward_target_name"),
+        &AcoreProtocolClient::quest_reward_probe_selector);
+    ClassDB::bind_method(
         D_METHOD("trainer_buy_spell_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name", "spell_id"),
         &AcoreProtocolClient::trainer_buy_spell_probe);
     ClassDB::bind_method(
@@ -1274,6 +1280,131 @@ Dictionary AcoreProtocolClient::quest_abandon_probe_selector(
         result["quest_log_after_remove"] = quest_log_dictionary(flow.quest_log_after_remove);
         result["before_populated"] = static_cast<int>(flow.quest_log_before_remove.populated_count);
         result["after_populated"] = static_cast<int>(flow.quest_log_after_remove.populated_count);
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::quest_reward_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t starter_entry,
+    int64_t reward_target_entry,
+    int64_t quest_id,
+    int64_t reward_choice,
+    String const& starter_name,
+    String const& reward_target_name)
+{
+    return quest_reward_probe_selector(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        String::num_int64(starter_entry),
+        String::num_int64(reward_target_entry),
+        quest_id,
+        reward_choice,
+        starter_name,
+        reward_target_name);
+}
+
+Dictionary AcoreProtocolClient::quest_reward_probe_selector(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    String const& starter_selector,
+    String const& reward_target_selector,
+    int64_t quest_id,
+    int64_t reward_choice,
+    String const& starter_name,
+    String const& reward_target_name)
+{
+    try
+    {
+        std::uint64_t const starter = parse_target_selector(starter_selector, "quest reward starter selector");
+        std::uint64_t const reward_target = parse_target_selector(reward_target_selector, "quest reward target selector");
+        if (quest_id <= 0)
+        {
+            throw std::runtime_error("quest reward quest id must be non-zero");
+        }
+        if (reward_choice < 0)
+        {
+            throw std::runtime_error("quest reward choice must be non-negative");
+        }
+
+        acore_protocol::QuestRewardProbeResult flow = acore_protocol::quest_reward_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            starter,
+            reward_target,
+            static_cast<std::uint32_t>(quest_id),
+            static_cast<std::uint32_t>(reward_choice),
+            to_std_string(starter_name),
+            to_std_string(reward_target_name));
+
+        Dictionary result;
+        result["ok"] = flow.reward_confirmed;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["starter_guid"] = guid_to_hex(flow.starter_guid);
+        result["starter_entry"] = static_cast<int>(flow.starter_entry);
+        result["starter_name"] = String(flow.starter_name.c_str());
+        result["reward_target_guid"] = guid_to_hex(flow.reward_target_guid);
+        result["reward_target_entry"] = static_cast<int>(flow.reward_target_entry);
+        result["reward_target_name"] = String(flow.reward_target_name.c_str());
+        result["quest_id"] = static_cast<int>(flow.quest_id);
+        result["reward_choice"] = static_cast<int>(flow.reward_choice);
+        result["accept_ok"] = flow.accept_ok;
+        result["live_reward_target_found"] = flow.live_reward_target_found;
+        result["reward_target_has_position"] = flow.reward_target_has_position;
+        result["reward_target_x"] = flow.reward_target_x;
+        result["reward_target_y"] = flow.reward_target_y;
+        result["reward_target_z"] = flow.reward_target_z;
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["approach_movement_sent"] = flow.approach_movement_sent;
+        result["return_movement_sent"] = flow.return_movement_sent;
+        result["selection_sent"] = flow.selection_sent;
+        result["logged_in_world"] = flow.logged_in_world;
+        result["complete_sent"] = flow.complete_sent;
+        result["request_reward_sent"] = flow.request_reward_sent;
+        result["request_reward_response_seen"] = flow.request_reward_response_seen;
+        result["choose_reward_sent"] = flow.choose_reward_sent;
+        result["request_items_seen"] = flow.request_items_seen;
+        result["offer_reward_seen"] = flow.offer_reward_seen;
+        result["quest_complete_seen"] = flow.quest_complete_seen;
+        result["quest_update_complete_seen"] = flow.quest_update_complete_seen;
+        result["failure_seen"] = flow.failure_seen;
+        result["failure_opcode"] = static_cast<int>(flow.failure_opcode);
+        result["response_opcode"] = static_cast<int>(flow.response_opcode);
+        result["failure_reason"] = static_cast<int64_t>(flow.failure_reason);
+        result["quest_log_before_reward_seen"] = flow.quest_log_before_reward_seen;
+        result["quest_log_after_reward_seen"] = flow.quest_log_after_reward_seen;
+        result["quest_in_log_before_reward"] = flow.quest_in_log_before_reward;
+        result["quest_in_log_after_reward"] = flow.quest_in_log_after_reward;
+        result["reward_confirmed"] = flow.reward_confirmed;
+        result["quest_log_before_reward"] = quest_log_dictionary(flow.quest_log_before_reward);
+        result["quest_log_after_reward"] = quest_log_dictionary(flow.quest_log_after_reward);
+        result["before_populated"] = static_cast<int>(flow.quest_log_before_reward.populated_count);
+        result["after_populated"] = static_cast<int>(flow.quest_log_after_reward.populated_count);
+        result["reward_choice_count"] = static_cast<int>(flow.offer_reward.reward_choice_count);
+        result["reward_item_count"] = static_cast<int>(flow.offer_reward.reward_item_count);
+        result["reward_money"] = static_cast<int64_t>(flow.quest_complete.money_reward);
+        result["reward_xp"] = static_cast<int64_t>(flow.quest_complete.xp_reward);
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
         result["realm"] = realm_dictionary(flow.realm);
         return result;
