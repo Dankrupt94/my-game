@@ -22,20 +22,31 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Chat Log Data Started (Codex UI lane)
+## 2026-07-02 - World Session Chat Log Data (Codex UI lane)
 
-Goal: continue moving normal-client HUD surfaces into the active
-world-session view by teaching the resident `Chat` panel to render safe
-session chat rows while keeping send behavior local until the live-session lane
-wires server chat actions.
+Context: the resident world-session `Chat` panel had a local send box, but it
+did not display session-provided chat/system rows.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Consume session-provided chat dictionaries/arrays; do not call or edit the
-  protocol bridge.
-- Add headless self-test coverage that proves the Chat panel renders session
-  chat rows.
+- Added safe chat-row extraction to `scripts/world_session_view.gd`.
+- The resident `Chat` panel now renders session chat dictionaries/arrays above
+  the local send box without calling the protocol bridge.
+- Chat rows show safe mode/channel, sender, and message text when available.
+- Send behavior remains a local queue until Claude's live-session lane wires
+  server chat sends into the persistent world session.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `chat=true`.
+
+Remaining work:
+
+- Feed live `SMSG_MESSAGECHAT`, system messages, combat log rows, and channel
+  updates into the world-session context.
+- Add tabs, filters, timestamps, scrollback controls, colors, command parsing,
+  and live send/whisper/channel calls through the persistent session lane.
 
 ## 2026-07-02 - World Session Spellbook Data (Codex UI lane)
 

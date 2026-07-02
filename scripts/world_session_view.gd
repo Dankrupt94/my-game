@@ -91,6 +91,7 @@ var session_wow_position := Vector3.ZERO
 var session_orientation := 0.0
 var visible_object_count := 0
 var visible_objects: Array = []
+var session_chat_rows: Array = []
 var session_spell_rows: Array = []
 var session_action_slots: Array = []
 var session_inventory_slots: Array = []
@@ -464,6 +465,7 @@ func _apply_session_data(
 	visible_objects = _extract_visible_objects(character, enter_result)
 	if not visible_objects.is_empty():
 		visible_object_count = max(visible_object_count, visible_objects.size())
+	session_chat_rows = _extract_chat_rows(character, enter_result)
 	session_spell_rows = _extract_spell_rows(character, enter_result)
 	session_action_slots = _extract_action_slots(character, enter_result)
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
@@ -525,6 +527,65 @@ func _normalize_visible_objects(raw_objects: Array) -> Array:
 			for key in ["entry_id", "object_entry", "id"]:
 				if row.has(key):
 					row["entry"] = int(row.get(key, 0))
+					break
+		rows.append(row)
+	return rows
+
+
+func _extract_chat_rows(character: Dictionary, enter_result: Dictionary) -> Array:
+	var candidates: Array = [
+		character.get("chat", {}),
+		character.get("chat_log", {}),
+		character.get("messages", []),
+		enter_result.get("chat", {}),
+		enter_result.get("chat_log", {}),
+		enter_result.get("messages", []),
+	]
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("chat", {}))
+		candidates.append(update.get("chat_log", {}))
+		candidates.append(update.get("messages", []))
+
+	for candidate in candidates:
+		var raw_rows = []
+		if candidate is Dictionary:
+			raw_rows = candidate.get("messages", candidate.get("rows", candidate.get("chat_rows", [])))
+		elif candidate is Array:
+			raw_rows = candidate
+		if raw_rows is Array and not raw_rows.is_empty():
+			var normalized := _normalize_chat_rows(raw_rows)
+			if not normalized.is_empty():
+				return normalized
+	return []
+
+
+func _normalize_chat_rows(raw_rows: Array) -> Array:
+	var rows: Array = []
+	for index in range(raw_rows.size()):
+		var raw_row = raw_rows[index]
+		var row: Dictionary = {}
+		if raw_row is Dictionary:
+			row = raw_row.duplicate(true)
+		elif raw_row is String:
+			row = {"message": raw_row}
+		else:
+			continue
+		if not row.has("message"):
+			for key in ["received_message", "text", "body", "line"]:
+				if row.has(key):
+					row["message"] = str(row.get(key, ""))
+					break
+		var message := str(row.get("message", "")).strip_edges()
+		if message.is_empty():
+			continue
+		row["message"] = message
+		if not row.has("index"):
+			row["index"] = index
+		if not row.has("mode"):
+			for key in ["channel", "chat_type", "type"]:
+				if row.has(key):
+					row["mode"] = str(row.get(key, ""))
 					break
 		rows.append(row)
 	return rows
@@ -1411,6 +1472,19 @@ func _clear_children(parent: Node) -> void:
 
 func _build_chat_panel() -> void:
 	panel_title_label.text = "Chat"
+	if session_chat_rows.is_empty():
+		panel_body.add_child(_panel_label("Chat log: waiting for live session messages.", 13))
+	else:
+		panel_body.add_child(_panel_label("Chat rows: " + str(session_chat_rows.size()), 13))
+		for index in range(min(session_chat_rows.size(), 40)):
+			var row = session_chat_rows[index]
+			if row is Dictionary:
+				panel_body.add_child(_panel_label(_chat_row_text(row), 13))
+		if session_chat_rows.size() > 40:
+			panel_body.add_child(
+				_panel_label("+%s more chat rows" % str(session_chat_rows.size() - 40), 13)
+			)
+
 	panel_body.add_child(_panel_label("Say", 13))
 	var input_row := HBoxContainer.new()
 	input_row.add_theme_constant_override("separation", 8)
@@ -1429,6 +1503,19 @@ func _build_chat_panel() -> void:
 	input_row.add_child(send_button)
 
 	panel_body.add_child(_panel_label("Channel state: local queue.", 13))
+
+
+func _chat_row_text(row: Dictionary) -> String:
+	var mode := str(row.get("mode", row.get("channel", "Say"))).strip_edges()
+	if mode.is_empty():
+		mode = "Say"
+	var sender := str(
+		row.get("sender", row.get("sender_name", row.get("from", row.get("sender_guid", ""))))
+	).strip_edges()
+	var message := str(row.get("message", "")).strip_edges()
+	if sender.is_empty():
+		return "[%s] %s" % [mode, message]
+	return "[%s] %s: %s" % [mode, sender, message]
 
 
 func _build_spells_panel() -> void:
@@ -2277,6 +2364,21 @@ func _run_self_test() -> void:
 				},
 			],
 		},
+		"chat":
+		{
+			"messages":
+			[
+				{
+					"mode": "Say",
+					"sender": "Codexstage",
+					"message": "Session hello",
+				},
+				{
+					"mode": "System",
+					"message": "World session ready",
+				},
+			],
+		},
 		"action_buttons":
 		{
 			"buttons":
@@ -2376,11 +2478,17 @@ func _run_self_test() -> void:
 	_show_session_panel("chat")
 	var chat_shell := _panel_shell("chat")
 	var chat_title: Label = session_panels.get("chat", {}).get("title", null)
+	var chat_body: VBoxContainer = session_panels.get("chat", {}).get("body", null)
 	var chat_panel_ok := (
 		chat_shell != null
 		and chat_shell.visible
 		and chat_title != null
 		and chat_title.text == "Chat"
+		and chat_body != null
+		and session_chat_rows.size() == 2
+		and _control_tree_text_contains(chat_body, "Chat rows: 2")
+		and _control_tree_text_contains(chat_body, "Session hello")
+		and _control_tree_text_contains(chat_body, "World session ready")
 	)
 	_show_session_panel("actions")
 	var actions_shell := _panel_shell("actions")
@@ -2545,7 +2653,7 @@ func _run_self_test() -> void:
 			(
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
-				+ "inventory=true quests=true tracker=true map_panel=true "
+				+ "chat=true inventory=true quests=true tracker=true map_panel=true "
 				+ "targets=true action_slots=true spellbook=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
 			)
