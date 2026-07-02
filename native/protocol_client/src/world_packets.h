@@ -383,6 +383,27 @@ struct QuestGiverListSummary
     std::vector<QuestGiverQuestSummary> quests;
 };
 
+struct GossipQuestItemSummary
+{
+    std::uint32_t quest_id = 0;
+    std::uint32_t quest_icon = 0;
+    std::int32_t quest_level = 0;
+    std::uint32_t quest_flags = 0;
+    std::uint8_t repeatable = 0;
+};
+
+struct GossipMessageSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint64_t sender_guid = 0;
+    std::uint32_t menu_id = 0;
+    std::uint32_t title_text_id = 0;
+    std::uint32_t gossip_option_count = 0;
+    std::int32_t quest_count = 0;
+    std::vector<GossipQuestItemSummary> quests;
+};
+
 struct VendorItemSummary
 {
     std::uint32_t vendor_slot = 0;
@@ -511,6 +532,7 @@ SpellCastResponseSummary parse_spell_cast_response(std::uint16_t opcode, std::sp
 LootResponseSummary parse_loot_response(std::span<const std::uint8_t> payload);
 TrainerListSummary parse_trainer_list_response(std::span<const std::uint8_t> payload);
 QuestGiverListSummary parse_questgiver_quest_list_response(std::span<const std::uint8_t> payload);
+GossipMessageSummary parse_gossip_message_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std::uint8_t> payload);
 VendorListSummary parse_vendor_list_response(std::span<const std::uint8_t> payload);

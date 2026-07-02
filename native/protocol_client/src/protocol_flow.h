@@ -154,6 +154,7 @@ struct QuestGiverListProbeResult
     bool gossip_fallback_seen = false;
     std::uint16_t response_opcode = 0;
     QuestGiverListSummary quest_list;
+    GossipMessageSummary gossip;
     std::vector<VisibleObjectSummary> visible_objects;
     std::vector<std::uint16_t> skipped_opcodes;
 };

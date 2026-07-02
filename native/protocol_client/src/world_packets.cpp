@@ -1407,6 +1407,56 @@ QuestGiverListSummary parse_questgiver_quest_list_response(std::span<const std::
     return summary;
 }
 
+GossipMessageSummary parse_gossip_message_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    GossipMessageSummary summary;
+    summary.payload_size = payload.size();
+    summary.sender_guid = read_u64_le(payload, offset);
+    summary.menu_id = read_u32_le(payload, offset);
+    summary.title_text_id = read_u32_le(payload, offset);
+
+    summary.gossip_option_count = read_u32_le(payload, offset);
+    if (summary.gossip_option_count > 256)
+    {
+        throw std::runtime_error("gossip message has an implausible option count");
+    }
+    for (std::uint32_t i = 0; i < summary.gossip_option_count; ++i)
+    {
+        (void)read_u32_le(payload, offset); // option index
+        (void)read_u8(payload, offset);     // icon
+        (void)read_u8(payload, offset);     // coded
+        (void)read_u32_le(payload, offset); // box money
+        (void)read_c_string(payload, offset); // message (proprietary; discarded)
+        (void)read_c_string(payload, offset); // box message (proprietary; discarded)
+    }
+
+    summary.quest_count = static_cast<std::int32_t>(read_u32_le(payload, offset));
+    if (summary.quest_count < 0 || summary.quest_count > 256)
+    {
+        throw std::runtime_error("gossip message has an implausible quest count");
+    }
+    summary.quests.reserve(static_cast<std::size_t>(summary.quest_count));
+    for (std::int32_t i = 0; i < summary.quest_count; ++i)
+    {
+        GossipQuestItemSummary quest;
+        quest.quest_id = read_u32_le(payload, offset);
+        quest.quest_icon = read_u32_le(payload, offset);
+        quest.quest_level = static_cast<std::int32_t>(read_u32_le(payload, offset));
+        quest.quest_flags = read_u32_le(payload, offset);
+        quest.repeatable = read_u8(payload, offset);
+        (void)read_c_string(payload, offset); // title (proprietary; discarded)
+        summary.quests.push_back(quest);
+    }
+
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("gossip message parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload)
 {
     std::size_t offset = 0;
@@ -2114,6 +2164,32 @@ bool world_packet_self_test()
     questgiver_list_payload.insert(questgiver_list_payload.end(), {'K', 'i', 'l', 'l', ' ', 'r', 'a', 't', 's', 0});
     QuestGiverListSummary questgiver_list = parse_questgiver_quest_list_response(questgiver_list_payload);
 
+    std::vector<std::uint8_t> gossip_message_payload;
+    append_u64_le(gossip_message_payload, 0xF130000123000002ULL); // sender guid
+    append_u32_le(gossip_message_payload, 0);   // menu id
+    append_u32_le(gossip_message_payload, 100);  // title text id
+    append_u32_le(gossip_message_payload, 1);   // gossip option count
+    append_u32_le(gossip_message_payload, 0);   // option index
+    append_u8(gossip_message_payload, 1);       // icon
+    append_u8(gossip_message_payload, 0);       // coded
+    append_u32_le(gossip_message_payload, 0);   // box money
+    gossip_message_payload.insert(gossip_message_payload.end(), {'H', 'i', 0}); // message
+    gossip_message_payload.insert(gossip_message_payload.end(), {0});           // box message (empty)
+    append_u32_le(gossip_message_payload, 2);   // quest count
+    append_u32_le(gossip_message_payload, 62);  // quest 1 id
+    append_u32_le(gossip_message_payload, 2);   // icon
+    append_u32_le(gossip_message_payload, 5);   // level
+    append_u32_le(gossip_message_payload, 8);   // flags
+    append_u8(gossip_message_payload, 0);       // repeatable
+    gossip_message_payload.insert(gossip_message_payload.end(), {'A', 0});      // title
+    append_u32_le(gossip_message_payload, 63);  // quest 2 id
+    append_u32_le(gossip_message_payload, 2);   // icon
+    append_u32_le(gossip_message_payload, 6);   // level
+    append_u32_le(gossip_message_payload, 0);   // flags
+    append_u8(gossip_message_payload, 0);       // repeatable
+    gossip_message_payload.insert(gossip_message_payload.end(), {'B', 0});      // title
+    GossipMessageSummary gossip_message = parse_gossip_message_response(gossip_message_payload);
+
     return rejected_truncation
         && characters.size() == 1
         && characters[0].guid == 0x1234
@@ -2244,6 +2320,14 @@ bool world_packet_self_test()
         && questgiver_list.quests[0].quest_id == 42
         && questgiver_list.quests[0].quest_level == 5
         && questgiver_list.quests[0].title == "Kill rats"
+        && gossip_message.parsed
+        && gossip_message.sender_guid == 0xF130000123000002ULL
+        && gossip_message.gossip_option_count == 1
+        && gossip_message.quest_count == 2
+        && gossip_message.quests.size() == 2
+        && gossip_message.quests[0].quest_id == 62
+        && gossip_message.quests[1].quest_id == 63
+        && gossip_message.quests[1].quest_level == 6
         && trainer_buy_success.parsed
         && trainer_buy_success.succeeded
         && !trainer_buy_success.failed

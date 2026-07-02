@@ -443,6 +443,8 @@ int questgiver_list_probe(
               << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
               << " greeting=\"" << result.quest_list.greeting << "\""
               << " quest_count=" << result.quest_list.quest_count
+              << " gossip_menu_id=" << result.gossip.menu_id
+              << " gossip_quest_count=" << result.gossip.quest_count
               << " skipped=" << result.skipped_opcodes.size()
               << "\n";
     std::size_t printed = 0;
@@ -463,12 +465,31 @@ int questgiver_list_probe(
                   << "\n";
         ++printed;
     }
+    std::size_t gossip_printed = 0;
+    for (GossipQuestItemSummary const& quest : result.gossip.quests)
+    {
+        if (gossip_printed >= 40)
+        {
+            break;
+        }
+        // Quest ids/levels/flags only; titles are proprietary and are not printed.
+        std::cout << "GOSSIP_QUEST"
+                  << " quest_id=" << quest.quest_id
+                  << " icon=" << quest.quest_icon
+                  << " level=" << quest.quest_level
+                  << " flags=" << quest.quest_flags
+                  << " repeatable=" << static_cast<int>(quest.repeatable)
+                  << "\n";
+        ++gossip_printed;
+    }
+
     // Live AzerothCore quest givers answer CMSG_QUESTGIVER_HELLO with gossip-embedded
     // quests (SMSG_GOSSIP_MESSAGE); the standalone SMSG_QUESTGIVER_QUEST_LIST is rarer.
-    // A successful probe means the quest giver was reached and responded via either
-    // path. The 0x185 quest-list parser itself is covered by --self-test.
+    // Success means the quest giver was reached and returned offered quests via either
+    // path. Both parsers are also covered by --self-test.
     return result.live_target_found && result.selection_sent && result.questgiver_hello_sent
-        && (result.quest_list_response_seen || result.gossip_fallback_seen) ? 0 : 1;
+        && ((result.quest_list_response_seen && result.quest_list.quest_count > 0)
+            || (result.gossip_fallback_seen && result.gossip.quest_count > 0)) ? 0 : 1;
 }
 
 int trainer_buy_spell_probe(

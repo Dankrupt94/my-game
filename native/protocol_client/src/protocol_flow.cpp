@@ -2351,9 +2351,10 @@ QuestGiverListProbeResult questgiver_list_probe(
         if (packet->opcode == SMSG_GOSSIP_MESSAGE)
         {
             // Quest givers that also expose a gossip menu answer CMSG_QUESTGIVER_HELLO
-            // with SMSG_GOSSIP_MESSAGE (quests embedded in the gossip). Record the
-            // fallback; a dedicated gossip-quest parse is future work.
-            result.gossip_fallback_seen = true;
+            // with SMSG_GOSSIP_MESSAGE, carrying the offered quests embedded in the
+            // packet. Parse those quests out of the gossip response.
+            result.gossip = parse_gossip_message_response(packet->payload);
+            result.gossip_fallback_seen = result.gossip.parsed;
             result.response_opcode = packet->opcode;
             break;
         }
