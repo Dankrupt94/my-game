@@ -2177,3 +2177,22 @@ Remaining work:
 
 - Quest completion/reward selection, objective progress updates, full quest log
   UI state, persistent-session integration, and UI lane polish.
+
+## 2026-07-01 - Begin Stage 17 Quest Completion Reward Proof
+
+Goal: add a bounded live quest turn-in proof for the local starter fixture. The
+proof should accept quest `783` from starter entry `823`, complete/request/choose
+reward at ender entry `197`, and confirm the quest leaves the active log and is
+recorded as rewarded by the local server.
+
+Plan:
+
+- Add client packet builders for `CMSG_QUESTGIVER_COMPLETE_QUEST`,
+  `CMSG_QUESTGIVER_REQUEST_REWARD`, and `CMSG_QUESTGIVER_CHOOSE_REWARD`.
+- Parse the safe numeric portions of reward/complete server responses without
+  committing quest text or client assets.
+- Expose the flow through the native helper, Godot extension, and
+  `ProtocolClientBridge`.
+- Validate with fixture reset before and after, using the local database only
+  for setup/cleanup proof; the actual turn-in must happen through AzerothCore
+  packets.
