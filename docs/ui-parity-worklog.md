@@ -22,19 +22,34 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Spellbook Data Started (Codex UI lane)
+## 2026-07-02 - World Session Spellbook Data (Codex UI lane)
 
-Goal: continue moving normal-client HUD surfaces into the active
-world-session view by teaching the resident `Spells` panel to render safe
-spellbook-style session rows.
+Context: the world-session HUD had a `Spells` shortcut and panel, but that
+panel still showed placeholder text even when spellbook-style session data
+could be supplied by the login/session handoff.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI worklog.
-- Consume dictionary/array data that the session context may already provide;
-  do not call or edit the protocol bridge.
-- Add headless self-test coverage that proves the Spells panel renders session
-  spell rows.
+- Added safe spell-row extraction to `scripts/world_session_view.gd`.
+- The resident `Spells` panel now renders dictionary/array spellbook rows from
+  session data without calling the protocol bridge.
+- Spell rows show safe numeric spell ids, slots, and available flags/state
+  fields, with selectable rows that update the HUD status/detail text.
+- This remains UI-lane work only; live casting, cooldowns, names, icons, and
+  failure feedback still depend on later live-session and local-only metadata
+  slices.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `spellbook=true`.
+
+Remaining work:
+
+- Feed live `SMSG_INITIAL_SPELLS` and learned-spell refresh snapshots from
+  Claude's persistent session lane into the world-session context.
+- Add local-only spell names/icons/ranks, cooldown/failure/cast state, drag/drop
+  action placement, and actual spell-cast calls through the live-session lane.
 
 ## 2026-07-02 - World Session Action Bar Data (Codex UI lane)
 

@@ -91,6 +91,7 @@ var session_wow_position := Vector3.ZERO
 var session_orientation := 0.0
 var visible_object_count := 0
 var visible_objects: Array = []
+var session_spell_rows: Array = []
 var session_action_slots: Array = []
 var session_inventory_slots: Array = []
 var session_coinage := -1
@@ -463,6 +464,7 @@ func _apply_session_data(
 	visible_objects = _extract_visible_objects(character, enter_result)
 	if not visible_objects.is_empty():
 		visible_object_count = max(visible_object_count, visible_objects.size())
+	session_spell_rows = _extract_spell_rows(character, enter_result)
 	session_action_slots = _extract_action_slots(character, enter_result)
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
@@ -524,6 +526,68 @@ func _normalize_visible_objects(raw_objects: Array) -> Array:
 				if row.has(key):
 					row["entry"] = int(row.get(key, 0))
 					break
+		rows.append(row)
+	return rows
+
+
+func _extract_spell_rows(character: Dictionary, enter_result: Dictionary) -> Array:
+	var candidates: Array = [
+		character.get("spellbook", {}),
+		character.get("initial_spells", {}),
+		character.get("known_spells", {}),
+		character.get("spells", []),
+		enter_result.get("spellbook", {}),
+		enter_result.get("initial_spells", {}),
+		enter_result.get("known_spells", {}),
+		enter_result.get("spells", []),
+	]
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("spellbook", {}))
+		candidates.append(update.get("initial_spells", {}))
+		candidates.append(update.get("known_spells", {}))
+		candidates.append(update.get("spells", []))
+
+	for candidate in candidates:
+		var raw_rows = []
+		if candidate is Dictionary:
+			raw_rows = candidate.get("spells", candidate.get("rows", candidate.get("spell_rows", [])))
+		elif candidate is Array:
+			raw_rows = candidate
+		if raw_rows is Array and not raw_rows.is_empty():
+			var normalized := _normalize_spell_rows(raw_rows)
+			if not normalized.is_empty():
+				return normalized
+	return []
+
+
+func _normalize_spell_rows(raw_rows: Array) -> Array:
+	var rows: Array = []
+	for index in range(raw_rows.size()):
+		var raw_row = raw_rows[index]
+		var row: Dictionary = {}
+		if raw_row is Dictionary:
+			row = raw_row.duplicate(true)
+		elif raw_row is int or raw_row is float:
+			row = {"id": int(raw_row)}
+		elif raw_row is String and raw_row.is_valid_int():
+			row = {"id": int(raw_row)}
+		else:
+			continue
+		if not row.has("id"):
+			for key in ["spell_id", "spell", "entry", "spell_entry"]:
+				if row.has(key):
+					row["id"] = int(row.get(key, 0))
+					break
+		if int(row.get("id", 0)) <= 0:
+			continue
+		if not row.has("slot"):
+			if row.has("slot_index"):
+				row["slot"] = int(row.get("slot_index", index))
+			elif row.has("index"):
+				row["slot"] = int(row.get("index", index))
+			else:
+				row["slot"] = index
 		rows.append(row)
 	return rows
 
@@ -1369,10 +1433,67 @@ func _build_chat_panel() -> void:
 
 func _build_spells_panel() -> void:
 	panel_title_label.text = "Spells"
-	panel_body.add_child(_panel_label("Known spells: no session rows yet.", 13))
 	panel_body.add_child(
 		_panel_label("Active inputs: primary action, target next, interact, and jump.", 13)
 	)
+	if session_spell_rows.is_empty():
+		panel_body.add_child(_panel_label("Known spells: waiting for session spellbook rows.", 13))
+		panel_body.add_child(
+			_panel_label(
+				(
+					"The spellbook stays in the gameplay HUD while the live session "
+					+ "feeds spell snapshots and cast results."
+				),
+				13
+			)
+		)
+		return
+
+	panel_body.add_child(_panel_label("Known spells: " + str(session_spell_rows.size()), 13))
+	for index in range(min(session_spell_rows.size(), 80)):
+		var row = session_spell_rows[index]
+		if row is Dictionary:
+			panel_body.add_child(_spell_row_button(row, index))
+	if session_spell_rows.size() > 80:
+		panel_body.add_child(
+			_panel_label("+%s more spell rows" % str(session_spell_rows.size() - 80), 13)
+		)
+
+
+func _spell_row_button(row: Dictionary, index: int) -> Button:
+	var button := Button.new()
+	button.text = _spell_row_title(row, index)
+	button.tooltip_text = _spell_row_detail(row, index)
+	button.custom_minimum_size = Vector2(220.0, 46.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_spell_row.bind(row, index))
+	return button
+
+
+func _show_spell_row(row: Dictionary, index: int) -> void:
+	var detail := _spell_row_detail(row, index)
+	session_label.text = detail
+	status_label.text = "Spell row selected: " + _spell_row_title(row, index).replace("\n", " | ")
+
+
+func _spell_row_title(row: Dictionary, index: int) -> String:
+	var display_name := str(row.get("display_name", row.get("name", ""))).strip_edges()
+	var id_text := "Spell ID " + str(row.get("id", row.get("spell_id", 0)))
+	var slot_text := "slot " + str(row.get("slot", index))
+	if display_name.is_empty():
+		return id_text + "\n" + slot_text
+	return display_name + "\n" + id_text + " | " + slot_text
+
+
+func _spell_row_detail(row: Dictionary, index: int) -> String:
+	var parts: Array[String] = [
+		"spell " + str(row.get("id", row.get("spell_id", 0))),
+		"slot " + str(row.get("slot", index)),
+	]
+	for key in ["flags", "active", "passive", "disabled", "cooldown", "category_cooldown"]:
+		if row.has(key):
+			parts.append(key + " " + str(row.get(key)))
+	return " | ".join(parts)
 
 
 func _build_actions_panel() -> void:
@@ -2183,6 +2304,30 @@ func _run_self_test() -> void:
 				},
 			],
 		},
+		"spellbook":
+		{
+			"initial_spells_seen": true,
+			"spell_count": 3,
+			"cooldown_count": 1,
+			"spells":
+			[
+				{
+					"slot": 0,
+					"id": 78,
+					"flags": 0,
+				},
+				{
+					"slot": 1,
+					"spell_id": 2457,
+					"flags": 0,
+				},
+				{
+					"slot": 2,
+					"id": 6603,
+					"passive": false,
+				},
+			],
+		},
 		"quest_log":
 		{
 			"slots":
@@ -2271,11 +2416,17 @@ func _run_self_test() -> void:
 	_show_session_panel("spells")
 	var spells_shell := _panel_shell("spells")
 	var spells_title: Label = session_panels.get("spells", {}).get("title", null)
+	var spells_body: VBoxContainer = session_panels.get("spells", {}).get("body", null)
 	var spells_panel_ok := (
 		spells_shell != null
 		and spells_shell.visible
 		and spells_title != null
 		and spells_title.text == "Spells"
+		and spells_body != null
+		and session_spell_rows.size() == 3
+		and _control_tree_text_contains(spells_body, "Known spells: 3")
+		and _control_tree_text_contains(spells_body, "Spell ID 78")
+		and _control_tree_text_contains(spells_body, "Spell ID 2457")
 	)
 	_show_session_panel("quests")
 	var quests_shell := _panel_shell("quests")
@@ -2395,7 +2546,7 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "inventory=true quests=true tracker=true map_panel=true "
-				+ "targets=true action_slots=true "
+				+ "targets=true action_slots=true spellbook=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
 			)
 			% [
