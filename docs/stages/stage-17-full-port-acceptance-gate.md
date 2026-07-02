@@ -267,6 +267,22 @@ Stage 17 uses [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_sp
 - Validation: `ACORE_VENDOR_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_vendor_view.tscn` still passed after the transaction feedback change.
 - Remaining work: replace this transaction proof list with a persistent vendor/inventory layout that refreshes the actual inventory panel after buy/sell, add stock refresh and failure-code UI, add repair, and move the interaction into a persistent world session.
 
+### 2026-07-01 - Quest Giver Details Protocol Probe
+
+- Extended the quest-giver slice from offered-quest listing into a safe quest-detail packet proof.
+- The Godot extension and script bridge now expose `questgiver_details_probe(_selector)` for `CMSG_QUESTGIVER_QUERY_QUEST` / `SMSG_QUESTGIVER_QUEST_DETAILS`.
+- `scenes/stage17_questgiver_view.tscn` now has a quest id input, `Query Details` control, and safe numeric detail rows for quest id, flags, reward counts, money/xp, spell id, and reward item ids/counts.
+- The scene still does not commit or print quest title/body/objective text. That text belongs in the future local-only data/text pipeline.
+- Reviewed the local Antigravity phase-2 blindspots file for questing risks. The next quest milestones need to track quest-log caps, objective/map overlays, shared and area-triggered credit, party range checks, item-started quests, turn-in bag capacity, daily resets, and phasing-aware gossip.
+- Validation: `./tools/build_godot_protocol_extension_compat.sh` passed.
+- Validation: `native/protocol_client/build-compat/acore_protocol_client --self-test` passed.
+- Validation: `godot-4 --headless --path . --script res://tools/godot_protocol_extension_smoke.gd` passed after the local Godot import cache registered the extension.
+- Validation: `godot-4 --headless --path . --script res://tools/protocol_bridge_smoke.gd` passed when run sequentially.
+- Validation: `ACORE_QUESTGIVER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_questgiver_view.tscn` passed with one offered quest and opcode `0x17d`.
+- Validation: `ACORE_QUESTGIVER_DETAILS_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_questgiver_view.tscn` passed with quest id `783`, details opcode `0x188`, and no fixed/choice reward item rows for this starter fixture.
+- Caveat: running multiple authenticated world-session checks in parallel against the same local character can produce transient socket closes. Run live protocol checks sequentially until the persistent-session lane owns connection multiplexing.
+- Remaining work: accept, complete, reward choice, quest log, abandon/share, objective progress, item-started quests, daily reset behavior, phasing-aware gossip, in-world click targeting, persistent-session integration, and local-only text/icon rendering.
+
 ### 2026-07-01 - Settings And Keybindings First Slice
 
 - Added `scenes/settings_view.tscn` and `scripts/settings_view.gd` as the first Godot-native options menu.

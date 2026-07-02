@@ -451,6 +451,80 @@ Remaining loot packet work:
 - Parse and surface loot errors, bind prompts, quest item rules, group loot settings, rolls, master loot, and permission edge cases.
 - Add long-session persistence checks for looted money/items.
 
+## Quest Giver List And Details Slice
+
+Stage 17 now has the first live quest-giver list and detail packet paths. This
+is still not full quest parity: the current scene lists offered quest ids and
+queries one detail packet, but it does not accept, complete, reward, abandon,
+share, or track objectives yet.
+
+Relevant opcodes:
+
+| Opcode | Value | Stage 17 support |
+| --- | ---: | --- |
+| `CMSG_QUESTGIVER_HELLO` | `0x184` | Sends selected quest-giver GUID after moving within NPC interaction range |
+| `SMSG_QUESTGIVER_QUEST_LIST` | `0x185` | Parses standalone offered-quest rows when the server uses this response |
+| `CMSG_QUESTGIVER_QUERY_QUEST` | `0x186` | Sends selected quest-giver GUID and quest id for detail lookup |
+| `SMSG_QUESTGIVER_QUEST_DETAILS` | `0x188` | Parses safe numeric detail fields and reward item ids/counts |
+| `SMSG_GOSSIP_MESSAGE` | `0x17D` | Parses gossip-embedded quest rows used by live local quest givers |
+
+Quest-giver hello request payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| quest-giver GUID | 8 | Raw little-endian object GUID |
+
+Quest detail request payload:
+
+| Field | Size | Notes |
+| --- | ---: | --- |
+| quest-giver GUID | 8 | Raw little-endian object GUID |
+| quest id | 4 | Requested quest template id |
+
+Current detail response fields:
+
+| Field | Notes |
+| --- | --- |
+| npc guid | Parsed from the server response |
+| quest id | Must match the requested quest id for the self-test to pass |
+| quest flags | Numeric flags only |
+| suggested players | Numeric group-size hint |
+| hidden rewards | Boolean flag |
+| reward choice count | Number of selectable reward item rows |
+| reward item count | Number of fixed reward item rows |
+| money reward | Copper amount, before future level-cap conversion UI |
+| xp reward | XP amount |
+| honor reward | Honor amount |
+| reward spell | Spell id, if present |
+| reward item rows | Item id and count only |
+| reward choice rows | Item id and count only |
+
+Observed Stage 17 result:
+
+- `ACORE_QUESTGIVER_LIST_SELF_TEST=1` passed through
+  `scenes/stage17_questgiver_view.tscn` with one offered quest via
+  `SMSG_GOSSIP_MESSAGE` opcode `0x17d`.
+- `ACORE_QUESTGIVER_DETAILS_SELF_TEST=1` passed through the same scene with
+  quest id `783`, `SMSG_QUESTGIVER_QUEST_DETAILS` opcode `0x188`, and zero
+  fixed/choice reward item rows for the local starter fixture.
+- The Godot surface and helper fallback intentionally keep committed output to
+  ids, flags, counts, and money/xp values. Quest title/body/objective text and
+  icons remain a future local-only data/asset pipeline concern.
+- The local Antigravity phase-2 blindspots file highlights future quest risks:
+  quest-log cap handling, objective/map overlays, shared and area-triggered
+  credit, party range checks, item-started quests, turn-in bag capacity, daily
+  resets, and phasing-aware gossip.
+
+Remaining quest packet work:
+
+- Add accept, complete, reward choice, quest log, abandon, and share packet
+  support.
+- Track objective progress from server state instead of treating detail packets
+  as quest-log state.
+- Add in-world click targeting and persistent-session integration.
+- Add local-only quest text, icons, map overlays, and difficulty coloring
+  without committing client-derived text/assets.
+
 ## Trainer List And Buy Slice
 
 Stage 17 now has the first trainer-list and trainer-buy response paths required by [WotLK Client Parity Engine Spec](../wotlk_client_parity_engine_spec.md).

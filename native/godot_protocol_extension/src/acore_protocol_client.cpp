@@ -397,6 +397,45 @@ Dictionary questgiver_list_dictionary(QuestGiverListSummary const& list)
     return value;
 }
 
+Dictionary quest_reward_item_dictionary(QuestRewardItemSummary const& item)
+{
+    Dictionary value;
+    value["item_id"] = static_cast<int>(item.item_id);
+    value["count"] = static_cast<int>(item.item_count);
+    return value;
+}
+
+Array quest_reward_item_array(std::vector<QuestRewardItemSummary> const& items)
+{
+    Array values;
+    for (QuestRewardItemSummary const& item : items)
+    {
+        values.append(quest_reward_item_dictionary(item));
+    }
+    return values;
+}
+
+Dictionary questgiver_details_dictionary(QuestGiverDetailsSummary const& details)
+{
+    Dictionary value;
+    value["parsed"] = details.parsed;
+    value["payload_size"] = static_cast<int>(details.payload_size);
+    value["npc_guid"] = guid_to_hex(details.npc_guid);
+    value["quest_id"] = static_cast<int>(details.quest_id);
+    value["quest_flags"] = static_cast<int>(details.quest_flags);
+    value["suggested_players"] = static_cast<int>(details.suggested_players);
+    value["hidden_rewards"] = details.hidden_rewards;
+    value["reward_choice_count"] = static_cast<int>(details.reward_choice_count);
+    value["reward_item_count"] = static_cast<int>(details.reward_item_count);
+    value["money_reward"] = static_cast<int64_t>(details.money_reward);
+    value["xp_reward"] = static_cast<int64_t>(details.xp_reward);
+    value["honor_reward"] = static_cast<int64_t>(details.honor_reward);
+    value["reward_spell"] = static_cast<int>(details.reward_spell);
+    value["reward_choice_items"] = quest_reward_item_array(details.reward_choice_items);
+    value["reward_items"] = quest_reward_item_array(details.reward_items);
+    return value;
+}
+
 Dictionary gossip_message_dictionary(GossipMessageSummary const& gossip)
 {
     Dictionary value;
@@ -581,6 +620,12 @@ void AcoreProtocolClient::_bind_methods()
     ClassDB::bind_method(
         D_METHOD("questgiver_list_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "target_name"),
         &AcoreProtocolClient::questgiver_list_probe_selector);
+    ClassDB::bind_method(
+        D_METHOD("questgiver_details_probe", "host", "port", "account", "password", "character_name", "target_entry", "quest_id", "target_name"),
+        &AcoreProtocolClient::questgiver_details_probe);
+    ClassDB::bind_method(
+        D_METHOD("questgiver_details_probe_selector", "host", "port", "account", "password", "character_name", "target_selector", "quest_id", "target_name"),
+        &AcoreProtocolClient::questgiver_details_probe_selector);
     ClassDB::bind_method(
         D_METHOD("trainer_buy_spell_probe", "host", "port", "account", "password", "character_name", "target_entry", "target_name", "spell_id"),
         &AcoreProtocolClient::trainer_buy_spell_probe);
@@ -901,6 +946,95 @@ Dictionary AcoreProtocolClient::questgiver_list_probe_selector(
         result["quests"] = flow.quest_list_response_seen
             ? questgiver_quest_array(flow.quest_list.quests)
             : gossip_quest_array(flow.gossip.quests);
+        result["visible_objects"] = visible_object_array(flow.visible_objects);
+        result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
+        result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);
+        result["realm"] = realm_dictionary(flow.realm);
+        return result;
+    }
+    catch (std::exception const& exc)
+    {
+        return failure(exc.what());
+    }
+}
+
+Dictionary AcoreProtocolClient::questgiver_details_probe(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    int64_t target_entry,
+    int64_t quest_id,
+    String const& target_name)
+{
+    return questgiver_details_probe_selector(
+        host,
+        port,
+        account,
+        password,
+        character_name,
+        String::num_int64(target_entry),
+        quest_id,
+        target_name);
+}
+
+Dictionary AcoreProtocolClient::questgiver_details_probe_selector(
+    String const& host,
+    String const& port,
+    String const& account,
+    String const& password,
+    String const& character_name,
+    String const& target_selector,
+    int64_t quest_id,
+    String const& target_name)
+{
+    try
+    {
+        std::uint64_t const selector = parse_target_selector(target_selector, "questgiver details target selector");
+        if (quest_id <= 0)
+        {
+            throw std::runtime_error("questgiver details quest id must be non-zero");
+        }
+
+        acore_protocol::QuestGiverDetailsProbeResult flow = acore_protocol::questgiver_details_probe(
+            to_std_string(host),
+            to_std_string(port),
+            to_std_string(account),
+            to_std_string(password),
+            to_std_string(character_name),
+            selector,
+            static_cast<std::uint32_t>(quest_id),
+            to_std_string(target_name));
+
+        Dictionary result;
+        result["ok"] = flow.live_target_found && flow.selection_sent && flow.query_quest_sent
+            && flow.details_response_seen && flow.details.quest_id == flow.query_quest_id;
+        result["auth_flow_ok"] = true;
+        result["world_auth_ok"] = true;
+        result["character"] = character_dictionary(flow.character);
+        result["target_guid"] = guid_to_hex(flow.target_guid);
+        result["target_entry"] = static_cast<int>(flow.target_entry);
+        result["target_name"] = String(flow.target_name.c_str());
+        result["query_quest_id"] = static_cast<int>(flow.query_quest_id);
+        result["live_target_found"] = flow.live_target_found;
+        result["target_has_position"] = flow.target_has_position;
+        result["approach_movement_sent"] = flow.approach_movement_sent;
+        result["return_movement_sent"] = flow.return_movement_sent;
+        result["selection_sent"] = flow.selection_sent;
+        result["questgiver_hello_sent"] = flow.questgiver_hello_sent;
+        result["query_quest_sent"] = flow.query_quest_sent;
+        result["details_response_seen"] = flow.details_response_seen;
+        result["response_opcode"] = static_cast<int>(flow.response_opcode);
+        result["details"] = questgiver_details_dictionary(flow.details);
+        result["details_quest_id"] = static_cast<int>(flow.details.quest_id);
+        result["reward_choice_count"] = static_cast<int>(flow.details.reward_choice_count);
+        result["reward_item_count"] = static_cast<int>(flow.details.reward_item_count);
+        result["money_reward"] = static_cast<int64_t>(flow.details.money_reward);
+        result["xp_reward"] = static_cast<int64_t>(flow.details.xp_reward);
+        result["reward_spell"] = static_cast<int>(flow.details.reward_spell);
+        result["reward_choice_items"] = quest_reward_item_array(flow.details.reward_choice_items);
+        result["reward_items"] = quest_reward_item_array(flow.details.reward_items);
         result["visible_objects"] = visible_object_array(flow.visible_objects);
         result["visible_object_count"] = static_cast<int>(flow.visible_objects.size());
         result["skipped_opcodes"] = opcode_array(flow.skipped_opcodes);

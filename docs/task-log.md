@@ -1,5 +1,60 @@
 # Task Log
 
+## 2026-07-01 - Stage 17 Quest Giver Details Slice
+
+Goal: extend the live quest-giver work from offered-quest listing into a safe
+quest-detail packet proof through the Godot client path.
+
+Plan:
+
+- Reuse the existing quest-giver target scan, approach, selection, and hello
+  flow.
+- Expose `CMSG_QUESTGIVER_QUERY_QUEST` / `SMSG_QUESTGIVER_QUEST_DETAILS`
+  through the Godot native extension and script bridge.
+- Add a visible details query to `scenes/stage17_questgiver_view.tscn`.
+- Keep committed output numeric only: quest ids, flags, reward counts, money/xp,
+  spell ids, and reward item ids/counts. No quest title/body/objective text is
+  stored or printed.
+- Review the local Antigravity phase-2 blindspots file for questing risks and
+  record the relevant next-stage gaps.
+
+Result:
+
+- Added `questgiver_details_probe(_selector)` to the Godot native extension.
+- Added `ProtocolClientBridge.questgiver_details_probe_selector(...)` with
+  helper-process fallback parsing for `QUESTGIVER_DETAILS_PROBE`,
+  `QUEST_REWARD_ITEM`, and `QUEST_CHOICE_ITEM` lines.
+- Updated the quest-giver scene with a quest id input, `Query Details` action,
+  safe detail rows, and `ACORE_QUESTGIVER_DETAILS_SELF_TEST=1`.
+- The scene now autofills the detail quest id from the first offered quest after
+  a successful list query.
+- The blindspots file points the next questing work at quest-log caps, objective
+  overlays, area-triggered credit, shared kill credit, party range checks,
+  item-started quests, bag-capacity turn-in checks, daily resets, and phased
+  gossip state.
+
+Validation:
+
+- `native/protocol_client/build-compat/acore_protocol_client --self-test` passed.
+- `./tools/build_godot_protocol_extension_compat.sh` passed.
+- `godot-4 --headless --path . --script res://tools/godot_protocol_extension_smoke.gd`
+  passed after the local Godot import cache registered the extension.
+- `godot-4 --headless --path . --script res://tools/protocol_bridge_smoke.gd`
+  passed when run sequentially. Running multiple authenticated checks in
+  parallel against the same local character can cause transient socket closes.
+- `ACORE_QUESTGIVER_LIST_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_questgiver_view.tscn`
+  passed with `quest_count=1` and response opcode `0x17d`.
+- `ACORE_QUESTGIVER_DETAILS_SELF_TEST=1 godot-4 --headless --path . res://scenes/stage17_questgiver_view.tscn`
+  passed with quest id `783`, details opcode `0x188`, and zero fixed/choice
+  reward item rows for this starter fixture.
+
+Remaining work:
+
+- Add accept, complete, reward-choice, quest-log, abandon, share, objective
+  tracking, map/objective overlays, item-started quests, daily reset handling,
+  phasing-aware gossip, in-world click targeting, persistent-session integration,
+  and local-only text/icon rendering.
+
 ## 2026-07-01 - Stage 17 Vendor Transaction Inventory Feedback Started
 
 Goal: make the vendor buy/sell proof show visible inventory state evidence instead of only reporting a roundtrip flag.
