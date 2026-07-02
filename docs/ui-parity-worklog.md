@@ -22,6 +22,22 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Aura And Unit Status Panel Started (Codex UI lane)
+
+Goal: add a resident aura/status surface to the active world-session HUD so
+safe player and target unit-state snapshots can display in the normal gameplay
+view.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render session-provided health, power, level, faction/reaction, aura,
+  buff/debuff, and cooldown-like summaries without calling or editing the
+  protocol bridge.
+- Keep live update-field parsing, combat health deltas, aura application,
+  expiration, dispels, and server-synchronized unit-frame updates in Claude's
+  live-session lane.
+
 ## 2026-07-02 - World Session Mail Panel (Codex UI lane)
 
 Context: the Stage 17 parity spec requires normal mailbox list/read/send
