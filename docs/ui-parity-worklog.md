@@ -22,6 +22,19 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Loot Panel Started (Codex UI lane)
+
+Goal: add a resident loot-window surface to the active world-session HUD so
+safe loot snapshots can display in the normal gameplay view.
+
+Scope:
+
+- Stay in the UI lane by changing only the world-session view and UI docs.
+- Render session-provided loot status, money, and item rows without calling or
+  editing the protocol bridge.
+- Keep actual loot pickup/release/autostore actions in Claude's live-session
+  lane.
+
 ## 2026-07-02 - World Session Character Panel (Codex UI lane)
 
 Context: the active world-session HUD had bags and target data, but no resident
