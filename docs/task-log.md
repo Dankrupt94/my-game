@@ -2325,3 +2325,18 @@ Validation:
   privacy guidance was folded into `docs/playable-toolchain.md`.
 - RenderDoc remains deferred because neither apt nor Snap exposed
   `renderdoccmd`; `apitrace` is the current graphics trace fallback.
+
+## 2026-07-01 - Begin Local Format Tools And AI Reviewer Upgrade
+
+Goal: fill the remaining local tool gaps for WotLK client-format inspection and
+improve the local AI review lane without making it the source of truth.
+
+Plan:
+
+- Add a practical MPQ/archive command-line utility for authorized local client
+  inspection.
+- Add a broader World of Warcraft file-format CLI if it installs cleanly.
+- Pull one stronger local coding model that fits this machine better than
+  oversized 24B/30B/32B options.
+- Update the toolchain checker and local-AI docs so future agents know which
+  tool or model to use for each job.
