@@ -1,5 +1,35 @@
 # Task Log
 
+## 2026-07-02 - World Session Auction Panel
+
+Goal: add a first resident auction-house surface to the active world-session
+HUD without touching Claude's native/protocol/bridge/live-session files.
+
+Result:
+
+- Added an `Auction House` panel to the world-session movable/resizable HUD
+  system.
+- The panel renders safe session auction data: browse/search rows, active bid
+  rows, owned-auction rows, item ids or local-safe names, quantities, bid
+  prices, buyout prices, owners, bidders, time-left summaries, search text,
+  auctioneer GUID, and response opcode when present.
+- The panel stays display-only; auctioneer discovery, browse/search packets,
+  bid, buyout, sell, cancel, deposit, delivery, mailbox handoff, and server
+  failure states remain live-session lane work.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `auction_panel=true`.
+
+Remaining work:
+
+- Feed live auction snapshots from the persistent session lane.
+- Add player-driven search filters, paging, bid, buyout, sell, cancel, deposit
+  estimates, failure-code feedback, mailbox delivery handoff, owned-auction
+  refresh, local-only item names/icons/tooltips, and normal auctioneer
+  targeting.
+
 ## 2026-07-02 - World Session Aura And Unit Status Panel
 
 Goal: add a first resident aura/status surface to the active world-session HUD

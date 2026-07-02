@@ -22,21 +22,37 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Auction Panel Started (Codex UI lane)
+## 2026-07-02 - World Session Auction Panel (Codex UI lane)
 
-Goal: add a resident auction-house surface to the active world-session HUD so
-safe browse, bid, and owned-auction snapshots can display in the normal
-gameplay view.
+Context: the Stage 17 parity spec requires normal auction browse/search,
+bid/buyout, sell, and cancel surfaces, but the active world-session HUD did not
+yet have a resident Auction House window.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Render session-provided auction browse/search rows, bid rows, owned-auction
-  rows, prices, quantities, owners, bidders, and time-left summaries without
-  calling or editing the protocol bridge.
+- Added a resident `Auction House` panel to `scripts/world_session_view.gd`.
+- The panel renders safe session auction dictionaries without calling the
+  protocol bridge: browse/search rows, active bid rows, owned-auction rows,
+  item ids or local-safe names, quantities, bid prices, buyout prices, owners,
+  bidders, time-left summaries, search text, auctioneer GUID, and response
+  opcode when present.
 - Keep live auctioneer discovery, browse/search packets, bid, buyout, sell,
   cancel, deposit, delivery, mailbox handoff, and server failure states in
   Claude's live-session lane.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `auction_panel=true`.
+
+Remaining work:
+
+- Feed live auction snapshots from Claude's persistent session lane into the
+  world-session context.
+- Add player-driven search filters, paging, bid, buyout, sell, cancel, deposit
+  estimates, failure-code feedback, mailbox delivery handoff, owned-auction
+  refresh, local-only item names/icons/tooltips, and normal auctioneer
+  targeting.
 
 ## 2026-07-02 - World Session Aura And Unit Status Panel (Codex UI lane)
 

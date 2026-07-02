@@ -29,12 +29,14 @@ const PANEL_NAMES := [
 	"trainer",
 	"social",
 	"mail",
+	"auction",
 	"map",
 	"options",
 	"inventory"
 ]
 const PANEL_TITLES := {
 	"actions": "Actions",
+	"auction": "Auction House",
 	"auras": "Auras",
 	"character": "Character",
 	"chat": "Chat",
@@ -134,6 +136,7 @@ var session_vendor_snapshot: Dictionary = {}
 var session_trainer_snapshot: Dictionary = {}
 var session_social_snapshot: Dictionary = {}
 var session_mail_snapshot: Dictionary = {}
+var session_auction_snapshot: Dictionary = {}
 var session_inventory_slots: Array = []
 var session_coinage := -1
 var selected_target_index := -1
@@ -309,6 +312,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Trainer", "trainer")
 	_add_panel_button(nav_bar, "Social", "social")
 	_add_panel_button(nav_bar, "Mail", "mail")
+	_add_panel_button(nav_bar, "Auction", "auction")
 	_add_panel_button(nav_bar, "Map", "map")
 	_add_panel_button(nav_bar, "Bags", "inventory")
 	_add_panel_button(nav_bar, "Options", "options")
@@ -542,6 +546,7 @@ func _apply_session_data(
 	session_trainer_snapshot = _extract_trainer_snapshot(character, enter_result)
 	session_social_snapshot = _extract_social_snapshot(character, enter_result)
 	session_mail_snapshot = _extract_mail_snapshot(character, enter_result)
+	session_auction_snapshot = _extract_auction_snapshot(character, enter_result)
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
 	session_quest_slots = _extract_quest_slots(character, enter_result)
@@ -1740,6 +1745,147 @@ func _mail_value(row: Dictionary, keys: Array, fallback: Variant = null) -> Vari
 	return fallback
 
 
+func _extract_auction_snapshot(character: Dictionary, enter_result: Dictionary) -> Dictionary:
+	var candidates: Array = [
+		character.get("auction", {}),
+		character.get("auction_house", {}),
+		character.get("auction_list", {}),
+		enter_result.get("auction", {}),
+		enter_result.get("auction_house", {}),
+		enter_result.get("auction_list", {}),
+	]
+	if _looks_like_auction_snapshot(character):
+		candidates.append(character)
+	if _looks_like_auction_snapshot(enter_result):
+		candidates.append(enter_result)
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("auction", {}))
+		candidates.append(update.get("auction_house", {}))
+		candidates.append(update.get("auction_list", {}))
+		if _looks_like_auction_snapshot(update):
+			candidates.append(update)
+
+	for candidate in candidates:
+		if not candidate is Dictionary or candidate.is_empty():
+			continue
+		var snapshot := _normalize_auction_snapshot(candidate)
+		if bool(snapshot.get("has_auction_data", false)):
+			return snapshot
+	return {}
+
+
+func _looks_like_auction_snapshot(snapshot: Dictionary) -> bool:
+	for key in [
+		"auction",
+		"auction_house",
+		"auction_list",
+		"auction_results",
+		"auctions",
+		"browse",
+		"bids",
+		"owned",
+		"owned_auctions",
+		"auction_rows",
+		"search_text",
+		"result_count",
+	]:
+		if snapshot.has(key):
+			return true
+	return false
+
+
+func _normalize_auction_snapshot(raw_snapshot: Dictionary) -> Dictionary:
+	var source := raw_snapshot
+	for nested_key in ["auction", "auction_house", "auction_list"]:
+		var nested: Variant = raw_snapshot.get(nested_key, {})
+		if nested is Dictionary and _looks_like_auction_snapshot(nested):
+			source = nested
+			break
+	var browse := _normalize_auction_rows(
+		_auction_raw_rows(source, ["browse", "auctions", "auction_results", "auction_rows"]),
+		"browse"
+	)
+	var bids := _normalize_auction_rows(
+		_auction_raw_rows(source, ["bids", "bid_rows", "bid_auctions"]),
+		"bid"
+	)
+	var owned := _normalize_auction_rows(
+		_auction_raw_rows(source, ["owned", "owned_auctions", "owner_rows"]),
+		"owned"
+	)
+	var result_count := int(source.get("result_count", source.get("total_count", browse.size())))
+	var has_auction_data := (
+		_looks_like_auction_snapshot(source)
+		or not browse.is_empty()
+		or not bids.is_empty()
+		or not owned.is_empty()
+	)
+	return {
+		"has_auction_data": has_auction_data,
+		"browse": browse,
+		"bids": bids,
+		"owned": owned,
+		"result_count": result_count,
+		"search_text": source.get("search_text", source.get("query", "")),
+		"auctioneer_guid": source.get("auctioneer_guid", source.get("guid", "")),
+		"response_opcode": source.get("response_opcode", 0),
+	}
+
+
+func _auction_raw_rows(snapshot: Dictionary, keys: Array) -> Array:
+	for key in keys:
+		var value: Variant = snapshot.get(key, [])
+		if value is Array:
+			return value
+		if value is Dictionary:
+			for row_key in ["rows", "items", "auctions", "entries"]:
+				if value.has(row_key) and value.get(row_key) is Array:
+					return value.get(row_key)
+	return []
+
+
+func _normalize_auction_rows(raw_rows: Array, row_kind: String) -> Array:
+	var rows: Array = []
+	for index in range(raw_rows.size()):
+		var raw_row = raw_rows[index]
+		if not raw_row is Dictionary:
+			continue
+		var row: Dictionary = raw_row.duplicate(true)
+		if not row.has("kind"):
+			row["kind"] = row_kind
+		if not row.has("auction_id"):
+			row["auction_id"] = int(_auction_value(row, ["id", "auction", "auction_entry"], index))
+		if not row.has("item_id"):
+			row["item_id"] = int(_auction_value(row, ["item_entry", "entry", "item"], 0))
+		if not row.has("item_name"):
+			var item_id := int(row.get("item_id", 0))
+			row["item_name"] = "item " + str(item_id) if item_id > 0 else "auction item"
+		if not row.has("quantity"):
+			row["quantity"] = int(_auction_value(row, ["count", "stack_count", "amount"], 1))
+		if not row.has("current_bid"):
+			row["current_bid"] = int(_auction_value(row, ["bid", "bid_amount", "min_bid"], 0))
+		if not row.has("buyout"):
+			row["buyout"] = int(_auction_value(row, ["buyout_price", "buyout_amount"], 0))
+		if not row.has("owner"):
+			row["owner"] = _auction_value(row, ["seller", "seller_name", "owner_name"], "")
+		if not row.has("bidder"):
+			row["bidder"] = _auction_value(row, ["buyer", "bidder_name"], "")
+		if not row.has("time_left"):
+			row["time_left"] = _auction_value(row, ["time", "duration", "expires"], "")
+		if not row.has("index"):
+			row["index"] = index
+		rows.append(row)
+	return rows
+
+
+func _auction_value(row: Dictionary, keys: Array, fallback: Variant = null) -> Variant:
+	for key in keys:
+		if row.has(key):
+			return row.get(key)
+	return fallback
+
+
 func _extract_inventory_slots(character: Dictionary, enter_result: Dictionary) -> Array:
 	var candidates := [
 		character.get("inventory", {}),
@@ -2315,6 +2461,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_social_panel()
 		"mail":
 			_build_mail_panel()
+		"auction":
+			_build_auction_panel()
 		"map":
 			_build_map_panel()
 		"inventory":
@@ -3754,6 +3902,115 @@ func _mail_attachment_text(attachment: Dictionary) -> String:
 	)
 
 
+func _build_auction_panel() -> void:
+	panel_title_label.text = "Auction House"
+	if session_auction_snapshot.is_empty():
+		panel_body.add_child(_panel_label("Auction house: waiting for session auction data.", 13))
+		panel_body.add_child(
+			_panel_label(
+				"Browse, bid, buyout, sell, cancel, and delivery remain in the live-session lane.",
+				13
+			)
+		)
+		return
+
+	var browse: Array = session_auction_snapshot.get("browse", [])
+	var bids: Array = session_auction_snapshot.get("bids", [])
+	var owned: Array = session_auction_snapshot.get("owned", [])
+	panel_body.add_child(
+		_panel_label(
+			(
+				"Auction rows: %s | bids %s | owned %s"
+				% [
+					str(session_auction_snapshot.get("result_count", browse.size())),
+					str(bids.size()),
+					str(owned.size()),
+				]
+			),
+			13
+		)
+	)
+	var search_text := str(session_auction_snapshot.get("search_text", "")).strip_edges()
+	if not search_text.is_empty():
+		panel_body.add_child(_panel_label("Search: " + search_text, 13))
+	var auctioneer_guid := str(session_auction_snapshot.get("auctioneer_guid", "")).strip_edges()
+	if not auctioneer_guid.is_empty():
+		panel_body.add_child(_panel_label("Auctioneer: " + auctioneer_guid, 13))
+	var opcode := int(session_auction_snapshot.get("response_opcode", 0))
+	if opcode > 0:
+		panel_body.add_child(_panel_label("Response opcode: 0x%03x" % opcode, 13))
+
+	_add_auction_section("Browse", browse)
+	_add_auction_section("Bids", bids)
+	_add_auction_section("Owned", owned)
+	panel_body.add_child(_panel_label("Auction actions: waiting for live session controls.", 13))
+
+
+func _add_auction_section(title: String, rows: Array) -> void:
+	panel_body.add_child(_panel_label("%s: %s" % [title, str(rows.size())], 14))
+	if rows.is_empty():
+		panel_body.add_child(_panel_label("No " + title.to_lower() + " auction rows.", 13))
+		return
+	for index in range(min(rows.size(), 24)):
+		var row = rows[index]
+		if row is Dictionary:
+			panel_body.add_child(_auction_row_button(row))
+	if rows.size() > 24:
+		panel_body.add_child(_panel_label("+%s more %s rows" % [str(rows.size() - 24), title], 13))
+
+
+func _auction_row_button(row: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = _auction_row_text(row)
+	button.tooltip_text = _auction_row_detail(row)
+	button.custom_minimum_size = Vector2(280.0, 50.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_auction_row.bind(row))
+	return button
+
+
+func _show_auction_row(row: Dictionary) -> void:
+	session_label.text = _auction_row_detail(row)
+	status_label.text = "Auction row selected: " + _auction_row_text(row).replace("\n", " | ")
+
+
+func _auction_row_text(row: Dictionary) -> String:
+	var name := str(row.get("item_name", "auction item")).strip_edges()
+	var parts: Array[String] = [
+		str(row.get("kind", "auction")),
+		"qty " + str(row.get("quantity", 1)),
+		"bid " + _money_text(int(row.get("current_bid", 0))),
+	]
+	var buyout := int(row.get("buyout", 0))
+	if buyout > 0:
+		parts.append("buyout " + _money_text(buyout))
+	var owner := str(row.get("owner", "")).strip_edges()
+	if not owner.is_empty():
+		parts.append("owner " + owner)
+	return "%s\n%s" % [name, " | ".join(parts)]
+
+
+func _auction_row_detail(row: Dictionary) -> String:
+	var parts: Array[String] = [
+		"auction " + str(row.get("auction_id", 0)),
+		"kind " + str(row.get("kind", "auction")),
+		"item " + str(row.get("item_id", 0)),
+		"quantity " + str(row.get("quantity", 1)),
+		"bid " + _money_text(int(row.get("current_bid", 0))),
+		"buyout " + _money_text(int(row.get("buyout", 0))),
+	]
+	var owner := str(row.get("owner", "")).strip_edges()
+	if not owner.is_empty():
+		parts.append("owner " + owner)
+	var bidder := str(row.get("bidder", "")).strip_edges()
+	if not bidder.is_empty():
+		parts.append("bidder " + bidder)
+	var time_left := str(row.get("time_left", "")).strip_edges()
+	if not time_left.is_empty():
+		parts.append("time " + time_left)
+	return " | ".join(parts)
+
+
 func _build_map_panel() -> void:
 	panel_title_label.text = "Map"
 	var selected_target_text := (
@@ -4582,6 +4839,59 @@ func _run_self_test() -> void:
 				},
 			],
 		},
+		"auction_house":
+		{
+			"search_text": "training",
+			"result_count": 2,
+			"browse":
+			[
+				{
+					"auction_id": 501,
+					"item_id": 17184,
+					"item_name": "Practice Supply",
+					"owner": "Localbank",
+					"quantity": 3,
+					"current_bid": 120,
+					"buyout": 450,
+					"time_left": "long",
+				},
+				{
+					"auction_id": 502,
+					"item_entry": 17000,
+					"seller": "Testseller",
+					"count": 1,
+					"bid": 25,
+					"buyout_price": 80,
+					"time_left": "medium",
+				},
+			],
+			"bids":
+			[
+				{
+					"auction_id": 503,
+					"item_id": 25,
+					"item_name": "Bid Practice Item",
+					"owner": "Otherlocal",
+					"bidder": "Codexstage",
+					"quantity": 1,
+					"current_bid": 32,
+					"buyout": 100,
+				},
+			],
+			"owned":
+			[
+				{
+					"auction_id": 504,
+					"item_id": 117,
+					"item_name": "Owned Practice Item",
+					"owner": "Codexstage",
+					"quantity": 2,
+					"current_bid": 0,
+					"buyout": 200,
+					"time_left": "short",
+				},
+			],
+		},
 		"action_buttons":
 		{
 			"buttons":
@@ -4914,6 +5224,30 @@ func _run_self_test() -> void:
 		and _control_tree_text_contains(mail_body, "attachments 1")
 		and _control_tree_text_contains(mail_body, "COD 0g 0s 25c")
 	)
+	_show_session_panel("auction")
+	var auction_shell := _panel_shell("auction")
+	var auction_title: Label = session_panels.get("auction", {}).get("title", null)
+	var auction_body: VBoxContainer = session_panels.get("auction", {}).get("body", null)
+	var auction_browse: Array = session_auction_snapshot.get("browse", [])
+	var auction_bids: Array = session_auction_snapshot.get("bids", [])
+	var auction_owned: Array = session_auction_snapshot.get("owned", [])
+	var auction_panel_ok := (
+		auction_shell != null
+		and auction_shell.visible
+		and auction_title != null
+		and auction_title.text == "Auction House"
+		and auction_body != null
+		and auction_browse.size() == 2
+		and auction_bids.size() == 1
+		and auction_owned.size() == 1
+		and _control_tree_text_contains(auction_body, "Auction rows: 2")
+		and _control_tree_text_contains(auction_body, "Search: training")
+		and _control_tree_text_contains(auction_body, "Practice Supply")
+		and _control_tree_text_contains(auction_body, "owner Localbank")
+		and _control_tree_text_contains(auction_body, "Bid Practice Item")
+		and _control_tree_text_contains(auction_body, "Owned Practice Item")
+		and _control_tree_text_contains(auction_body, "buyout 0g 4s 50c")
+	)
 	_show_session_panel("map")
 	var map_shell := _panel_shell("map")
 	var map_title: Label = session_panels.get("map", {}).get("title", null)
@@ -4974,7 +5308,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 17
+	var actions_ok := action_buttons.size() == 18
 	var shortcut_ok := (
 		shortcut_slots.size() == 12
 		and shortcut_slots[0].text.find("spell 78") != -1
@@ -5002,6 +5336,7 @@ func _run_self_test() -> void:
 		and trainer_panel_ok
 		and social_panel_ok
 		and mail_panel_ok
+		and auction_panel_ok
 		and map_panel_ok
 		and quest_tracker_ok
 		and options_panel_ok
@@ -5015,7 +5350,8 @@ func _run_self_test() -> void:
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
 				+ "auras_panel=true "
-				+ "loot_panel=true vendor_panel=true trainer_panel=true social_panel=true mail_panel=true "
+				+ "loot_panel=true vendor_panel=true trainer_panel=true social_panel=true "
+				+ "mail_panel=true auction_panel=true "
 				+ "map_panel=true "
 				+ "targets=true action_slots=true spellbook=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
@@ -5040,7 +5376,8 @@ func _run_self_test() -> void:
 			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s "
 			+ "auras_panel_ok=%s "
 			+ "loot_panel_ok=%s vendor_panel_ok=%s trainer_panel_ok=%s social_panel_ok=%s "
-			+ "mail_panel_ok=%s social_counts=%s/%s/%s/%s mail_count=%s"
+			+ "mail_panel_ok=%s auction_panel_ok=%s social_counts=%s/%s/%s/%s "
+			+ "mail_count=%s auction_counts=%s/%s/%s"
 		)
 		% [
 			str(marker_ok),
@@ -5061,11 +5398,15 @@ func _run_self_test() -> void:
 			str(trainer_panel_ok),
 			str(social_panel_ok),
 			str(mail_panel_ok),
+			str(auction_panel_ok),
 			str(social_friends.size()),
 			str(social_party.size()),
 			str(social_guild.size()),
 			str(social_invites.size()),
 			str(mail_messages.size()),
+			str(auction_browse.size()),
+			str(auction_bids.size()),
+			str(auction_owned.size()),
 		]
 	)
 	push_error(self_test_error)
