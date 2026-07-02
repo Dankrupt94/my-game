@@ -17,6 +17,30 @@ Plan:
 - Validate with headless Godot world-session checks and keep this branch
   independent from Claude's active main-worktree edits.
 
+Result:
+
+- `scripts/world_session_view.gd` now has an always-visible `Quest Tracker`
+  HUD surface under the world-session status rows.
+- The tracker renders active quest ids, slot numbers, objective counters, and
+  other numeric quest-log state from the same safe session dictionaries used by
+  the resident `Quests` panel.
+- The tracker includes an `Open` action that brings up the larger movable
+  `Quests` panel without leaving the world-session view.
+- `AGENTS.md` on this UI branch now includes the GPU/local-AI ownership rule.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `tracker=true`.
+
+Remaining work:
+
+- Feed live quest-log snapshots from Claude's persistent session lane into the
+  tracker.
+- Add local-only quest titles/objective text/icons, pinned tracking choices,
+  objective progress updates, completion/reward controls, abandon/share
+  controls, and map objective hooks.
+
 ## 2026-07-02 - World Session Quest Panel Started
 
 Goal: return to the UI lane after the tooling stage by adding a resident quest

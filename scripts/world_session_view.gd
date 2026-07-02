@@ -68,6 +68,7 @@ var detail_label: Label
 var target_label: Label
 var quest_label: Label
 var session_label: Label
+var quest_tracker_body: VBoxContainer
 var panel_overlay: Control
 var panel_shell: PanelContainer
 var panel_title_label: Label
@@ -222,6 +223,7 @@ func _build_hud() -> void:
 	layout.add_child(target_label)
 	quest_label = _hud_label()
 	layout.add_child(quest_label)
+	_build_quest_tracker(layout)
 	session_label = _hud_label()
 	layout.add_child(session_label)
 
@@ -250,6 +252,84 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Options", "options")
 	_add_scene_button(nav_bar, "Roster", CHARACTER_SELECT_SCENE)
 	_add_scene_button(nav_bar, "Dashboard", DASHBOARD_SCENE)
+
+
+func _build_quest_tracker(parent: Control) -> void:
+	var tracker := PanelContainer.new()
+	tracker.name = "QuestTrackerHud"
+	tracker.custom_minimum_size = Vector2(340.0, 92.0)
+	var tracker_style := StyleBoxFlat.new()
+	tracker_style.bg_color = Color(0.035, 0.043, 0.048, 0.78)
+	tracker_style.border_color = Color(0.24, 0.30, 0.32, 0.85)
+	tracker_style.set_border_width_all(1)
+	tracker_style.corner_radius_top_left = 5
+	tracker_style.corner_radius_top_right = 5
+	tracker_style.corner_radius_bottom_left = 5
+	tracker_style.corner_radius_bottom_right = 5
+	tracker.add_theme_stylebox_override("panel", tracker_style)
+	parent.add_child(tracker)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	tracker.add_child(margin)
+
+	quest_tracker_body = VBoxContainer.new()
+	quest_tracker_body.add_theme_constant_override("separation", 4)
+	margin.add_child(quest_tracker_body)
+
+
+func _refresh_quest_tracker() -> void:
+	if quest_tracker_body == null:
+		return
+	_clear_children(quest_tracker_body)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	quest_tracker_body.add_child(header)
+
+	var title := _panel_label("Quest Tracker", 14)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+
+	var open_button := Button.new()
+	open_button.text = "Open"
+	open_button.tooltip_text = "Open Quests"
+	open_button.custom_minimum_size = Vector2(72.0, 28.0)
+	open_button.pressed.connect(_show_session_panel.bind("quests"))
+	header.add_child(open_button)
+
+	var active_slots := _quest_active_slots()
+	if session_quest_slots.is_empty():
+		quest_tracker_body.add_child(_panel_label("Waiting for quest-log snapshot.", 12))
+		return
+	if active_slots.is_empty():
+		quest_tracker_body.add_child(_panel_label("No active quest ids in snapshot.", 12))
+		return
+
+	var rendered := 0
+	for slot in active_slots:
+		if rendered >= 4:
+			break
+		quest_tracker_body.add_child(_quest_tracker_row(slot))
+		rendered += 1
+	if active_slots.size() > rendered:
+		quest_tracker_body.add_child(
+			_panel_label("+%s more active quest slot%s" % [
+				str(active_slots.size() - rendered),
+				"" if active_slots.size() - rendered == 1 else "s",
+			], 12)
+		)
+
+
+func _quest_tracker_row(slot: Dictionary) -> Label:
+	var text := "Slot %s | %s" % [
+		str(slot.get("slot", "?")),
+		_quest_slot_state(slot),
+	]
+	return _panel_label(text, 12)
 
 
 func _apply_session_context() -> void:
@@ -311,6 +391,7 @@ func _apply_session_data(
 		)
 	else:
 		quest_label.text = "Quest tracker: waiting for live quest-log integration."
+	_refresh_quest_tracker()
 	session_label.text = source_text
 	_update_camera()
 
@@ -1041,7 +1122,11 @@ func _delete_layout_file(path: String) -> void:
 
 
 func _clear_panel_body() -> void:
-	for child in panel_body.get_children():
+	_clear_children(panel_body)
+
+
+func _clear_children(parent: Node) -> void:
+	for child in parent.get_children():
 		child.queue_free()
 
 
@@ -1446,6 +1531,17 @@ func _input_action_has_key(action: String, keycode: int) -> bool:
 	return false
 
 
+func _control_tree_text_contains(node: Node, needle: String) -> bool:
+	if node is Label and node.text.find(needle) != -1:
+		return true
+	if node is Button and node.text.find(needle) != -1:
+		return true
+	for child in node.get_children():
+		if _control_tree_text_contains(child, needle):
+			return true
+	return false
+
+
 func _run_keybind_settings_self_test() -> void:
 	var test_settings := SettingsRuntime.default_settings()
 	test_settings["keybindings"]["move_forward"] = KEY_UP
@@ -1734,6 +1830,12 @@ func _run_self_test() -> void:
 		and _quest_active_count() == 1
 		and quest_button_ok
 	)
+	var quest_tracker_ok := (
+		quest_tracker_body != null
+		and _control_tree_text_contains(quest_tracker_body, "Quest ID 783")
+		and _control_tree_text_contains(quest_tracker_body, "obj1 1")
+		and _control_tree_text_contains(quest_tracker_body, "Open")
+	)
 	_show_session_panel("options")
 	var options_shell := _panel_shell("options")
 	var options_title: Label = session_panels.get("options", {}).get("title", null)
@@ -1796,6 +1898,7 @@ func _run_self_test() -> void:
 		and actions_panel_ok
 		and spells_panel_ok
 		and quests_panel_ok
+		and quest_tracker_ok
 		and options_panel_ok
 		and inventory_panel_ok
 		and multi_panel_ok
@@ -1805,7 +1908,8 @@ func _run_self_test() -> void:
 			(
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
-				+ "inventory=true quests=true marker=(%.2f,%.2f,%.2f)"
+				+ "inventory=true quests=true tracker=true "
+				+ "marker=(%.2f,%.2f,%.2f)"
 			)
 			% [
 				str(action_buttons.size()),
@@ -1823,7 +1927,7 @@ func _run_self_test() -> void:
 		(
 			"WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s "
 			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
-			+ "inventory_panel_ok=%s"
+			+ "inventory_panel_ok=%s quest_tracker_ok=%s"
 		)
 		% [
 			str(marker_ok),
@@ -1833,6 +1937,7 @@ func _run_self_test() -> void:
 			str(input_ok),
 			str(panel_ok),
 			str(inventory_panel_ok),
+			str(quest_tracker_ok),
 		]
 	)
 	push_error(self_test_error)

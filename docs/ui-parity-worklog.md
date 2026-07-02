@@ -22,6 +22,35 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-02 - World Session Quest Tracker (Codex UI lane)
+
+Context: the resident Quests panel made quest-log data available in a HUD
+window, but a normal client also needs a small tracker visible during play.
+
+Result:
+
+- Added an always-visible `Quest Tracker` HUD surface to
+  `scripts/world_session_view.gd`.
+- The tracker renders numeric active quest rows from the same safe session
+  dictionaries as the movable Quests panel: slot id, quest id, objective
+  counters, timers, and status flags when present.
+- The tracker has an `Open` action that opens the resident Quests panel without
+  leaving the world-session view.
+- This remains UI-lane work only and does not call or edit the protocol bridge.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `tracker=true`.
+
+Remaining work:
+
+- Feed live quest-log snapshots from Claude's persistent session lane into the
+  tracker.
+- Add local-only quest titles/objective text/icons, pinned tracking choices,
+  objective progress updates, completion/reward controls, abandon/share
+  controls, and map objective hooks.
+
 ## 2026-07-02 - World Session Quest Panel (Codex UI lane)
 
 Context: the world-session HUD had a Quests shortcut and panel, but it only
