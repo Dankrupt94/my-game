@@ -22,17 +22,35 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
-## 2026-07-02 - World Session Vendor Panel Started (Codex UI lane)
+## 2026-07-02 - World Session Vendor Panel (Codex UI lane)
 
-Goal: add a resident vendor-window surface to the active world-session HUD so
-safe vendor snapshots can display in the normal gameplay view.
+Context: Stage 17 has live vendor proof scenes, but the active world-session
+HUD did not yet have a resident vendor-window surface.
 
-Scope:
+Result:
 
-- Stay in the UI lane by changing only the world-session view and UI docs.
-- Render session-provided vendor target, item rows, stock, price, and transaction
-  feedback without calling or editing the protocol bridge.
-- Keep buy/sell/repair actions in Claude's live-session lane.
+- Added a resident `Vendor` panel to `scripts/world_session_view.gd`.
+- The panel renders safe session vendor dictionaries without calling the
+  protocol bridge: target entry/GUID, response opcode, vendor item rows, price,
+  buy count, stock, durability, extended cost, and transaction snapshots when
+  present.
+- Replaced the return-heavy panel-title helper with a title lookup table as the
+  panel list grows.
+- Actual buy, sell, repair, stock refresh, and in-world click targeting remains
+  in Claude's live-session/native lane.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `vendor_panel=true`.
+
+Remaining work:
+
+- Feed live vendor snapshots from Claude's persistent session lane into the
+  world-session context.
+- Add player-driven buy/sell/repair controls, failure-code feedback, inventory
+  refresh after transactions, local-only names/icons/tooltips, stock refresh,
+  and normal click-to-vendor targeting.
 
 ## 2026-07-02 - World Session Loot Panel (Codex UI lane)
 

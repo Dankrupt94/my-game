@@ -17,12 +17,26 @@ const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
 const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
 const PANEL_NAMES := [
-	"chat", "character", "spells", "actions", "targets", "quests", "loot", "map", "options",
-	"inventory"
+	"chat", "character", "spells", "actions", "targets", "quests", "loot", "vendor",
+	"map", "options", "inventory"
 ]
+const PANEL_TITLES := {
+	"actions": "Actions",
+	"character": "Character",
+	"chat": "Chat",
+	"inventory": "Bags",
+	"loot": "Loot",
+	"map": "Map",
+	"options": "Options",
+	"quests": "Quests",
+	"spells": "Spells",
+	"targets": "Targets",
+	"vendor": "Vendor",
+}
 const ACTION_BAR_DISPLAY_COUNT := 12
 const ACTION_BAR_KEYS := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="]
 const EQUIPMENT_SLOT_COUNT := 19
+const INFINITE_STOCK := 0xFFFFFFFF
 const QUEST_LOG_SLOT_COUNT := 25
 const INVENTORY_SLOT_NAMES := [
 	"Head",
@@ -98,6 +112,7 @@ var session_chat_rows: Array = []
 var session_spell_rows: Array = []
 var session_action_slots: Array = []
 var session_loot_snapshot: Dictionary = {}
+var session_vendor_snapshot: Dictionary = {}
 var session_inventory_slots: Array = []
 var session_coinage := -1
 var selected_target_index := -1
@@ -268,6 +283,7 @@ func _build_hud() -> void:
 	_add_panel_button(nav_bar, "Targets", "targets")
 	_add_panel_button(nav_bar, "Quests", "quests")
 	_add_panel_button(nav_bar, "Loot", "loot")
+	_add_panel_button(nav_bar, "Vendor", "vendor")
 	_add_panel_button(nav_bar, "Map", "map")
 	_add_panel_button(nav_bar, "Bags", "inventory")
 	_add_panel_button(nav_bar, "Options", "options")
@@ -478,6 +494,7 @@ func _apply_session_data(
 	session_spell_rows = _extract_spell_rows(character, enter_result)
 	session_action_slots = _extract_action_slots(character, enter_result)
 	session_loot_snapshot = _extract_loot_snapshot(character, enter_result)
+	session_vendor_snapshot = _extract_vendor_snapshot(character, enter_result)
 	session_inventory_slots = _extract_inventory_slots(character, enter_result)
 	session_coinage = _extract_coinage(character, enter_result)
 	session_quest_slots = _extract_quest_slots(character, enter_result)
@@ -852,6 +869,156 @@ func _normalize_loot_items(raw_items: Array) -> Array:
 			item["count"] = 1 if int(item.get("item_id", 0)) > 0 else 0
 		items.append(item)
 	return items
+
+
+func _extract_vendor_snapshot(character: Dictionary, enter_result: Dictionary) -> Dictionary:
+	var candidates: Array = [
+		character.get("vendor", {}),
+		character.get("vendor_list", {}),
+		character.get("vendor_window", {}),
+		enter_result.get("vendor", {}),
+		enter_result.get("vendor_list", {}),
+		enter_result.get("vendor_window", {}),
+	]
+	if _looks_like_vendor_snapshot(character):
+		candidates.append(character)
+	if _looks_like_vendor_snapshot(enter_result):
+		candidates.append(enter_result)
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("vendor", {}))
+		candidates.append(update.get("vendor_list", {}))
+		candidates.append(update.get("vendor_window", {}))
+		if _looks_like_vendor_snapshot(update):
+			candidates.append(update)
+
+	for candidate in candidates:
+		if not candidate is Dictionary or candidate.is_empty():
+			continue
+		var snapshot := _normalize_vendor_snapshot(candidate)
+		if bool(snapshot.get("has_vendor_data", false)):
+			return snapshot
+	return {}
+
+
+func _looks_like_vendor_snapshot(snapshot: Dictionary) -> bool:
+	for key in [
+		"vendor_list_response_seen",
+		"vendor_list",
+		"vendor_items",
+		"vendor_slot",
+		"buy_response_seen",
+		"roundtrip_confirmed",
+		"bought_slot",
+		"buy_coinage_delta",
+	]:
+		if snapshot.has(key):
+			return true
+	return false
+
+
+func _normalize_vendor_snapshot(raw_snapshot: Dictionary) -> Dictionary:
+	var nested = raw_snapshot.get("vendor_list", {})
+	var raw_items = raw_snapshot.get("items", raw_snapshot.get("vendor_items", []))
+	if raw_items is Array and raw_items.is_empty() and nested is Dictionary:
+		raw_items = nested.get("items", [])
+	var items: Array = _normalize_vendor_items(raw_items if raw_items is Array else [])
+	var transaction: Dictionary = _normalize_vendor_transaction(raw_snapshot)
+	var item_count := int(raw_snapshot.get("item_count", items.size()))
+	if item_count == 0 and nested is Dictionary:
+		item_count = int(nested.get("item_count", items.size()))
+	var response_seen: bool = bool(
+		raw_snapshot.get(
+			"vendor_list_response_seen",
+			nested.get("parsed", not items.is_empty()) if nested is Dictionary else not items.is_empty()
+		)
+	)
+	var has_vendor_data: bool = (
+		_looks_like_vendor_snapshot(raw_snapshot)
+		or response_seen
+		or not items.is_empty()
+		or not transaction.is_empty()
+	)
+	var target_guid: String = str(
+		raw_snapshot.get("target_guid", raw_snapshot.get("vendor_guid", ""))
+	)
+	if str(target_guid).strip_edges().is_empty() and nested is Dictionary:
+		target_guid = str(nested.get("vendor_guid", ""))
+	return {
+		"has_vendor_data": has_vendor_data,
+		"response_seen": response_seen,
+		"target_guid": target_guid,
+		"target_entry": raw_snapshot.get("target_entry", raw_snapshot.get("entry", 0)),
+		"target_name": raw_snapshot.get("target_name", raw_snapshot.get("name", "")),
+		"response_opcode": raw_snapshot.get("response_opcode", 0),
+		"item_count": item_count,
+		"error_code": raw_snapshot.get("error_code", raw_snapshot.get("buy_failure_reason", 0)),
+		"items": items,
+		"transaction": transaction,
+	}
+
+
+func _normalize_vendor_items(raw_items: Array) -> Array:
+	var items: Array = []
+	for index in range(raw_items.size()):
+		var raw_item = raw_items[index]
+		if not raw_item is Dictionary:
+			continue
+		var item: Dictionary = raw_item.duplicate(true)
+		if not item.has("vendor_slot"):
+			if item.has("slot"):
+				item["vendor_slot"] = int(item.get("slot", index))
+			elif item.has("index"):
+				item["vendor_slot"] = int(item.get("index", index))
+			else:
+				item["vendor_slot"] = index
+		if not item.has("item_id") and item.has("item_entry"):
+			item["item_id"] = int(item.get("item_entry", 0))
+		if not item.has("buy_price"):
+			item["buy_price"] = int(item.get("price", 0))
+		if not item.has("buy_count"):
+			item["buy_count"] = int(item.get("count", 1))
+		if not item.has("left_in_stock"):
+			item["left_in_stock"] = int(item.get("stock", INFINITE_STOCK))
+		items.append(item)
+	return items
+
+
+func _normalize_vendor_transaction(raw_snapshot: Dictionary) -> Dictionary:
+	var transaction_keys := [
+		"buy_response_seen",
+		"buy_succeeded",
+		"buy_failed",
+		"sell_confirmed",
+		"roundtrip_confirmed",
+		"bought_slot",
+		"buy_coinage_delta",
+		"roundtrip_coinage_delta",
+	]
+	var has_transaction := false
+	for key in transaction_keys:
+		if raw_snapshot.has(key):
+			has_transaction = true
+			break
+	if not has_transaction:
+		return {}
+	return {
+		"buy_response_seen": raw_snapshot.get("buy_response_seen", false),
+		"buy_succeeded": raw_snapshot.get("buy_succeeded", false),
+		"buy_failed": raw_snapshot.get("buy_failed", false),
+		"sell_confirmed": raw_snapshot.get("sell_confirmed", false),
+		"roundtrip_confirmed": raw_snapshot.get("roundtrip_confirmed", false),
+		"bought_slot": raw_snapshot.get("bought_slot", 0),
+		"before_coinage": raw_snapshot.get("before_coinage", 0),
+		"after_buy_coinage": raw_snapshot.get("after_buy_coinage", 0),
+		"after_sell_coinage": raw_snapshot.get("after_sell_coinage", 0),
+		"buy_coinage_delta": raw_snapshot.get("buy_coinage_delta", 0),
+		"sell_coinage_delta": raw_snapshot.get("sell_coinage_delta", 0),
+		"roundtrip_coinage_delta": raw_snapshot.get("roundtrip_coinage_delta", 0),
+		"bought_slot_before": raw_snapshot.get("bought_slot_before", {}),
+		"bought_slot_after_buy": raw_snapshot.get("bought_slot_after_buy", {}),
+		"bought_slot_after_sell": raw_snapshot.get("bought_slot_after_sell", {}),
+	}
 
 
 func _extract_inventory_slots(character: Dictionary, enter_result: Dictionary) -> Array:
@@ -1318,29 +1485,7 @@ func _panel_shell(panel_name: String) -> PanelContainer:
 
 
 func _panel_title(panel_name: String) -> String:
-	match panel_name:
-		"chat":
-			return "Chat"
-		"character":
-			return "Character"
-		"spells":
-			return "Spells"
-		"actions":
-			return "Actions"
-		"targets":
-			return "Targets"
-		"quests":
-			return "Quests"
-		"loot":
-			return "Loot"
-		"map":
-			return "Map"
-		"inventory":
-			return "Bags"
-		"options":
-			return "Options"
-		_:
-			return "Session Panel"
+	return str(PANEL_TITLES.get(panel_name, "Session Panel"))
 
 
 func _default_panel_position(panel_name: String) -> Vector2:
@@ -1438,6 +1583,8 @@ func _show_session_panel(panel_name: String) -> void:
 			_build_quests_panel()
 		"loot":
 			_build_loot_panel()
+		"vendor":
+			_build_vendor_panel()
 		"map":
 			_build_map_panel()
 		"inventory":
@@ -2099,6 +2246,135 @@ func _loot_item_detail(item: Dictionary) -> String:
 	return " | ".join(parts)
 
 
+func _build_vendor_panel() -> void:
+	panel_title_label.text = "Vendor"
+	if session_vendor_snapshot.is_empty():
+		panel_body.add_child(_panel_label("Vendor window: waiting for session vendor data.", 13))
+		panel_body.add_child(
+			_panel_label(
+				"Buy, sell, repair, and stock refresh actions remain in the live-session lane.",
+				13
+			)
+		)
+		return
+
+	var item_count := int(session_vendor_snapshot.get("item_count", 0))
+	panel_body.add_child(_panel_label("Vendor items: " + str(item_count), 13))
+	var target_entry := int(session_vendor_snapshot.get("target_entry", 0))
+	var target_guid := str(session_vendor_snapshot.get("target_guid", "")).strip_edges()
+	if target_entry > 0 or not target_guid.is_empty():
+		panel_body.add_child(
+			_panel_label(
+				"Target: entry %s guid %s" % [str(target_entry), target_guid],
+				13
+			)
+		)
+	var opcode := int(session_vendor_snapshot.get("response_opcode", 0))
+	if opcode > 0:
+		panel_body.add_child(_panel_label("Response opcode: 0x%03x" % opcode, 13))
+	var error_code := int(session_vendor_snapshot.get("error_code", 0))
+	if error_code > 0:
+		panel_body.add_child(_panel_label("Vendor error: " + str(error_code), 13))
+
+	var items: Array = session_vendor_snapshot.get("items", [])
+	if items.is_empty():
+		panel_body.add_child(_panel_label("Vendor rows: no item rows in this snapshot.", 13))
+	else:
+		for index in range(min(items.size(), 36)):
+			var item = items[index]
+			if item is Dictionary:
+				panel_body.add_child(_vendor_item_button(item))
+		if items.size() > 36:
+			panel_body.add_child(
+				_panel_label("+%s more vendor rows" % str(items.size() - 36), 13)
+			)
+
+	var transaction: Dictionary = session_vendor_snapshot.get("transaction", {})
+	if not transaction.is_empty():
+		panel_body.add_child(_panel_label("Transaction", 14))
+		panel_body.add_child(_panel_label(_vendor_transaction_summary(transaction), 13))
+		panel_body.add_child(
+			_panel_label(
+				(
+					"Money: %s -> %s -> %s | total %s"
+					% [
+						_money_text(int(transaction.get("before_coinage", 0))),
+						_money_text(int(transaction.get("after_buy_coinage", 0))),
+						_money_text(int(transaction.get("after_sell_coinage", 0))),
+						_money_delta_text(int(transaction.get("roundtrip_coinage_delta", 0))),
+					]
+				),
+				13
+			)
+		)
+		for key in ["bought_slot_before", "bought_slot_after_buy", "bought_slot_after_sell"]:
+			var slot = transaction.get(key, {})
+			if slot is Dictionary and not slot.is_empty():
+				panel_body.add_child(
+					_panel_label(_inventory_slot_detail(slot, int(slot.get("slot", 0))), 13)
+				)
+
+	panel_body.add_child(_panel_label("Vendor actions: waiting for live session controls.", 13))
+
+
+func _vendor_item_button(item: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = _vendor_item_text(item)
+	button.tooltip_text = _vendor_item_detail(item)
+	button.custom_minimum_size = Vector2(240.0, 46.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_vendor_item.bind(item))
+	return button
+
+
+func _show_vendor_item(item: Dictionary) -> void:
+	session_label.text = _vendor_item_detail(item)
+	status_label.text = "Vendor row selected: " + _vendor_item_text(item).replace("\n", " | ")
+
+
+func _vendor_item_text(item: Dictionary) -> String:
+	return "Slot %s\nItem %s | %s each | stock %s" % [
+		str(item.get("vendor_slot", 0)),
+		str(item.get("item_id", 0)),
+		_money_text(int(item.get("buy_price", 0))),
+		_vendor_stock_text(int(item.get("left_in_stock", 0))),
+	]
+
+
+func _vendor_item_detail(item: Dictionary) -> String:
+	return "slot %s | item %s | price %s | count %s | stock %s | durability %s | cost %s" % [
+		str(item.get("vendor_slot", 0)),
+		str(item.get("item_id", 0)),
+		_money_text(int(item.get("buy_price", 0))),
+		str(item.get("buy_count", 0)),
+		_vendor_stock_text(int(item.get("left_in_stock", 0))),
+		str(item.get("max_durability", 0)),
+		str(item.get("extended_cost", 0)),
+	]
+
+
+func _vendor_transaction_summary(transaction: Dictionary) -> String:
+	return "buy %s | sell %s | roundtrip %s | bought slot %s" % [
+		str(transaction.get("buy_succeeded", false)),
+		str(transaction.get("sell_confirmed", false)),
+		str(transaction.get("roundtrip_confirmed", false)),
+		str(transaction.get("bought_slot", 0)),
+	]
+
+
+func _vendor_stock_text(stock: int) -> String:
+	if stock < 0 or stock == INFINITE_STOCK:
+		return "infinite"
+	return str(stock)
+
+
+func _money_delta_text(copper: int) -> String:
+	if copper == 0:
+		return "0c"
+	var prefix := "+" if copper > 0 else "-"
+	return prefix + _money_text(abs(copper))
+
+
 func _build_map_panel() -> void:
 	panel_title_label.text = "Map"
 	var selected_target_text := "none" if selected_target_index < 0 else str(selected_target_index + 1)
@@ -2716,6 +2992,52 @@ func _run_self_test() -> void:
 				},
 			],
 		},
+		"vendor":
+		{
+			"vendor_list_response_seen": true,
+			"target_guid": "0xf1300004bd000777",
+			"target_entry": 1213,
+			"response_opcode": 0x19F,
+			"item_count": 2,
+			"items":
+			[
+				{
+					"vendor_slot": 8,
+					"item_id": 17184,
+					"buy_price": 32,
+					"left_in_stock": INFINITE_STOCK,
+					"buy_count": 1,
+					"max_durability": 0,
+					"extended_cost": 0,
+				},
+				{
+					"vendor_slot": 9,
+					"item_id": 17000,
+					"buy_price": 120,
+					"left_in_stock": 4,
+					"buy_count": 1,
+					"max_durability": 0,
+					"extended_cost": 0,
+				},
+			],
+			"buy_response_seen": true,
+			"buy_succeeded": true,
+			"sell_confirmed": true,
+			"roundtrip_confirmed": true,
+			"bought_slot": 34,
+			"before_coinage": 9939,
+			"after_buy_coinage": 9907,
+			"after_sell_coinage": 9913,
+			"roundtrip_coinage_delta": -26,
+			"bought_slot_after_buy":
+			{
+				"slot": 34,
+				"populated": true,
+				"item_entry": 17184,
+				"stack_count": 1,
+				"item_guid": "0x4000000000000300",
+			},
+		},
 		"action_buttons":
 		{
 			"buttons":
@@ -2938,6 +3260,24 @@ func _run_self_test() -> void:
 		and _control_tree_text_contains(loot_body, "item 25")
 		and _control_tree_text_contains(loot_body, "Inventory changes: 1")
 	)
+	_show_session_panel("vendor")
+	var vendor_shell := _panel_shell("vendor")
+	var vendor_title: Label = session_panels.get("vendor", {}).get("title", null)
+	var vendor_body: VBoxContainer = session_panels.get("vendor", {}).get("body", null)
+	var vendor_items: Array = session_vendor_snapshot.get("items", [])
+	var vendor_panel_ok := (
+		vendor_shell != null
+		and vendor_shell.visible
+		and vendor_title != null
+		and vendor_title.text == "Vendor"
+		and vendor_body != null
+		and vendor_items.size() == 2
+		and _control_tree_text_contains(vendor_body, "Vendor items: 2")
+		and _control_tree_text_contains(vendor_body, "Item 17184")
+		and _control_tree_text_contains(vendor_body, "stock infinite")
+		and _control_tree_text_contains(vendor_body, "roundtrip true")
+		and _control_tree_text_contains(vendor_body, "total -0g 0s 26c")
+	)
 	_show_session_panel("map")
 	var map_shell := _panel_shell("map")
 	var map_title: Label = session_panels.get("map", {}).get("title", null)
@@ -2998,7 +3338,7 @@ func _run_self_test() -> void:
 		and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	)
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
-	var actions_ok := action_buttons.size() == 12
+	var actions_ok := action_buttons.size() == 13
 	var shortcut_ok := (
 		shortcut_slots.size() == 12
 		and shortcut_slots[0].text.find("spell 78") != -1
@@ -3021,6 +3361,7 @@ func _run_self_test() -> void:
 		and spells_panel_ok
 		and quests_panel_ok
 		and loot_panel_ok
+		and vendor_panel_ok
 		and map_panel_ok
 		and quest_tracker_ok
 		and options_panel_ok
@@ -3033,7 +3374,7 @@ func _run_self_test() -> void:
 				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
 				+ "actions=%s shortcuts=%s input=true panels=true "
 				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
-				+ "loot_panel=true map_panel=true "
+				+ "loot_panel=true vendor_panel=true map_panel=true "
 				+ "targets=true action_slots=true spellbook=true "
 				+ "marker=(%.2f,%.2f,%.2f)"
 			)
@@ -3054,7 +3395,8 @@ func _run_self_test() -> void:
 			"WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s "
 			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
 			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
-			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s loot_panel_ok=%s"
+			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s "
+			+ "loot_panel_ok=%s vendor_panel_ok=%s"
 		)
 		% [
 			str(marker_ok),
@@ -3070,6 +3412,7 @@ func _run_self_test() -> void:
 			str(target_frame_ok),
 			str(character_panel_ok),
 			str(loot_panel_ok),
+			str(vendor_panel_ok),
 		]
 	)
 	push_error(self_test_error)

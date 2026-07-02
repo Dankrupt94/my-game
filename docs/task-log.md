@@ -1,5 +1,33 @@
 # Task Log
 
+## 2026-07-02 - World Session Vendor Panel
+
+Goal: add a first resident vendor-window surface to the active world-session
+HUD without touching Claude's native/protocol/bridge/live-session files.
+
+Result:
+
+- Added a `Vendor` panel to the world-session movable/resizable HUD system.
+- The panel renders safe session vendor data: target entry/GUID, response
+  opcode, vendor item rows, price, buy count, stock, durability, extended cost,
+  and transaction snapshots when present.
+- The panel stays display-only; buy, sell, repair, stock refresh, and real click
+  targeting remain live-session lane work.
+- Replaced the return-heavy panel-title helper with a lookup table as the
+  resident panel list grows.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `vendor_panel=true`.
+
+Remaining work:
+
+- Feed live vendor snapshots from the persistent session lane.
+- Add player-driven buy/sell/repair controls, failure-code feedback, inventory
+  refresh after transactions, local-only names/icons/tooltips, stock refresh,
+  and normal click-to-vendor targeting.
+
 ## 2026-07-02 - World Session Loot Panel
 
 Goal: add a first resident loot-window surface to the active world-session HUD
