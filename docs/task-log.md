@@ -1,5 +1,21 @@
 # Task Log
 
+## 2026-07-02 - Live Quest Log Snapshot Bridge Started
+
+Goal: use the temporary Claude-side window to expose a read-only live quest-log
+snapshot through the native helper, Godot GDExtension, and script bridge so the
+UI-lane quest tracker can later consume server-owned quest state directly.
+
+Plan:
+
+- Reuse the existing `read_quest_log_snapshot(...)` protocol flow instead of
+  adding new packet behavior.
+- Add a native CLI command that prints safe numeric quest-log slot rows.
+- Expose the same snapshot through `AcoreProtocolClient` and
+  `ProtocolClientBridge`.
+- Add a headless Godot bridge smoke test and keep committed output limited to
+  quest ids, slot ids, counters, flags, timers, and status booleans.
+
 ## 2026-07-02 - Stage 17 Live Quest Log UI Started
 
 Goal: continue toward a playable Godot client with a UI-only questing slice that
