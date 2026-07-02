@@ -2286,3 +2286,21 @@ Remaining work:
 - Multi-status marker refresh, marker transitions after quest mutations,
   map/minimap marker plumbing, persistent-session integration, and UI-lane
   rendering.
+
+## 2026-07-01 - Begin Playable Toolchain Integration
+
+Goal: add and document local developer tools that speed up getting the Godot
+client playable without committing proprietary client assets or generated
+derivatives.
+
+Plan:
+
+- Re-check the local playable-port toolchain instead of relying only on the
+  earlier audit.
+- Install or integrate safe local helpers that speed asset inspection,
+  conversion validation, GUI/headless testing, local protocol debugging, and
+  repeated Godot/native build loops.
+- Add a repeatable repo script so future agents can see which playable-port
+  tools are ready and which are still missing.
+- Document the Git boundary for each tool category: code and tool setup may be
+  committed, but client-derived inputs and outputs stay local-only.
