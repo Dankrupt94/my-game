@@ -2340,3 +2340,31 @@ Plan:
   oversized 24B/30B/32B options.
 - Update the toolchain checker and local-AI docs so future agents know which
   tool or model to use for each job.
+
+Result:
+
+- Installed `smpq` from the system package manager.
+- Installed `warcraft-rs 0.6.1` with Cargo using the crate lockfile after the
+  unconstrained dependency build hit a `wow-mpq` API mismatch.
+- Pulled and verified `qwen2.5-coder:14b` as the slow local review model.
+- Updated `tools/check_playable_toolchain.sh`, `docs/playable-toolchain.md`,
+  `docs/local-ai-resources.md`, and the toolchain audit summary.
+- Updated `AGENTS.md` and `docs/local-ai-resources.md` with the GPU ownership
+  rule: unload running Ollama models before GPU-bound Godot, Blender, graphics
+  capture, conversion, native debugging, or performance work.
+- Unloaded the already-running `qwen-agent` model after verification so the GPU
+  is free for the next UI/Godot stage.
+
+Local AI tradeoff:
+
+- `qwen2.5-coder:7b` remains the fast local helper.
+- `qwen2.5-coder:14b` is worth trying for harder code review on this GTX 1080
+  / 8 GB VRAM machine, but should not replace direct validation.
+- Larger 24B/30B/32B local models are likely too slow for the normal project
+  loop unless a specific task justifies the wait.
+
+Validation:
+
+- `ollama list` showed `qwen2.5-coder:14b`, `qwen-agent:latest`, and
+  `qwen2.5-coder:7b`.
+- `ollama ps` was empty after unloading `qwen-agent`.

@@ -9,6 +9,9 @@ protocol proofs to a playable Godot-native AzerothCore client.
 - Blender, Assimp, glTF Transform, gltfpack, ImageMagick, and FFmpeg make local
   visual/audio conversion experiments faster once the port reaches the asset
   pipeline work.
+- smpq and warcraft-rs give us local-only inspection for MPQ archives and common
+  World of Warcraft client formats before we decide what metadata, conversion
+  code, or generated Godot import path is safe to build.
 - SQLite, sqlite-utils, jq, tshark, tcpdump, and scapy make local data and
   packet inspection faster without hand-copying runtime data into docs.
 - Xvfb, xdotool, wmctrl, and Wine make GUI automation and local reference-client
@@ -30,6 +33,21 @@ protocol proofs to a playable Godot-native AzerothCore client.
 - User-local packages: `@gltf-transform/cli`, `sqlite-utils`, and
   `cargo-watch`.
 - Repo integration: `tools/check_playable_toolchain.sh`.
+
+## Added On 2026-07-01 After Follow-Up
+
+- System package: `smpq`.
+- User-local package: `warcraft-rs`.
+- Local model installed for slow review: `qwen2.5-coder:14b`.
+
+`warcraft-rs` is especially useful because it exposes subcommands for MPQ, DBC,
+BLP, M2, WMO, ADT, WDT, and WDL inspection. Use it to understand local input
+shape before writing conversion code. Do not use either archive tool to write
+client-derived files into Git-tracked paths.
+
+When the workflow needs GPU time for Godot, Blender, graphics tracing,
+conversion experiments, or native debugging, unload any running Ollama model
+first with `ollama ps` and `ollama stop <model>`.
 
 ## How To Check It
 

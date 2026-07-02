@@ -87,6 +87,13 @@ check_local_ai() {
         MISSING_OPTIONAL=$((MISSING_OPTIONAL + 1))
         printf 'OPTIONAL: Ollama is installed, but no Qwen coding model was visible in a quick check.\n'
     fi
+
+    if printf '%s\n' "${models}" | awk 'NR > 1 && $1 == "qwen2.5-coder:14b" { found = 1 } END { exit found ? 0 : 1 }'; then
+        printf 'OK: `qwen2.5-coder:14b` is available as the slower local review model.\n'
+    else
+        MISSING_OPTIONAL=$((MISSING_OPTIONAL + 1))
+        printf 'OPTIONAL: `qwen2.5-coder:14b` is not visible. Use `qwen2.5-coder:7b` for fast local review.\n'
+    fi
 }
 
 print_versions() {
@@ -108,6 +115,12 @@ print_versions() {
     fi
     if command -v sqlite-utils >/dev/null 2>&1; then
         printf -- '- sqlite-utils: `%s`\n' "$(sqlite-utils --version 2>/dev/null | head -n 1)"
+    fi
+    if command -v smpq >/dev/null 2>&1; then
+        printf -- '- smpq: `%s`\n' "$(smpq -V 2>/dev/null | head -n 1)"
+    fi
+    if command -v warcraft-rs >/dev/null 2>&1; then
+        printf -- '- warcraft-rs: `%s`\n' "$(warcraft-rs --version 2>/dev/null | head -n 1)"
     fi
 }
 
@@ -133,6 +146,11 @@ check_tool required gltf-transform "Inspect, validate, and optimize glTF/GLB con
 check_tool required gltfpack "Fast mesh and scene optimization for converted glTF/GLB files."
 check_tool required magick "Texture/image inspection and conversion helper."
 check_tool required ffmpeg "Audio/video conversion and test capture helper."
+
+printf '\n'
+print_category "Client Format Inspection"
+check_tool required smpq "StormLib MPQ archive listing, info, validation, and local-only extraction."
+check_tool required warcraft-rs "Unified local World of Warcraft format inspection for MPQ, DBC, BLP, M2, WMO, ADT, WDT, and WDL files."
 
 printf '\n'
 print_category "Data And Protocol Work"

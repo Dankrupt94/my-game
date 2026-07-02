@@ -22,7 +22,8 @@ Confirmed present on this machine:
 - **Languages/Packages:** Python3/pip3, Node/npm, Rust/Cargo.
 - **Compilers/Linkers:** CMake, Make, GCC, and G++.
 - **Containerization:** Docker.
-- **Local AI:** Ollama running `qwen-agent:latest` and `qwen2.5-coder:7b`.
+- **Local AI:** Ollama with `qwen-agent:latest`, `qwen2.5-coder:7b`, and
+  `qwen2.5-coder:14b`.
 - **System Utilities:** `ffmpeg`, `7z`, `unzip`, `jq`, `sqlite3`, and `mysql_config`.
 - **Database Client:** `mysql` and `mysqldump` (via `default-mysql-client`).
 - **Database Convenience:** `mycli`.
@@ -38,6 +39,7 @@ Developer/debugging tools added after the first audit:
 
 - **Graphics/Visuals:** `blender`, `assimp`, `gltf-transform`, `gltfpack`,
   `magick`, and `convert`.
+- **Client Format Inspection:** `smpq` and `warcraft-rs`.
 - **Multi-Client Test Automation:** `xdotool` and `wmctrl`.
 - **Headless GUI Testing:** `xvfb-run`.
 - **Rust GDExtension Building:** `cargo-watch`.
@@ -48,7 +50,8 @@ Developer/debugging tools added after the first audit:
 
 Still missing or deferred developer/debugging tools:
 
-- **MPQ Parsing:** `mpqtool` (recommended MPQ viewer/extractor).
+- **MPQ Parsing:** `mpqtool` remains deferred, but the practical local MPQ gap is
+  covered by `smpq` and `warcraft-rs`.
 - **GPU Frame Debugging:** `renderdoccmd` (not available from apt or Snap on
   this machine during the 2026-07-01 playable-toolchain pass).
 - **Other:** `go` (optional) and `podman` (optional, since Docker is present).
