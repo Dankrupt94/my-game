@@ -473,6 +473,15 @@ struct QuestGiverOfferRewardSummary
     std::vector<QuestRewardItemSummary> reward_items;
 };
 
+struct QuestGiverQuestCompleteSummary
+{
+    bool parsed = false;
+    std::size_t payload_size = 0;
+    std::uint32_t quest_id = 0;
+    std::uint32_t xp_reward = 0;
+    std::uint32_t money_reward = 0;
+};
+
 struct VendorItemSummary
 {
     std::uint32_t vendor_slot = 0;
@@ -610,6 +619,7 @@ std::vector<std::uint8_t> build_questgiver_complete_quest_payload(std::uint64_t 
 std::vector<std::uint8_t> build_questgiver_request_reward_payload(std::uint64_t guid, std::uint32_t quest_id);
 std::vector<std::uint8_t> build_questgiver_choose_reward_payload(std::uint64_t guid, std::uint32_t quest_id, std::uint32_t reward_index);
 QuestGiverOfferRewardSummary parse_questgiver_offer_reward_response(std::span<const std::uint8_t> payload);
+QuestGiverQuestCompleteSummary parse_questgiver_quest_complete_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_succeeded_response(std::span<const std::uint8_t> payload);
 TrainerBuyResponseSummary parse_trainer_buy_failed_response(std::span<const std::uint8_t> payload);
 VendorListSummary parse_vendor_list_response(std::span<const std::uint8_t> payload);

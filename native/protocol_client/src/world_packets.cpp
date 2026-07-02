@@ -1612,6 +1612,25 @@ QuestGiverOfferRewardSummary parse_questgiver_offer_reward_response(std::span<co
     return summary;
 }
 
+QuestGiverQuestCompleteSummary parse_questgiver_quest_complete_response(std::span<const std::uint8_t> payload)
+{
+    std::size_t offset = 0;
+    QuestGiverQuestCompleteSummary summary;
+    summary.payload_size = payload.size();
+    summary.quest_id = read_u32_le(payload, offset);
+    summary.xp_reward = read_u32_le(payload, offset);
+    summary.money_reward = read_u32_le(payload, offset);
+    (void)read_u32_le(payload, offset); // honor (10x)
+    (void)read_u32_le(payload, offset); // bonus talents
+    (void)read_u32_le(payload, offset); // arena points
+    if (offset != payload.size())
+    {
+        throw std::runtime_error("quest complete parser left trailing bytes");
+    }
+    summary.parsed = true;
+    return summary;
+}
+
 QuestGiverDetailsSummary parse_questgiver_quest_details_response(std::span<const std::uint8_t> payload)
 {
     std::size_t offset = 0;
@@ -2265,6 +2284,15 @@ bool world_packet_self_test()
     for (int i = 0; i < 15; ++i) append_u32_le(offer_reward_payload, 0); // 3x5 reputation arrays
     QuestGiverOfferRewardSummary offer_reward = parse_questgiver_offer_reward_response(offer_reward_payload);
 
+    std::vector<std::uint8_t> quest_complete_payload;
+    append_u32_le(quest_complete_payload, 783);  // quest id
+    append_u32_le(quest_complete_payload, 90);   // xp reward
+    append_u32_le(quest_complete_payload, 120);  // money reward
+    append_u32_le(quest_complete_payload, 0);    // honor (10x)
+    append_u32_le(quest_complete_payload, 0);    // bonus talents
+    append_u32_le(quest_complete_payload, 0);    // arena points
+    QuestGiverQuestCompleteSummary quest_complete = parse_questgiver_quest_complete_response(quest_complete_payload);
+
     std::vector<std::uint8_t> chat_response;
     append_u8(chat_response, CHAT_MSG_SAY);
     append_u32_le(chat_response, LANG_COMMON);
@@ -2710,5 +2738,9 @@ bool world_packet_self_test()
         && offer_reward.reward_items[0].item_id == 200
         && offer_reward.reward_items[0].item_count == 2
         && offer_reward.money_reward == 1500
-        && offer_reward.xp_reward == 500;
+        && offer_reward.xp_reward == 500
+        && quest_complete.parsed
+        && quest_complete.quest_id == 783
+        && quest_complete.xp_reward == 90
+        && quest_complete.money_reward == 120;
 }

@@ -1980,3 +1980,46 @@ Godot exposure (same day):
   offer=false request_items=false invalid=true` (server `SMSG_QUESTGIVER_QUEST_INVALID`
   0x18F for the not-yet-takeable Willem quest 6, confirming the opcode fix over
   the extension path).
+
+## 2026-07-02 - Stage 17 Full Quest Turn-in Slice + Fixture (native)
+
+Goal: perform the real, irreversible quest turn-in end to end against live
+AzerothCore — request the reward screen, choose a reward, and confirm the server
+completed the quest — on a repeatable disposable-state fixture that restores the
+test character afterward.
+
+Result:
+
+- `SMSG_QUESTGIVER_QUEST_COMPLETE` (0x191) parser (quest id / xp / money) matching
+  `Player::SendQuestReward`.
+- `questgiver_turnin_probe`: confirms the quest is COMPLETE in a quest-log slot at
+  login, approaches/selects/hellos the ender, sends
+  `CMSG_QUESTGIVER_COMPLETE_QUEST`, parses `SMSG_QUESTGIVER_OFFER_REWARD`, sends
+  `CMSG_QUESTGIVER_CHOOSE_REWARD` (reward index), then confirms
+  `SMSG_QUESTGIVER_QUEST_COMPLETE` and that the quest-log slot clears.
+  `--questgiver-turnin` CLI (optional trailing reward index, default 0).
+- `tools/prepare_quest_turnin_fixture.py`: offline-only, transaction-logged,
+  `--dry-run`/`--reset`. Setup marks quest 783 `QUEST_STATUS_COMPLETE` in
+  `character_queststatus` and clears `character_queststatus_rewarded`; reset
+  removes both rows. 783 is a no-objective, no-prereq, no-reward Northshire quest
+  started by Willem (823) and ended by NPC 197 (spawns ~42y from Codexstage).
+
+Validation:
+
+- `--self-test` passes (`WORLD_PACKET_SELF_TEST_OK`) with synthetic
+  `SMSG_QUESTGIVER_OFFER_REWARD` and `SMSG_QUESTGIVER_QUEST_COMPLETE` packets.
+- Live end-to-end vs `Codexstage`/NPC 197, quest 783 (after fixture setup):
+  `quest_in_log_before=1 quest_slot_before=0`, `offer_reward_seen=1`
+  (response_opcode `0x18d`), `choose_reward_sent=1`, `quest_complete_seen=1`
+  (`complete_quest_id=783 complete_xp=10`), `quest_removed_from_log=1`, exit 0.
+  This is the first live parse of `SMSG_QUESTGIVER_OFFER_REWARD` and a real
+  `CMSG_QUESTGIVER_CHOOSE_REWARD` turn-in through the client path.
+- Fixture `--reset` afterwards reported `rewarded_before=1` (DB-side confirmation
+  the server recorded the turn-in) then restored `Codexstage` to a clean slate
+  (`status=None`, `rewarded=0`). No quest/reward text stored.
+
+Remaining work:
+
+- Godot extension/bridge/scene exposure of the turn-in probe (this lane, next).
+- Quest objective progress (`SMSG_QUESTUPDATE_ADD_KILL`/`ADD_ITEM`), quest-log UI,
+  in-world click targeting, and persistent-session integration.

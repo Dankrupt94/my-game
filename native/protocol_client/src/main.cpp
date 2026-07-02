@@ -653,6 +653,58 @@ int questgiver_reward_probe(
         && result.quest_removed_after_remove ? 0 : 1;
 }
 
+int questgiver_turnin_probe(
+    std::string const& host,
+    std::string const& port,
+    std::string const& account,
+    std::string const& character_name,
+    std::string const& target_selector,
+    std::string const& quest_id,
+    std::string const& target_name,
+    std::string const& reward_index)
+{
+    acore_protocol::FlowOptions options{
+        .trace_world_packets = std::getenv("ACORE_PROTOCOL_TRACE") != nullptr,
+    };
+    acore_protocol::QuestGiverTurninProbeResult result = acore_protocol::questgiver_turnin_probe(
+        host,
+        port,
+        account,
+        protocol_password(),
+        character_name,
+        parse_guid_arg(target_selector),
+        static_cast<std::uint32_t>(std::stoul(quest_id)),
+        static_cast<std::uint32_t>(std::stoul(reward_index)),
+        target_name,
+        options);
+
+    std::cout << acore_protocol::format_auth_flow_ok(result.realm) << "\n";
+    std::cout << "QUESTGIVER_TURNIN_PROBE"
+              << " character=\"" << result.character.name << "\""
+              << " target_guid=0x" << std::hex << result.target_guid << std::dec
+              << " target_entry=" << result.target_entry
+              << " quest_id=" << result.quest_id
+              << " reward_index=" << result.reward_index
+              << " live_target_found=" << (result.live_target_found ? 1 : 0)
+              << " quest_in_log_before=" << (result.quest_in_log_before ? 1 : 0)
+              << " quest_slot_before=" << result.quest_slot_before
+              << " questgiver_hello_sent=" << (result.questgiver_hello_sent ? 1 : 0)
+              << " complete_request_sent=" << (result.complete_request_sent ? 1 : 0)
+              << " offer_reward_seen=" << (result.offer_reward_seen ? 1 : 0)
+              << " choose_reward_sent=" << (result.choose_reward_sent ? 1 : 0)
+              << " quest_complete_seen=" << (result.quest_complete_seen ? 1 : 0)
+              << " quest_removed_from_log=" << (result.quest_removed_from_log ? 1 : 0)
+              << " complete_quest_id=" << result.quest_complete.quest_id
+              << " complete_xp=" << result.quest_complete.xp_reward
+              << " complete_money=" << result.quest_complete.money_reward
+              << " response_opcode=0x" << std::hex << result.response_opcode << std::dec
+              << "\n";
+    // Turn-in succeeds when the reward screen showed, we chose a reward, and the
+    // server confirmed completion and cleared the quest from the log.
+    return result.live_target_found && result.offer_reward_seen && result.choose_reward_sent
+        && result.quest_complete_seen && result.quest_removed_from_log ? 0 : 1;
+}
+
 int trainer_buy_spell_probe(
     std::string const& host,
     std::string const& port,
@@ -1772,6 +1824,12 @@ int main(int argc, char** argv)
         if (argc == 9 && std::strcmp(argv[1], "--questgiver-reward") == 0)
         {
             return questgiver_reward_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
+        }
+
+        if ((argc == 9 || argc == 10) && std::strcmp(argv[1], "--questgiver-turnin") == 0)
+        {
+            std::string reward_index = argc == 10 ? argv[9] : "0";
+            return questgiver_turnin_probe(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8], reward_index);
         }
 
         if (argc == 9 && std::strcmp(argv[1], "--trainer-buy") == 0)
