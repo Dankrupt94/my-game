@@ -108,6 +108,7 @@ var status_label: Label
 var detail_label: Label
 var target_label: Label
 var target_frame_body: VBoxContainer
+var minimap_body: VBoxContainer
 var quest_label: Label
 var session_label: Label
 var quest_tracker_body: VBoxContainer
@@ -127,6 +128,7 @@ var authoritative_marker_position := Vector3.ZERO
 var session_map_id := 0
 var session_wow_position := Vector3.ZERO
 var session_orientation := 0.0
+var session_map_snapshot: Dictionary = {}
 var session_character_profile: Dictionary = {}
 var visible_object_count := 0
 var visible_objects: Array = []
@@ -281,6 +283,7 @@ func _build_hud() -> void:
 	target_label = _hud_label()
 	layout.add_child(target_label)
 	_build_target_frame(layout)
+	_build_minimap(layout)
 	quest_label = _hud_label()
 	layout.add_child(quest_label)
 	_build_quest_tracker(layout)
@@ -549,6 +552,77 @@ func _quest_tracker_row(slot: Dictionary) -> Label:
 	return _panel_label(text, 12)
 
 
+func _build_minimap(parent: Control) -> void:
+	var frame := PanelContainer.new()
+	frame.name = "MinimapHud"
+	frame.custom_minimum_size = Vector2(340.0, 92.0)
+	var frame_style := StyleBoxFlat.new()
+	frame_style.bg_color = Color(0.035, 0.047, 0.056, 0.78)
+	frame_style.border_color = Color(0.24, 0.32, 0.40, 0.85)
+	frame_style.set_border_width_all(1)
+	frame_style.corner_radius_top_left = 5
+	frame_style.corner_radius_top_right = 5
+	frame_style.corner_radius_bottom_left = 5
+	frame_style.corner_radius_bottom_right = 5
+	frame.add_theme_stylebox_override("panel", frame_style)
+	parent.add_child(frame)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	frame.add_child(margin)
+
+	minimap_body = VBoxContainer.new()
+	minimap_body.add_theme_constant_override("separation", 4)
+	margin.add_child(minimap_body)
+
+
+func _refresh_minimap() -> void:
+	if minimap_body == null:
+		return
+	_clear_children(minimap_body)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	minimap_body.add_child(header)
+
+	var title := _panel_label("Minimap", 14)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+
+	var open_button := Button.new()
+	open_button.text = "Open"
+	open_button.tooltip_text = "Open Map"
+	open_button.custom_minimum_size = Vector2(72.0, 28.0)
+	open_button.pressed.connect(_show_session_panel.bind("map"))
+	header.add_child(open_button)
+
+	var display_map_id := int(session_map_snapshot.get("map_id", session_map_id))
+	var map_line := "Map " + str(display_map_id)
+	var area_line := _map_area_line()
+	if not area_line.is_empty():
+		map_line += " | " + area_line
+	minimap_body.add_child(_panel_label(map_line, 12))
+	var selected_target_text := "none" if selected_target_index < 0 else str(selected_target_index + 1)
+	minimap_body.add_child(
+		_panel_label(
+			(
+				"Pos %.1f, %.1f | Visible %s | POIs %s | Target %s"
+				% [
+					session_wow_position.x,
+					session_wow_position.y,
+					str(visible_object_count),
+					str(_map_poi_rows().size()),
+					selected_target_text,
+				]
+			),
+			12
+		)
+	)
+
+
 func _apply_session_context() -> void:
 	var context := _session_context()
 	if context == null:
@@ -572,6 +646,7 @@ func _apply_session_data(
 	session_map_id = map_id
 	session_wow_position = Vector3(wow_x, wow_y, wow_z)
 	session_orientation = float(login.get("orientation", character.get("orientation", 0.0)))
+	session_map_snapshot = _extract_map_snapshot(character, enter_result, map_id)
 	session_character_profile = _character_profile(
 		character, enter_result, character_name, map_id, wow_x, wow_y, wow_z
 	)
@@ -618,6 +693,7 @@ func _apply_session_data(
 	selected_target_index = -1
 	_refresh_shortcut_slots()
 	_refresh_target_label()
+	_refresh_minimap()
 	var active_quest_count := _quest_active_count()
 	if active_quest_count > 0:
 		quest_label.text = (
@@ -658,6 +734,136 @@ func _character_profile(
 		"z": wow_z,
 		"orientation": session_orientation,
 	}
+
+
+func _extract_map_snapshot(
+	character: Dictionary, enter_result: Dictionary, fallback_map_id: int
+) -> Dictionary:
+	var candidates: Array = [
+		character.get("map_snapshot", {}),
+		character.get("map_info", {}),
+		character.get("minimap", {}),
+		enter_result.get("map_snapshot", {}),
+		enter_result.get("map_info", {}),
+		enter_result.get("minimap", {}),
+	]
+	if _looks_like_map_snapshot(character):
+		candidates.append(character)
+	if _looks_like_map_snapshot(enter_result):
+		candidates.append(enter_result)
+	var update = enter_result.get("update", {})
+	if update is Dictionary:
+		candidates.append(update.get("map_snapshot", {}))
+		candidates.append(update.get("map_info", {}))
+		candidates.append(update.get("minimap", {}))
+		if _looks_like_map_snapshot(update):
+			candidates.append(update)
+
+	for candidate in candidates:
+		if not candidate is Dictionary or candidate.is_empty():
+			continue
+		var snapshot := _normalize_map_snapshot(candidate, fallback_map_id)
+		if bool(snapshot.get("has_map_data", false)):
+			return snapshot
+	return {"map_id": fallback_map_id, "pois": [], "has_map_data": false}
+
+
+func _looks_like_map_snapshot(snapshot: Dictionary) -> bool:
+	for key in [
+		"map_snapshot",
+		"map_info",
+		"minimap",
+		"map_id",
+		"zone",
+		"area",
+		"subzone",
+		"discovered_count",
+		"pois",
+		"poi_rows",
+		"markers",
+	]:
+		if snapshot.has(key):
+			return true
+	return false
+
+
+func _normalize_map_snapshot(raw_snapshot: Dictionary, fallback_map_id: int) -> Dictionary:
+	var source := raw_snapshot
+	for nested_key in ["map_snapshot", "map_info", "minimap"]:
+		var nested: Variant = raw_snapshot.get(nested_key, {})
+		if nested is Dictionary and _looks_like_map_snapshot(nested):
+			source = nested
+			break
+	var pois := _normalize_map_pois(_map_raw_rows(source, ["pois", "poi_rows", "markers"]))
+	var map_id := int(source.get("map_id", source.get("map", fallback_map_id)))
+	var has_map_data := _looks_like_map_snapshot(source) or not pois.is_empty()
+	return {
+		"has_map_data": has_map_data,
+		"map_id": map_id,
+		"zone": source.get("zone", source.get("zone_name", "")),
+		"area": source.get("area", source.get("area_name", "")),
+		"subzone": source.get("subzone", source.get("subzone_name", "")),
+		"discovered_count": int(source.get("discovered_count", source.get("explored_count", 0))),
+		"pois": pois,
+	}
+
+
+func _map_raw_rows(snapshot: Dictionary, keys: Array) -> Array:
+	for key in keys:
+		var value: Variant = snapshot.get(key, [])
+		if value is Array:
+			return value
+		if value is Dictionary:
+			for row_key in ["rows", "items", "markers", "pois", "entries"]:
+				if value.has(row_key) and value.get(row_key) is Array:
+					return value.get(row_key)
+	return []
+
+
+func _normalize_map_pois(raw_rows: Array) -> Array:
+	var rows: Array = []
+	for index in range(raw_rows.size()):
+		var raw_row = raw_rows[index]
+		var row: Dictionary = {}
+		if raw_row is Dictionary:
+			row = raw_row.duplicate(true)
+		elif raw_row is String:
+			row = {"name": raw_row}
+		else:
+			continue
+		if not row.has("name"):
+			row["name"] = "Marker " + str(index + 1)
+		if not row.has("kind"):
+			row["kind"] = str(row.get("type", row.get("category", "poi")))
+		if not row.has("index"):
+			row["index"] = index
+		rows.append(row)
+	return rows
+
+
+func _map_area_line() -> String:
+	var parts: Array[String] = []
+	var zone := _map_snapshot_string("zone")
+	var area := _map_snapshot_string("area")
+	var subzone := _map_snapshot_string("subzone")
+	if not zone.is_empty():
+		parts.append(zone)
+	if not area.is_empty():
+		parts.append(area)
+	if not subzone.is_empty():
+		parts.append(subzone)
+	return " / ".join(parts)
+
+
+func _map_snapshot_string(key: String) -> String:
+	return str(session_map_snapshot.get(key, "")).strip_edges()
+
+
+func _map_poi_rows() -> Array:
+	var rows = session_map_snapshot.get("pois", [])
+	if rows is Array:
+		return rows
+	return []
 
 
 func _extract_visible_objects(character: Dictionary, enter_result: Dictionary) -> Array:
@@ -4306,8 +4512,9 @@ func _build_map_panel() -> void:
 	var selected_target_text := (
 		"none" if selected_target_index < 0 else str(selected_target_index + 1)
 	)
+	var display_map_id := int(session_map_snapshot.get("map_id", session_map_id))
 	var rows := [
-		"Map ID: " + str(session_map_id),
+		"Map ID: " + str(display_map_id),
 		(
 			"Server position: %.2f, %.2f, %.2f"
 			% [session_wow_position.x, session_wow_position.y, session_wow_position.z]
@@ -4320,8 +4527,82 @@ func _build_map_panel() -> void:
 		"Visible objects: " + str(visible_object_count),
 		"Selected target: " + selected_target_text,
 	]
+	var zone := _map_snapshot_string("zone")
+	var area := _map_snapshot_string("area")
+	var subzone := _map_snapshot_string("subzone")
+	if not zone.is_empty():
+		rows.append("Zone: " + zone)
+	if not area.is_empty():
+		rows.append("Area: " + area)
+	if not subzone.is_empty():
+		rows.append("Subzone: " + subzone)
+	var discovered_count := int(session_map_snapshot.get("discovered_count", 0))
+	if discovered_count > 0:
+		rows.append("Discovered areas: " + str(discovered_count))
 	for row in rows:
 		panel_body.add_child(_panel_label(row, 13))
+
+	var pois := _map_poi_rows()
+	panel_body.add_child(_panel_label("POIs: " + str(pois.size()), 14))
+	if pois.is_empty():
+		panel_body.add_child(
+			_panel_label("Map markers: waiting for live map discovery data.", 13)
+		)
+	else:
+		for index in range(min(pois.size(), 24)):
+			var poi = pois[index]
+			if poi is Dictionary:
+				panel_body.add_child(_map_poi_button(poi))
+		if pois.size() > 24:
+			panel_body.add_child(
+				_panel_label("Additional POIs hidden: " + str(pois.size() - 24), 13)
+			)
+
+	panel_body.add_child(
+		_panel_label(
+			"Map art, tracking filters, pins, and zone transitions stay in the live data lane.", 13
+		)
+	)
+
+
+func _map_poi_button(row: Dictionary) -> Button:
+	var button := Button.new()
+	button.text = _map_poi_text(row)
+	button.tooltip_text = _map_poi_detail(row)
+	button.custom_minimum_size = Vector2(240.0, 44.0)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.pressed.connect(_show_map_poi.bind(row))
+	return button
+
+
+func _show_map_poi(row: Dictionary) -> void:
+	var detail := _map_poi_detail(row)
+	session_label.text = detail
+	status_label.text = "Map marker selected: " + _map_poi_text(row).replace("\n", " | ")
+
+
+func _map_poi_text(row: Dictionary) -> String:
+	var name := str(row.get("name", "Marker")).strip_edges()
+	if name.is_empty():
+		name = "Marker"
+	var kind := str(row.get("kind", "poi")).strip_edges()
+	if kind.is_empty():
+		kind = "poi"
+	var parts: Array[String] = [kind]
+	if row.has("distance"):
+		parts.append("%.1fm" % float(row.get("distance", 0.0)))
+	return "%s\n%s" % [name, " | ".join(parts)]
+
+
+func _map_poi_detail(row: Dictionary) -> String:
+	var parts: Array[String] = [
+		"marker " + str(int(row.get("index", 0)) + 1),
+		"kind " + str(row.get("kind", "poi")),
+	]
+	for key in ["x", "y", "z", "distance", "zone", "area", "entry", "guid"]:
+		if row.has(key):
+			parts.append(key + " " + str(row.get(key)))
+	return " | ".join(parts)
 
 
 func _quest_slot_button(slot: Dictionary) -> Button:
@@ -4833,17 +5114,44 @@ func _run_self_test() -> void:
 		"ok": true,
 		"character_name": "Codexstage",
 		"login":
-		{
-			"map": 0,
-			"x": -8949.95,
-			"y": -132.49,
-			"z": 83.53,
-			"orientation": 0.0,
-		},
-		"update":
-		{
-			"visible_object_count": 3,
-			"visible_objects":
+			{
+				"map": 0,
+				"x": -8949.95,
+				"y": -132.49,
+				"z": 83.53,
+				"orientation": 0.0,
+			},
+			"map_snapshot":
+			{
+				"map_id": 0,
+				"zone": "Local Test Zone",
+				"area": "Training Meadow",
+				"subzone": "Minimap Ridge",
+				"discovered_count": 3,
+				"pois":
+				[
+					{
+						"name": "Local Camp",
+						"kind": "quest",
+						"x": -8944.0,
+						"y": -129.0,
+						"z": 83.5,
+						"distance": 10.5,
+					},
+					{
+						"name": "Local Mailbox",
+						"type": "mailbox",
+						"x": -8955.0,
+						"y": -140.0,
+						"z": 83.5,
+						"distance": 18.0,
+					},
+				],
+			},
+			"update":
+			{
+				"visible_object_count": 3,
+				"visible_objects":
 			[
 				{
 					"type": "creature",
@@ -5607,6 +5915,22 @@ func _run_self_test() -> void:
 		and map_body != null
 		and _control_tree_text_contains(map_body, "Map ID: 0")
 		and _control_tree_text_contains(map_body, "Server position:")
+		and _control_tree_text_contains(map_body, "Zone: Local Test Zone")
+		and _control_tree_text_contains(map_body, "Area: Training Meadow")
+		and _control_tree_text_contains(map_body, "Subzone: Minimap Ridge")
+		and _control_tree_text_contains(map_body, "Discovered areas: 3")
+		and _control_tree_text_contains(map_body, "POIs: 2")
+		and _control_tree_text_contains(map_body, "Local Camp")
+		and _control_tree_text_contains(map_body, "Local Mailbox")
+	)
+	var minimap_ok := (
+		minimap_body != null
+		and _control_tree_text_contains(minimap_body, "Minimap")
+		and _control_tree_text_contains(minimap_body, "Map 0")
+		and _control_tree_text_contains(minimap_body, "Training Meadow")
+		and _control_tree_text_contains(minimap_body, "Visible 3")
+		and _control_tree_text_contains(minimap_body, "POIs 2")
+		and _control_tree_text_contains(minimap_body, "Open")
 	)
 	_show_session_panel("options")
 	var options_shell := _panel_shell("options")
@@ -5681,30 +6005,31 @@ func _run_self_test() -> void:
 		and spells_panel_ok
 		and quests_panel_ok
 		and loot_panel_ok
-		and vendor_panel_ok
-		and trainer_panel_ok
-		and social_panel_ok
-		and mail_panel_ok
-		and auction_panel_ok
-		and map_panel_ok
-		and quest_tracker_ok
-		and options_panel_ok
-		and inventory_panel_ok
-		and multi_panel_ok
-	)
+			and vendor_panel_ok
+			and trainer_panel_ok
+			and social_panel_ok
+			and mail_panel_ok
+			and auction_panel_ok
+			and map_panel_ok
+			and minimap_ok
+			and quest_tracker_ok
+			and options_panel_ok
+			and inventory_panel_ok
+			and multi_panel_ok
+		)
 	if marker_ok and hud_ok and actions_ok and shortcut_ok and input_ok and panel_ok:
 		var self_test_message := (
 			(
-				"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
-				+ "actions=%s shortcuts=%s input=true panels=true "
-				+ "chat=true character_panel=true inventory=true quests=true tracker=true "
-				+ "auras_panel=true death_panel=true "
-				+ "loot_panel=true vendor_panel=true trainer_panel=true social_panel=true "
-				+ "mail_panel=true auction_panel=true "
-				+ "map_panel=true "
-				+ "targets=true action_slots=true spellbook=true "
-				+ "marker=(%.2f,%.2f,%.2f)"
-			)
+					"WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 "
+					+ "actions=%s shortcuts=%s input=true panels=true "
+					+ "chat=true character_panel=true inventory=true quests=true tracker=true "
+					+ "auras_panel=true death_panel=true "
+					+ "loot_panel=true vendor_panel=true trainer_panel=true social_panel=true "
+					+ "mail_panel=true auction_panel=true "
+					+ "map_panel=true minimap=true "
+					+ "targets=true action_slots=true spellbook=true "
+					+ "marker=(%.2f,%.2f,%.2f)"
+				)
 			% [
 				str(action_buttons.size()),
 				str(shortcut_slots.size()),
@@ -5718,29 +6043,31 @@ func _run_self_test() -> void:
 		return
 
 	var self_test_error := (
-		(
-			"WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s "
-			+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
-			+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
-			+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s "
-			+ "auras_panel_ok=%s death_hud_ok=%s death_panel_ok=%s "
-			+ "loot_panel_ok=%s vendor_panel_ok=%s trainer_panel_ok=%s social_panel_ok=%s "
-			+ "mail_panel_ok=%s auction_panel_ok=%s social_counts=%s/%s/%s/%s "
-			+ "mail_count=%s auction_counts=%s/%s/%s"
-		)
+			(
+				"WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s "
+				+ "actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s "
+				+ "inventory_panel_ok=%s quest_tracker_ok=%s map_panel_ok=%s "
+				+ "minimap_ok=%s "
+				+ "targets_panel_ok=%s target_frame_ok=%s character_panel_ok=%s "
+				+ "auras_panel_ok=%s death_hud_ok=%s death_panel_ok=%s "
+				+ "loot_panel_ok=%s vendor_panel_ok=%s trainer_panel_ok=%s social_panel_ok=%s "
+				+ "mail_panel_ok=%s auction_panel_ok=%s social_counts=%s/%s/%s/%s "
+				+ "mail_count=%s auction_counts=%s/%s/%s"
+			)
 		% [
 			str(marker_ok),
 			str(hud_ok),
 			str(actions_ok),
 			str(shortcut_ok),
-			str(input_ok),
-			str(panel_ok),
-			str(inventory_panel_ok),
-			str(quest_tracker_ok),
-			str(map_panel_ok),
-			str(targets_panel_ok),
-			str(target_frame_ok),
-			str(character_panel_ok),
+				str(input_ok),
+				str(panel_ok),
+				str(inventory_panel_ok),
+				str(quest_tracker_ok),
+				str(map_panel_ok),
+				str(minimap_ok),
+				str(targets_panel_ok),
+				str(target_frame_ok),
+				str(character_panel_ok),
 			str(auras_panel_ok),
 			str(death_hud_ok),
 			str(death_panel_ok),

@@ -1,5 +1,36 @@
 # Task Log
 
+## 2026-07-02 - World Session Minimap And Map Snapshot
+
+Goal: add a first always-visible minimap-style status strip and richer map
+snapshot rendering to the active world-session HUD without touching Claude's
+native/protocol/bridge/live-session files.
+
+Result:
+
+- Added a compact `Minimap` HUD strip to the world-session view.
+- The strip renders safe session map data: map id, zone/area/subzone summary,
+  player position, selected target, visible-object count, and POI count.
+- Expanded the resident `Map` panel to show safe map snapshot data: zone, area,
+  subzone, discovered-area count, POI/marker rows, server position, marker
+  position, visible-object count, and selected target.
+- The panel and minimap stay display-only; live map packets, minimap/world-map
+  art, tracking filters, pins, zone transitions, and local-only asset integration
+  remain live-session/data-lane work.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` passed with `map_panel=true` and
+  `minimap=true`.
+
+Remaining work:
+
+- Feed live map snapshots from the persistent session lane.
+- Add local-only map art/tiles, discovered-map data, tracking filters, pins,
+  click-to-track/objective navigation, zone transition refresh, and quest
+  objective hooks.
+
 ## 2026-07-02 - World Session Death And Respawn Panel
 
 Goal: add resident death, ghost, corpse-run, and resurrection status surfaces
