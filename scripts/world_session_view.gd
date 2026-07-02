@@ -4,11 +4,6 @@ const SettingsRuntime = preload("res://scripts/settings_runtime.gd")
 
 const DASHBOARD_SCENE := "res://main.tscn"
 const CHARACTER_SELECT_SCENE := "res://scenes/character_select_view.tscn"
-const CHAT_SCENE := "res://scenes/stage16_chat_view.tscn"
-const SPELLBOOK_SCENE := "res://scenes/stage16_spellbook_view.tscn"
-const ACTION_BAR_SCENE := "res://scenes/stage16_action_bar_view.tscn"
-const QUEST_SCENE := "res://scenes/quest_view.tscn"
-const SETTINGS_SCENE := "res://scenes/settings_view.tscn"
 
 const WORLD_TO_GODOT_SCALE := 0.02
 const GRID_EXTENT := 220
@@ -23,7 +18,11 @@ var detail_label: Label
 var target_label: Label
 var quest_label: Label
 var session_label: Label
+var panel_shell: PanelContainer
+var panel_title_label: Label
+var panel_body: VBoxContainer
 var action_buttons: Array[Button] = []
+var shortcut_slots: Array[Button] = []
 
 var camera_yaw := 0.0
 var marker_velocity := Vector3.ZERO
@@ -159,21 +158,30 @@ func _build_hud() -> void:
 	session_label = _hud_label()
 	layout.add_child(session_label)
 
+	_build_panel_shell(layout)
+
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	layout.add_child(spacer)
 
-	var action_bar := HBoxContainer.new()
-	action_bar.add_theme_constant_override("separation", 8)
-	layout.add_child(action_bar)
+	var shortcut_grid := GridContainer.new()
+	shortcut_grid.columns = 12
+	shortcut_grid.add_theme_constant_override("h_separation", 6)
+	shortcut_grid.add_theme_constant_override("v_separation", 6)
+	layout.add_child(shortcut_grid)
+	_build_shortcut_slots(shortcut_grid)
 
-	_add_action_button(action_bar, "Chat", CHAT_SCENE)
-	_add_action_button(action_bar, "Spells", SPELLBOOK_SCENE)
-	_add_action_button(action_bar, "Actions", ACTION_BAR_SCENE)
-	_add_action_button(action_bar, "Quests", QUEST_SCENE)
-	_add_action_button(action_bar, "Options", SETTINGS_SCENE)
-	_add_action_button(action_bar, "Roster", CHARACTER_SELECT_SCENE)
-	_add_action_button(action_bar, "Dashboard", DASHBOARD_SCENE)
+	var nav_bar := HBoxContainer.new()
+	nav_bar.add_theme_constant_override("separation", 8)
+	layout.add_child(nav_bar)
+
+	_add_panel_button(nav_bar, "Chat", "chat")
+	_add_panel_button(nav_bar, "Spells", "spells")
+	_add_panel_button(nav_bar, "Actions", "actions")
+	_add_panel_button(nav_bar, "Quests", "quests")
+	_add_panel_button(nav_bar, "Options", "options")
+	_add_scene_button(nav_bar, "Roster", CHARACTER_SELECT_SCENE)
+	_add_scene_button(nav_bar, "Dashboard", DASHBOARD_SCENE)
 
 
 func _apply_session_context() -> void:
@@ -397,13 +405,215 @@ func _hud_label() -> Label:
 	return label
 
 
-func _add_action_button(parent: Control, label_text: String, scene_path: String) -> void:
+func _build_panel_shell(parent: Control) -> void:
+	panel_shell = PanelContainer.new()
+	panel_shell.visible = false
+	panel_shell.custom_minimum_size = Vector2(520, 210)
+	panel_shell.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.045, 0.052, 0.058, 0.88)
+	panel_style.border_color = Color(0.28, 0.34, 0.36, 0.95)
+	panel_style.set_border_width_all(1)
+	panel_style.corner_radius_top_left = 6
+	panel_style.corner_radius_top_right = 6
+	panel_style.corner_radius_bottom_left = 6
+	panel_style.corner_radius_bottom_right = 6
+	panel_shell.add_theme_stylebox_override("panel", panel_style)
+	parent.add_child(panel_shell)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	panel_shell.add_child(margin)
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 8)
+	margin.add_child(stack)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	stack.add_child(header)
+
+	panel_title_label = _panel_label("Session Panel", 17)
+	panel_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(panel_title_label)
+
+	var close_button := Button.new()
+	close_button.text = "X"
+	close_button.tooltip_text = "Close"
+	close_button.custom_minimum_size = Vector2(34, 30)
+	close_button.pressed.connect(_hide_session_panel)
+	header.add_child(close_button)
+
+	panel_body = VBoxContainer.new()
+	panel_body.add_theme_constant_override("separation", 6)
+	stack.add_child(panel_body)
+
+
+func _build_shortcut_slots(parent: Control) -> void:
+	shortcut_slots.clear()
+	_add_shortcut_slot(parent, "1", "Primary", Callable(self, "_queue_primary_action"))
+	_add_shortcut_slot(parent, "2", "Interact", Callable(self, "_queue_interact"))
+	_add_shortcut_slot(parent, "3", "Target", Callable(self, "_select_next_target"))
+	_add_shortcut_slot(parent, "4", "Spells", Callable(self, "_show_session_panel").bind("spells"))
+	_add_shortcut_slot(parent, "5", "Actions", Callable(self, "_show_session_panel").bind("actions"))
+	_add_shortcut_slot(parent, "6", "Quests", Callable(self, "_show_session_panel").bind("quests"))
+	_add_shortcut_slot(parent, "7", "Chat", Callable(self, "_show_session_panel").bind("chat"))
+	_add_shortcut_slot(parent, "8", "Options", Callable(self, "_show_session_panel").bind("options"))
+	_add_shortcut_slot(parent, "9", "Reset", Callable(self, "_reset_marker_to_session"))
+	_add_shortcut_slot(parent, "0", "Jump", Callable(self, "_queue_jump"))
+	_add_shortcut_slot(parent, "-", "Bag", Callable(self, "_show_session_panel").bind("actions"))
+	_add_shortcut_slot(parent, "=", "Map", Callable(self, "_show_session_panel").bind("quests"))
+
+
+func _add_shortcut_slot(parent: Control, key_text: String, label_text: String, action: Callable) -> void:
+	var button := Button.new()
+	button.text = "%s\n%s" % [key_text, label_text]
+	button.tooltip_text = label_text
+	button.custom_minimum_size = Vector2(72, 50)
+	button.pressed.connect(action)
+	parent.add_child(button)
+	shortcut_slots.append(button)
+
+
+func _add_panel_button(parent: Control, label_text: String, panel_name: String) -> void:
+	var button := Button.new()
+	button.text = label_text
+	button.custom_minimum_size = Vector2(104, 36)
+	button.pressed.connect(func(): _show_session_panel(panel_name))
+	parent.add_child(button)
+	action_buttons.append(button)
+
+
+func _add_scene_button(parent: Control, label_text: String, scene_path: String) -> void:
 	var button := Button.new()
 	button.text = label_text
 	button.custom_minimum_size = Vector2(104, 36)
 	button.pressed.connect(func(): _open_scene(scene_path))
 	parent.add_child(button)
 	action_buttons.append(button)
+
+
+func _show_session_panel(panel_name: String) -> void:
+	_clear_panel_body()
+	panel_shell.visible = true
+	match panel_name:
+		"chat":
+			_build_chat_panel()
+		"spells":
+			_build_spells_panel()
+		"actions":
+			_build_actions_panel()
+		"quests":
+			_build_quests_panel()
+		"options":
+			_build_options_panel()
+		_:
+			panel_title_label.text = "Session Panel"
+			panel_body.add_child(_panel_label("No panel is registered for " + panel_name + ".", 14))
+
+
+func _hide_session_panel() -> void:
+	panel_shell.visible = false
+
+
+func _clear_panel_body() -> void:
+	for child in panel_body.get_children():
+		child.queue_free()
+
+
+func _build_chat_panel() -> void:
+	panel_title_label.text = "Chat"
+	panel_body.add_child(_panel_label("Say", 13))
+	var input_row := HBoxContainer.new()
+	input_row.add_theme_constant_override("separation", 8)
+	panel_body.add_child(input_row)
+
+	var input := LineEdit.new()
+	input.placeholder_text = "Message"
+	input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	input_row.add_child(input)
+
+	var send_button := Button.new()
+	send_button.text = "Send"
+	send_button.custom_minimum_size = Vector2(86, 32)
+	send_button.pressed.connect(func(): _queue_chat_line(input.text))
+	input.text_submitted.connect(func(message: String): _queue_chat_line(message))
+	input_row.add_child(send_button)
+
+	panel_body.add_child(_panel_label("Channel state: local queue.", 13))
+
+
+func _build_spells_panel() -> void:
+	panel_title_label.text = "Spells"
+	panel_body.add_child(_panel_label("Known spells: no session rows yet.", 13))
+	panel_body.add_child(_panel_label("Active inputs: primary action, target next, interact, and jump.", 13))
+
+
+func _build_actions_panel() -> void:
+	panel_title_label.text = "Actions"
+	var rows := [
+		"Target: " + ("none" if selected_target_index < 0 else str(selected_target_index + 1)),
+		"Visible objects: " + str(visible_object_count),
+		"Primary: queued in HUD.",
+		"Interact: queued in HUD.",
+		"Reset: returns the marker to the last server-reported position.",
+	]
+	for row in rows:
+		panel_body.add_child(_panel_label(row, 13))
+
+
+func _build_quests_panel() -> void:
+	panel_title_label.text = "Quests"
+	panel_body.add_child(_panel_label(quest_label.text, 13))
+	panel_body.add_child(_panel_label("Tracked objective rows: none in this session yet.", 13))
+
+
+func _build_options_panel() -> void:
+	panel_title_label.text = "Options"
+	var settings := SettingsRuntime.load_settings()
+	var keybindings: Dictionary = settings.get("keybindings", {})
+	var key_lines := [
+		"Move forward: " + _key_name(int(keybindings.get("move_forward", KEY_W))),
+		"Move backward: " + _key_name(int(keybindings.get("move_backward", KEY_S))),
+		"Move left: " + _key_name(int(keybindings.get("move_left", KEY_A))),
+		"Move right: " + _key_name(int(keybindings.get("move_right", KEY_D))),
+		"Camera left/right: %s / %s" % [
+			_key_name(int(keybindings.get("camera_left", KEY_Q))),
+			_key_name(int(keybindings.get("camera_right", KEY_E))),
+		],
+		"Target/action/interact: %s / %s / %s" % [
+			_key_name(int(keybindings.get("target_next", KEY_TAB))),
+			_key_name(int(keybindings.get("attack_primary", KEY_1))),
+			_key_name(int(keybindings.get("interact", KEY_F))),
+		],
+	]
+	for line in key_lines:
+		panel_body.add_child(_panel_label(line, 13))
+
+
+func _queue_chat_line(message: String) -> void:
+	var trimmed := message.strip_edges()
+	if trimmed.is_empty():
+		status_label.text = "Chat input is empty."
+		return
+	status_label.text = "Chat queued locally: " + trimmed.left(48)
+
+
+func _panel_label(text: String, font_size: int = 14) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", font_size)
+	label.modulate = Color(0.91, 0.94, 0.92)
+	return label
+
+
+func _key_name(keycode: int) -> String:
+	var key_name := OS.get_keycode_string(keycode)
+	return key_name if not key_name.is_empty() else str(keycode)
 
 
 func _open_scene(scene_path: String) -> void:
@@ -519,14 +729,28 @@ func _run_self_test() -> void:
 	var interact_key_ok := quest_label.text.find("Interaction queued for target 1") != -1
 	player_marker.position += Vector3(8.0, 0.0, 0.0)
 	_reset_marker_to_session()
+	_show_session_panel("chat")
+	var chat_panel_ok := panel_shell.visible and panel_title_label.text == "Chat"
+	_show_session_panel("actions")
+	var actions_panel_ok := panel_shell.visible and panel_title_label.text == "Actions"
+	_show_session_panel("spells")
+	var spells_panel_ok := panel_shell.visible and panel_title_label.text == "Spells"
+	_show_session_panel("quests")
+	var quests_panel_ok := panel_shell.visible and panel_title_label.text == "Quests"
+	_show_session_panel("options")
+	var options_panel_ok := panel_shell.visible and panel_title_label.text == "Options"
+	_hide_session_panel()
 
 	var marker_ok := player_marker != null and player_marker.position.distance_to(_godot_position(-8949.95, -132.49, 83.53)) < 0.01
 	var hud_ok := detail_label.text.find("Codexstage") != -1 and visible_object_count == 3
 	var actions_ok := action_buttons.size() == 7
+	var shortcut_ok := shortcut_slots.size() == 12
 	var input_ok := no_target_key_ok and no_target_action_ok and no_target_interact_ok and target_key_ok and action_key_ok and interact_key_ok
-	if marker_ok and hud_ok and actions_ok and input_ok:
-		print("WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 actions=%s input=true marker=(%.2f,%.2f,%.2f)" % [
+	var panel_ok := chat_panel_ok and actions_panel_ok and spells_panel_ok and quests_panel_ok and options_panel_ok
+	if marker_ok and hud_ok and actions_ok and shortcut_ok and input_ok and panel_ok:
+		print("WORLD_SESSION_SELF_TEST_OK character=Codexstage map=0 actions=%s shortcuts=%s input=true panels=true marker=(%.2f,%.2f,%.2f)" % [
 			str(action_buttons.size()),
+			str(shortcut_slots.size()),
 			player_marker.position.x,
 			player_marker.position.y,
 			player_marker.position.z,
@@ -534,10 +758,12 @@ func _run_self_test() -> void:
 		get_tree().quit(0)
 		return
 
-	push_error("WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s actions_ok=%s input_ok=%s" % [
+	push_error("WORLD_SESSION_SELF_TEST_FAILED marker_ok=%s hud_ok=%s actions_ok=%s shortcut_ok=%s input_ok=%s panel_ok=%s" % [
 		str(marker_ok),
 		str(hud_ok),
 		str(actions_ok),
+		str(shortcut_ok),
 		str(input_ok),
+		str(panel_ok),
 	])
 	get_tree().quit(1)

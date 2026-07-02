@@ -22,6 +22,40 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-01 - World Session HUD Panels (Codex UI lane)
+
+Context: the world-session shell had buttons for chat, spells, actions, quests,
+and options, but those buttons still left the session shell for separate proof
+scenes. A playable client needs those surfaces to live inside the active world
+view.
+
+Result:
+
+- `scripts/world_session_view.gd` now opens Chat, Spells, Actions, Quests, and
+  Options as in-world HUD panels.
+- Roster and Dashboard remain explicit scene navigation buttons.
+- Added a 12-slot bottom action strip inside the world-session HUD for primary
+  action, interact, target, panel toggles, reset, and jump.
+- The Actions panel reflects current visible-object and target state; the
+  Options panel reads saved keybindings through `SettingsRuntime`.
+- This remains UI-lane work only. The panels do not call the protocol bridge or
+  take ownership of Claude's persistent live-session lane.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` now validates 7 navigation buttons, 12
+  HUD shortcut slots, and Chat/Actions panel creation.
+- `ACORE_WORLD_SESSION_KEYBIND_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` still validates saved keybinding
+  consumption.
+
+Remaining work:
+
+- Feed live chat, spellbook, action-button, quest, inventory, vendor, trainer,
+  and combat data into these panels once the persistent session bridge is ready.
+- Add draggable/movable panel layout persistence and full action-bar paging.
+
 ## 2026-07-01 - World Session Keybinding Input (Codex UI lane)
 
 Context: the world-session shell was reachable after character select, but its
