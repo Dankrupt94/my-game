@@ -22,6 +22,39 @@ documentation. See the lane split in the header of this file.
   `git add -A`/`-am`) and commits in small chunks. Verified working: Codex and
   Claude commits interleaved on `main` with no conflicts.
 
+## 2026-07-01 - Resizable World Session HUD Panels (Codex UI lane)
+
+Context: the world-session HUD supported multiple movable panels, but each panel
+still used a fixed size. A playable client needs windows that can be shaped
+around the player's preferred layout.
+
+Result:
+
+- Added a `Resize` handle to each world-session HUD panel.
+- Panel resizing clamps to sane minimum and maximum sizes, stays inside the
+  viewport, and saves through the same `user://world-session-layout.cfg` file
+  as panel positions.
+- Panel content now sits inside a scroll region so large option/chat/action
+  contents do not force the whole HUD window to grow uncontrollably.
+- `Reset HUD` restores every panel to the default position and default size.
+
+Validation:
+
+- `ACORE_WORLD_SESSION_LAYOUT_SELF_TEST=1 godot-4 --headless --path . --scene
+  res://scenes/world_session_view.tscn` now saves and reloads separate Options
+  and Actions panel positions plus distinct resized dimensions before
+  reset/cleanup.
+- `ACORE_WORLD_SESSION_SELF_TEST=1`,
+  `ACORE_WORLD_SESSION_KEYBIND_SELF_TEST=1`, and
+  `ACORE_UI_LAYOUT_SELF_TEST=1` still pass.
+
+Remaining work:
+
+- Feed live data into the individual panels as Claude's persistent session lane
+  exposes stable world-session APIs.
+- Add per-character/profile scope decisions, full action-bar paging, and
+  drag/drop action placement.
+
 ## 2026-07-01 - Multi-Panel World Session HUD (Codex UI lane)
 
 Context: the world-session HUD panel could move and persist its placement, but
@@ -53,8 +86,8 @@ Remaining work:
 
 - Feed live data into the individual panels as Claude's persistent session lane
   exposes stable world-session APIs.
-- Add panel resizing in the world HUD, per-character/profile scope decisions,
-  full action-bar paging, and drag/drop action placement.
+- Add per-character/profile scope decisions, full action-bar paging, and
+  drag/drop action placement.
 
 ## 2026-07-01 - Movable World Session HUD Layout (Codex UI lane)
 
@@ -84,8 +117,8 @@ Validation:
 
 Remaining work:
 
-- Add panel resizing in the world HUD, per-character/profile scope decisions,
-  full action-bar paging, and drag/drop action placement.
+- Add per-character/profile scope decisions, full action-bar paging, and
+  drag/drop action placement.
 
 ## 2026-07-01 - World Session HUD Panels (Codex UI lane)
 

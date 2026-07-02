@@ -12,7 +12,9 @@ const MARKER_MOVE_SPEED := 14.0
 const WORLD_SESSION_LAYOUT_FILE_PATH := "user://world-session-layout.cfg"
 const WORLD_SESSION_LAYOUT_SELF_TEST_FILE_PATH := "user://world-session-layout-self-test.cfg"
 const PANEL_DEFAULT_POSITION := Vector2(18.0, 156.0)
-const PANEL_DEFAULT_SIZE := Vector2(560.0, 260.0)
+const PANEL_DEFAULT_SIZE := Vector2(560.0, 380.0)
+const PANEL_MIN_SIZE := Vector2(360.0, 180.0)
+const PANEL_MAX_SIZE := Vector2(900.0, 620.0)
 const PANEL_DRAG_GRID := 10.0
 const PANEL_NAMES := ["chat", "spells", "actions", "quests", "options"]
 
@@ -46,6 +48,9 @@ var jump_was_pressed := false
 var active_panel_name := ""
 var panel_dragging_name := ""
 var panel_drag_offset := Vector2.ZERO
+var panel_resizing_name := ""
+var panel_resize_start_mouse := Vector2.ZERO
+var panel_resize_start_size := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -440,8 +445,8 @@ func _create_session_panel(panel_name: String, index: int) -> void:
 	var shell := PanelContainer.new()
 	shell.name = "SessionPanel" + panel_name.capitalize()
 	shell.visible = false
-	shell.custom_minimum_size = PANEL_DEFAULT_SIZE
-	shell.size = shell.custom_minimum_size
+	shell.custom_minimum_size = PANEL_MIN_SIZE
+	shell.size = PANEL_DEFAULT_SIZE
 	shell.position = _default_panel_position(panel_name)
 	shell.mouse_filter = Control.MOUSE_FILTER_STOP
 	var panel_style := StyleBoxFlat.new()
@@ -485,15 +490,39 @@ func _create_session_panel(panel_name: String, index: int) -> void:
 	close_button.pressed.connect(Callable(self, "_hide_session_panel").bind(panel_name))
 	header.add_child(close_button)
 
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.custom_minimum_size = Vector2(0.0, 80.0)
+	stack.add_child(scroll)
+
 	var body := VBoxContainer.new()
 	body.add_theme_constant_override("separation", 6)
-	body.custom_minimum_size = Vector2(500.0, 0.0)
-	stack.add_child(body)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(body)
+
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 8)
+	stack.add_child(footer)
+
+	var footer_spacer := Control.new()
+	footer_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(footer_spacer)
+
+	var resize_button := Button.new()
+	resize_button.text = "Resize"
+	resize_button.tooltip_text = "Drag to resize"
+	resize_button.custom_minimum_size = Vector2(78, 28)
+	resize_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	resize_button.gui_input.connect(_on_panel_resize_gui_input.bind(panel_name))
+	footer.add_child(resize_button)
 
 	session_panels[panel_name] = {
 		"shell": shell,
 		"title": title_label,
 		"body": body,
+		"scroll": scroll,
+		"resize": resize_button,
 		"index": index,
 	}
 
@@ -607,7 +636,7 @@ func _show_session_panel(panel_name: String) -> void:
 		_:
 			panel_title_label.text = "Session Panel"
 			panel_body.add_child(_panel_label("No panel is registered for " + panel_name + ".", 14))
-	panel_shell.size = PANEL_DEFAULT_SIZE
+	_set_panel_size(panel_name, panel_shell.size)
 	_set_panel_position(panel_name, panel_shell.position)
 
 
@@ -639,6 +668,30 @@ func _on_panel_header_gui_input(event: InputEvent, panel_name: String) -> void:
 		_set_panel_position(panel_name, next_position)
 
 
+func _on_panel_resize_gui_input(event: InputEvent, panel_name: String) -> void:
+	var shell := _panel_shell(panel_name)
+	if shell == null:
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			panel_resizing_name = panel_name
+			panel_resize_start_mouse = shell.get_global_mouse_position()
+			panel_resize_start_size = shell.size
+			shell.z_index = 50
+			_activate_panel(panel_name)
+			shell.move_to_front()
+		elif panel_resizing_name == panel_name:
+			panel_resizing_name = ""
+			shell.z_index = 0
+			_set_panel_size(panel_name, shell.size, true)
+			_set_panel_position(panel_name, shell.position)
+			_save_panel_layout()
+	elif event is InputEventMouseMotion and panel_resizing_name == panel_name:
+		var delta := shell.get_global_mouse_position() - panel_resize_start_mouse
+		_set_panel_size(panel_name, panel_resize_start_size + delta)
+		_set_panel_position(panel_name, shell.position)
+
+
 func _set_panel_position(panel_name: String, next_position: Vector2, snap_to_grid: bool = false) -> void:
 	var shell := _panel_shell(panel_name)
 	if shell == null:
@@ -649,14 +702,48 @@ func _set_panel_position(panel_name: String, next_position: Vector2, snap_to_gri
 	shell.position = _clamp_panel_position(panel_name, target)
 
 
+func _set_panel_size(panel_name: String, next_size: Vector2, snap_to_grid: bool = false) -> void:
+	var shell := _panel_shell(panel_name)
+	if shell == null:
+		return
+	var target := next_size
+	if snap_to_grid:
+		target = Vector2(snapped(target.x, PANEL_DRAG_GRID), snapped(target.y, PANEL_DRAG_GRID))
+	shell.size = _clamp_panel_size(panel_name, target)
+
+
 func _clamp_panel_position(panel_name: String, next_position: Vector2) -> Vector2:
-	var viewport_size := get_viewport().get_visible_rect().size
-	if viewport_size.x < PANEL_DEFAULT_SIZE.x + 120.0 or viewport_size.y < PANEL_DEFAULT_SIZE.y + 120.0:
-		viewport_size = Vector2(1280.0, 720.0)
-	var panel_size := PANEL_DEFAULT_SIZE
+	var viewport_size := _layout_viewport_size()
+	var panel_size := _panel_layout_size(panel_name)
 	var max_x: float = max(0.0, viewport_size.x - panel_size.x - 12.0)
 	var max_y: float = max(0.0, viewport_size.y - panel_size.y - 12.0)
 	return Vector2(clamp(next_position.x, 0.0, max_x), clamp(next_position.y, 0.0, max_y))
+
+
+func _clamp_panel_size(panel_name: String, next_size: Vector2) -> Vector2:
+	var shell := _panel_shell(panel_name)
+	var position := shell.position if shell != null else Vector2.ZERO
+	var viewport_size := _layout_viewport_size()
+	var max_width: float = min(PANEL_MAX_SIZE.x, max(PANEL_MIN_SIZE.x, viewport_size.x - position.x - 12.0))
+	var max_height: float = min(PANEL_MAX_SIZE.y, max(PANEL_MIN_SIZE.y, viewport_size.y - position.y - 12.0))
+	return Vector2(
+		clamp(next_size.x, PANEL_MIN_SIZE.x, max_width),
+		clamp(next_size.y, PANEL_MIN_SIZE.y, max_height)
+	)
+
+
+func _layout_viewport_size() -> Vector2:
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x < PANEL_MIN_SIZE.x + 120.0 or viewport_size.y < PANEL_MIN_SIZE.y + 120.0:
+		return Vector2(1280.0, 720.0)
+	return viewport_size
+
+
+func _panel_layout_size(panel_name: String) -> Vector2:
+	var shell := _panel_shell(panel_name)
+	if shell != null and shell.size.x > 0.0 and shell.size.y > 0.0:
+		return shell.size
+	return PANEL_DEFAULT_SIZE
 
 
 func _save_panel_layout() -> Error:
@@ -691,7 +778,7 @@ func _load_panel_layout() -> void:
 		if config.has_section_key(section, "size"):
 			var stored_size = config.get_value(section, "size")
 			if typeof(stored_size) == TYPE_VECTOR2:
-				shell.size = stored_size
+				_set_panel_size(panel_name, stored_size)
 		if config.has_section_key(section, "position"):
 			var stored_position = config.get_value(section, "position")
 			if typeof(stored_position) == TYPE_VECTOR2:
@@ -809,7 +896,7 @@ func _panel_label(text: String, font_size: int = 14) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.custom_minimum_size = Vector2(500.0, 0.0)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.add_theme_font_size_override("font_size", font_size)
 	label.modulate = Color(0.91, 0.94, 0.92)
 	return label
@@ -893,24 +980,35 @@ func _run_layout_self_test() -> void:
 	_show_session_panel("actions")
 	var options_shell := _panel_shell("options")
 	var actions_shell := _panel_shell("actions")
-	options_shell.size = PANEL_DEFAULT_SIZE
-	actions_shell.size = PANEL_DEFAULT_SIZE
+	var options_size := _clamp_panel_size("options", Vector2(660.0, 430.0))
+	var actions_size := _clamp_panel_size("actions", Vector2(620.0, 470.0))
+	_set_panel_size("options", options_size)
+	_set_panel_size("actions", actions_size)
 	_set_panel_position("options", Vector2(267.0, 318.0), true)
 	_set_panel_position("actions", Vector2(381.0, 246.0), true)
-	var options_position := _clamp_panel_position("options", Vector2(270.0, 320.0))
-	var actions_position := _clamp_panel_position("actions", Vector2(380.0, 250.0))
+	options_size = options_shell.size
+	actions_size = actions_shell.size
+	var options_position := options_shell.position
+	var actions_position := actions_shell.position
 	var snap_ok := (
-		options_shell.position.distance_to(options_position) < 0.01
-		and actions_shell.position.distance_to(actions_position) < 0.01
+		options_position.distance_to(_default_panel_position("options")) > 0.01
+		and actions_position.distance_to(_default_panel_position("actions")) > 0.01
+		and options_size.distance_to(PANEL_DEFAULT_SIZE) > 0.01
+		and actions_size.distance_to(PANEL_DEFAULT_SIZE) > 0.01
+		and options_size.distance_to(actions_size) > 0.01
 	)
 	var save_ok := _save_panel_layout() == OK
 
 	options_shell.position = Vector2.ZERO
 	actions_shell.position = Vector2.ZERO
+	options_shell.size = PANEL_MIN_SIZE
+	actions_shell.size = PANEL_MIN_SIZE
 	_load_panel_layout()
 	var load_ok := (
 		options_shell.position.distance_to(options_position) < 0.01
 		and actions_shell.position.distance_to(actions_position) < 0.01
+		and options_shell.size.distance_to(options_size) < 0.01
+		and actions_shell.size.distance_to(actions_size) < 0.01
 	)
 
 	_reset_panel_layout()
@@ -919,26 +1017,36 @@ func _run_layout_self_test() -> void:
 	var reset_ok := (
 		options_shell.position.distance_to(options_reset_position) < 0.01
 		and actions_shell.position.distance_to(actions_reset_position) < 0.01
+		and options_shell.size.distance_to(PANEL_DEFAULT_SIZE) < 0.01
+		and actions_shell.size.distance_to(PANEL_DEFAULT_SIZE) < 0.01
 	)
 	var cleanup_ok := not FileAccess.file_exists(ProjectSettings.globalize_path(layout_file_path))
 
 	if snap_ok and save_ok and load_ok and reset_ok and cleanup_ok:
-		print("WORLD_SESSION_LAYOUT_SELF_TEST_OK options=(%.1f,%.1f) actions=(%.1f,%.1f) reset=true" % [
+		print("WORLD_SESSION_LAYOUT_SELF_TEST_OK options=(%.1f,%.1f %.1fx%.1f) actions=(%.1f,%.1f %.1fx%.1f) reset=true" % [
 			options_position.x,
 			options_position.y,
+			options_size.x,
+			options_size.y,
 			actions_position.x,
 			actions_position.y,
+			actions_size.x,
+			actions_size.y,
 		])
 		get_tree().quit(0)
 		return
 
 	_delete_layout_file(layout_file_path)
-	push_error("WORLD_SESSION_LAYOUT_SELF_TEST_FAILED snap_ok=%s save_ok=%s load_ok=%s reset_ok=%s cleanup_ok=%s" % [
+	push_error("WORLD_SESSION_LAYOUT_SELF_TEST_FAILED snap_ok=%s save_ok=%s load_ok=%s reset_ok=%s cleanup_ok=%s options_pos=%s options_size=%s actions_pos=%s actions_size=%s" % [
 		str(snap_ok),
 		str(save_ok),
 		str(load_ok),
 		str(reset_ok),
 		str(cleanup_ok),
+		str(options_shell.position),
+		str(options_shell.size),
+		str(actions_shell.position),
+		str(actions_shell.size),
 	])
 	get_tree().quit(1)
 
